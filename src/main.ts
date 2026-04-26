@@ -18,10 +18,18 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: process.env.CORS_ORIGIN && process.env.CORS_ORIGIN !== '*' ? true : false,
+    credentials:
+      process.env.CORS_ORIGIN && process.env.CORS_ORIGIN !== '*' ? true : false,
   });
 
-  app.useGlobalPipes(new ValidationPipe({}));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();

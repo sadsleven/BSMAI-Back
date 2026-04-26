@@ -1,15 +1,143 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import { Permission } from '../permissions/entities/permission.entity';
+import { Role } from '../roles/entities/role.entity';
+import { User } from '../users/entities/user.entity';
+import { PERMISSION_CATALOG } from '../permissions/permissions.catalog';
+
+const SUPER_ADMIN_ROLE = 'Super Admin';
+const BCRYPT_ROUNDS = 10;
 
 @Injectable()
 export class SeedService {
+  private readonly logger = new Logger(SeedService.name);
+
   constructor(
-    private configService: ConfigService
-  ) {
-    
+    private readonly config: ConfigService,
+    @InjectRepository(Permission) private readonly permsRepo: Repository<Permission>,
+    @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
+    @InjectRepository(User) private readonly usersRepo: Repository<User>,
+  ) {}
+
+  async run(): Promise<void> {
+    await this.seedPermissions();
+    const role = await this.seedSuperAdminRole();
+    await this.seedSuperAdminUser(role);
+    this.logger.log('Seed completado');
   }
-  async run() {
-   
+
+  private async seedPermissions(): Promise<Permission[]> {
+    const existing = await this.permsRepo.find();
+    const existingByName = new Map(existing.map((p) => [p.name, p] as const));
+    const toInsert: Permission[] = [];
+    const toUpdate: Permission[] = [];
+
+    for (const def of PERMISSION_CATALOG) {
+      const found = existingByName.get(def.name);
+      if (!found) {
+        toInsert.push(this.permsRepo.create(def));
+      } else if (
+        found.resource !== def.resource ||
+        found.action !== def.action ||
+        found.description !== def.description ||
+        found.label !== def.label ||
+        found.group !== def.group
+      ) {
+        found.resource = def.resource;
+        found.action = def.action;
+        found.description = def.description;
+        found.label = def.label;
+        found.group = def.group;
+        toUpdate.push(found);
+      }
+    }
+    if (toInsert.length) await this.permsRepo.save(toInsert);
+    if (toUpdate.length) await this.permsRepo.save(toUpdate);
+    this.logger.log(
+      `Permisos: insertados=${toInsert.length} actualizados=${toUpdate.length} total catálogo=${PERMISSION_CATALOG.length}`,
+    );
+    return this.permsRepo.find();
+  }
+
+  private async seedSuperAdminRole(): Promise<Role> {
+    const all = await this.permsRepo.find();
+    let role = await this.rolesRepo.findOne({
+      where: { name: SUPER_ADMIN_ROLE },
+      relations: { permissions: true },
+      withDeleted: true,
+    });
+    if (!role) {
+      role = this.rolesRepo.create({
+        name: SUPER_ADMIN_ROLE,
+        description: 'Rol con todos los permisos del sistema',
+        isSystem: true,
+        isActive: true,
+        permissions: all,
+      });
+    } else {
+      if (role.deletedAt) {
+        await this.rolesRepo.restore(role.id);
+        role.deletedAt = null;
+      }
+      role.description = role.description ?? 'Rol con todos los permisos del sistema';
+      role.isSystem = true;
+      role.isActive = true;
+      role.permissions = all;
+    }
+    return this.rolesRepo.save(role);
+  }
+
+  private async seedSuperAdminUser(role: Role): Promise<void> {
+    const email = (this.config.get<string>('SUPER_ADMIN_EMAIL') ?? '').toLowerCase().trim();
+    const password = this.config.get<string>('SUPER_ADMIN_PASSWORD') ?? '';
+    const firstName = this.config.get<string>('SUPER_ADMIN_FIRST_NAME') ?? 'Super';
+    const lastName = this.config.get<string>('SUPER_ADMIN_LAST_NAME') ?? 'Admin';
+    const phoneNumber = this.config.get<string>('SUPER_ADMIN_PHONE') ?? null;
+
+    if (!email || !password) {
+      this.logger.warn(
+        'SUPER_ADMIN_EMAIL o SUPER_ADMIN_PASSWORD no definidos; se omite la creación del Super Admin',
+      );
+      return;
+    }
+
+    let user = await this.usersRepo.findOne({
+      where: { email },
+      relations: { roles: true },
+      withDeleted: true,
+    });
+
+    if (!user) {
+      const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      user = this.usersRepo.create({
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        password: hash,
+        isActive: true,
+        isSuperAdmin: true,
+        roles: [role],
+      });
+      await this.usersRepo.save(user);
+      this.logger.log(`Super Admin creado: ${email}`);
+      return;
+    }
+
+    if (user.deletedAt) {
+      await this.usersRepo.restore(user.id);
+      user.deletedAt = null;
+    }
+    user.firstName = firstName;
+    user.lastName = lastName;
+    user.phoneNumber = phoneNumber;
+    user.isActive = true;
+    user.isSuperAdmin = true;
+    user.roles = [role];
+    await this.usersRepo.save(user);
+    this.logger.log(`Super Admin asegurado: ${email}`);
   }
 }
-
