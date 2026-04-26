@@ -33,6 +33,10 @@ export class QueryRolesDto {
   withDeleted?: string;
 
   @IsOptional()
+  @IsBooleanString()
+  onlyDeleted?: string;
+
+  @IsOptional()
   @IsIn(['system', 'custom', 'all'])
   origin?: 'system' | 'custom' | 'all';
 

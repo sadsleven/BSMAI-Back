@@ -126,8 +126,9 @@ export interface PublicUser {
 }
 
 export function toPublicUser(user: User): PublicUser {
+  const activeRoles = (user.roles ?? []).filter((r) => r.isActive && !r.deletedAt);
   const permissions = new Set<string>();
-  for (const role of user.roles ?? []) {
+  for (const role of activeRoles) {
     for (const perm of role.permissions ?? []) permissions.add(perm.name);
   }
   return {
@@ -138,7 +139,7 @@ export function toPublicUser(user: User): PublicUser {
     phoneNumber: user.phoneNumber ?? null,
     isActive: user.isActive,
     isSuperAdmin: user.isSuperAdmin,
-    roles: (user.roles ?? []).map((r) => ({ id: r.id, name: r.name })),
+    roles: activeRoles.map((r) => ({ id: r.id, name: r.name })),
     permissions: Array.from(permissions),
   };
 }

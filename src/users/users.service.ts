@@ -41,6 +41,7 @@ export class UsersService {
       sortBy = 'createdAt',
       sortDir = 'DESC',
       withDeleted,
+      onlyDeleted,
     } = query;
 
     const qb = this.usersRepo
@@ -49,7 +50,11 @@ export class UsersService {
       .leftJoinAndSelect('role.permissions', 'permission')
       .orderBy(`user.${sortBy}`, sortDir);
 
-    if (withDeleted === 'true') qb.withDeleted();
+    if (onlyDeleted === 'true') {
+      qb.withDeleted().andWhere('user.deletedAt IS NOT NULL');
+    } else if (withDeleted === 'true') {
+      qb.withDeleted();
+    }
 
     if (search && search.trim()) {
       const term = `%${search.trim().toLowerCase()}%`;

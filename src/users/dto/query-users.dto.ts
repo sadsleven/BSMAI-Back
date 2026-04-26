@@ -63,4 +63,8 @@ export class QueryUsersDto {
   @IsOptional()
   @IsBooleanString()
   withDeleted?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  onlyDeleted?: string;
 }

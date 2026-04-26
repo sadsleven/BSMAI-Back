@@ -39,6 +39,7 @@ export class RolesService {
       sortBy = 'createdAt',
       sortDir = 'DESC',
       withDeleted,
+      onlyDeleted,
       origin,
       isActive,
     } = query;
@@ -47,7 +48,11 @@ export class RolesService {
       .leftJoinAndSelect('role.permissions', 'permission')
       .orderBy(`role.${sortBy}`, sortDir);
 
-    if (withDeleted === 'true') qb.withDeleted();
+    if (onlyDeleted === 'true') {
+      qb.withDeleted().andWhere('role.deletedAt IS NOT NULL');
+    } else if (withDeleted === 'true') {
+      qb.withDeleted();
+    }
 
     if (search && search.trim()) {
       qb.andWhere('(LOWER(role.name) LIKE :s OR LOWER(role.description) LIKE :s)', {
