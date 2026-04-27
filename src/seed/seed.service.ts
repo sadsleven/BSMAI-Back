@@ -6,6 +6,8 @@ import * as bcrypt from 'bcrypt';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Role } from '../roles/entities/role.entity';
 import { User } from '../users/entities/user.entity';
+import { Bank } from '../banks/entities/bank.entity';
+import { BANKS_SEED } from '../banks/banks.data';
 import { PERMISSION_CATALOG } from '../permissions/permissions.catalog';
 
 const SUPER_ADMIN_ROLE = 'Super Admin';
@@ -20,13 +22,37 @@ export class SeedService {
     @InjectRepository(Permission) private readonly permsRepo: Repository<Permission>,
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
+    @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
   ) {}
 
   async run(): Promise<void> {
     await this.seedPermissions();
     const role = await this.seedSuperAdminRole();
     await this.seedSuperAdminUser(role);
+    await this.seedBanks();
     this.logger.log('Seed completado');
+  }
+
+  private async seedBanks(): Promise<void> {
+    const existing = await this.banksRepo.find();
+    const existingByCode = new Map(existing.map((b) => [b.code, b] as const));
+    const toInsert: Bank[] = [];
+    const toUpdate: Bank[] = [];
+
+    for (const def of BANKS_SEED) {
+      const found = existingByCode.get(def.codigo);
+      if (!found) {
+        toInsert.push(this.banksRepo.create({ code: def.codigo, name: def.nombre }));
+      } else if (found.name !== def.nombre) {
+        found.name = def.nombre;
+        toUpdate.push(found);
+      }
+    }
+    if (toInsert.length) await this.banksRepo.save(toInsert);
+    if (toUpdate.length) await this.banksRepo.save(toUpdate);
+    this.logger.log(
+      `Bancos: insertados=${toInsert.length} actualizados=${toUpdate.length} total=${BANKS_SEED.length}`,
+    );
   }
 
   private async seedPermissions(): Promise<Permission[]> {

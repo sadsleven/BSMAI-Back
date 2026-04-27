@@ -260,6 +260,48 @@ Recurso `roles` (grupo "Roles"):
 Recurso `permissions` (grupo "Permisos"):
 - `permissions.list`.
 
+Recurso `specialties` (grupo "Especialidades"), `patients` (grupo "Pacientes"), `doctors` (grupo "Doctores"), `care-centers` (grupo "Centros de atención"):
+- 8 acciones estándar cada uno: `<resource>.{list,view,create,update,toggle-active,soft-delete,hard-delete,restore}`. Generadas vía helper `buildResourcePermissions` en `permissions.catalog.ts`.
+
+`GET /banks` es público (no requiere permiso).
+
+---
+
+## Módulos clínicos
+
+### Especialidades (`specialties`)
+
+CRUD simple. Endpoint extra `GET /specialties/assignable` (permiso `specialties.list`) devuelve sólo `isActive = true` y no eliminadas, ordenadas por nombre — para selectores en formularios. Diferente del listado paginado `GET /specialties`.
+
+### Bancos (`banks`)
+
+`Bank { id, code varchar(8) UNIQUE, name varchar(200) }`. Catálogo cerrado cargado desde `src/banks/banks.data.ts` por `SeedService.seedBanks()` (idempotente: insert si falta, update si nombre cambió). `GET /banks` público.
+
+### Formatos venezolanos compartidos
+
+`src/shared/validators/ve-formats.ts` exporta `CEDULA_PATTERN`, `RIF_PATTERN`, `PHONE_PATTERN` + mensajes canónicos + `normalizeCedula`/`normalizeRif`. **Todo DTO con cédula/RIF/teléfono importa de aquí**, no redefine regex local. El service llama `normalize*` antes de `save()` para evitar duplicados con casing distinto.
+
+### Pacientes (`patients`)
+
+Cédula + email + nombres + birthDate + dirección + phones (1-10) + isActive. Tabla `patient_phones` OneToMany con cascade+eager. Cédula y email únicos. Standard CRUD + soft delete + toggle-active.
+
+### Doctores (`doctors`) y Centros de atención (`care-centers`)
+
+Estructura paralela:
+
+- **Doctor**: cédula + email + nombres + `isLegalEntity` + `rif` (nullable, condicional) + specialties M2M (1+) + phones (1-10) + paymentMethods (0-20) + isActive.
+- **CareCenter**: `name` + email + `rif` (NOT NULL, siempre obligatorio) + specialties M2M (1+) + phones + paymentMethods + isActive. Sin `isLegalEntity`.
+
+Decisiones de diseño:
+
+1. **Phones por owner**: tablas `doctor_phones`, `care_center_phones`, `patient_phones`. Polimórfica única evaluada y descartada — relaciones TypeORM y cascadas más simples por owner.
+2. **Payment methods STI**: `doctor_payment_methods` y `care_center_payment_methods`. Discriminador `type` ∈ `mobile_payment | bank_transfer | other`. Columnas tipo-específicas todas nullable. El DTO valida campo a campo con `@ValidateIf((o) => o.type === '...')`.
+3. **Replace-all en PATCH**: el service borra y re-inserta phones/paymentMethods en cada update. El payload es self-contained, sin sub-recursos REST. Razón: simplifica el FE — el cliente envía siempre el array final como lo quiere.
+4. **Cross-validation `isLegalEntity ↔ rif`** (sólo doctores): `@ValidateIf((o) => o.isLegalEntity === true)` en el DTO + check en service que lanza `BadRequestException` ambos sentidos (RIF requerido si jurídica; ausente si natural). Defensa en profundidad ante clientes maliciosos.
+5. **Validación de `bankCode`**: `validatePaymentMethods()` en el service hace lookup contra `banks` por `code` antes de `save()`. Si el código no existe → `BadRequestException`.
+
+Endpoints estándar: `GET /<recurso>`, `GET /<recurso>/:id`, `POST /<recurso>`, `PATCH /<recurso>/:id`, `PATCH /<recurso>/:id/toggle-active`, `DELETE /<recurso>/:id`, `DELETE /<recurso>/:id/permanent`, `PATCH /<recurso>/:id/restore`. Filtro `entityType` (`natural|legal|all`) sólo en doctores.
+
 ---
 
 ## Paginación

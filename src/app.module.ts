@@ -14,6 +14,11 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { SpecialtiesModule } from './specialties/specialties.module';
+import { BanksModule } from './banks/banks.module';
+import { PatientsModule } from './patients/patients.module';
+import { DoctorsModule } from './doctors/doctors.module';
+import { CareCentersModule } from './care-centers/care-centers.module';
 
 @Module({
   imports: [
@@ -27,6 +32,11 @@ import { PermissionsModule } from './permissions/permissions.module';
     UsersModule,
     RolesModule,
     PermissionsModule,
+    SpecialtiesModule,
+    BanksModule,
+    PatientsModule,
+    DoctorsModule,
+    CareCentersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

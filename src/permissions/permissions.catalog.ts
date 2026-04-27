@@ -10,6 +10,10 @@ export interface PermissionDefinition {
 const USERS_GROUP = 'Usuarios';
 const ROLES_GROUP = 'Roles';
 const PERMISSIONS_GROUP = 'Permisos';
+const SPECIALTIES_GROUP = 'Especialidades';
+const PATIENTS_GROUP = 'Pacientes';
+const DOCTORS_GROUP = 'Doctores';
+const CARE_CENTERS_GROUP = 'Centros de Atención';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -172,11 +176,100 @@ const permissionsResourcePermissions: PermissionDefinition[] = [
   },
 ];
 
+function buildResourcePermissions(
+  resource: string,
+  group: string,
+  labels: Record<string, { label: string; description: string }>,
+): PermissionDefinition[] {
+  return Object.entries(labels).map(([action, l]) => ({
+    name: `${resource}.${action}`,
+    resource,
+    action,
+    label: l.label,
+    description: l.description,
+    group,
+  }));
+}
+
+const standardActionLabels = (entity: string, plural: string) => ({
+  list: { label: `Listar ${plural}`, description: `Permite ver el listado de ${plural} del sistema` },
+  view: { label: `Ver detalle de ${entity}`, description: `Permite ver el detalle de un ${entity} específico` },
+  create: { label: `Crear ${plural}`, description: `Permite crear nuevos ${plural}` },
+  update: { label: `Editar ${plural}`, description: `Permite modificar los datos de un ${entity}` },
+  'toggle-active': {
+    label: `Habilitar/Deshabilitar ${plural}`,
+    description: `Permite habilitar o deshabilitar ${plural}`,
+  },
+  'soft-delete': {
+    label: `Mover ${plural} a la papelera`,
+    description: `Permite enviar ${plural} a la papelera (borrado lógico)`,
+  },
+  'hard-delete': {
+    label: `Eliminar ${plural} permanentemente`,
+    description: `Permite eliminar ${plural} de forma definitiva`,
+  },
+  restore: { label: `Restaurar ${plural}`, description: `Permite restaurar ${plural} desde la papelera` },
+});
+
+const specialtiesPermissions = buildResourcePermissions(
+  'specialties',
+  SPECIALTIES_GROUP,
+  standardActionLabels('especialidad', 'especialidades'),
+);
+
+const patientsPermissions = buildResourcePermissions(
+  'patients',
+  PATIENTS_GROUP,
+  standardActionLabels('paciente', 'pacientes'),
+);
+
+const doctorsPermissions = buildResourcePermissions(
+  'doctors',
+  DOCTORS_GROUP,
+  standardActionLabels('doctor', 'doctores'),
+);
+
+const careCentersPermissions = buildResourcePermissions(
+  'care-centers',
+  CARE_CENTERS_GROUP,
+  standardActionLabels('centro de atención', 'centros de atención'),
+);
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
   ...permissionsResourcePermissions,
+  ...specialtiesPermissions,
+  ...patientsPermissions,
+  ...doctorsPermissions,
+  ...careCentersPermissions,
 ];
+
+const standardActions = {
+  VIEW: 'view',
+  LIST: 'list',
+  CREATE: 'create',
+  UPDATE: 'update',
+  TOGGLE_ACTIVE: 'toggle-active',
+  SOFT_DELETE: 'soft-delete',
+  HARD_DELETE: 'hard-delete',
+  RESTORE: 'restore',
+} as const;
+
+function buildResourceConst<T extends string>(resource: T) {
+  return {
+    VIEW: `${resource}.view`,
+    LIST: `${resource}.list`,
+    CREATE: `${resource}.create`,
+    UPDATE: `${resource}.update`,
+    TOGGLE_ACTIVE: `${resource}.toggle-active`,
+    SOFT_DELETE: `${resource}.soft-delete`,
+    HARD_DELETE: `${resource}.hard-delete`,
+    RESTORE: `${resource}.restore`,
+  } as const;
+}
+
+void standardActions;
 
 export const PERMISSIONS = {
   USERS: {
@@ -204,4 +297,8 @@ export const PERMISSIONS = {
   PERMISSIONS: {
     LIST: 'permissions.list',
   },
+  SPECIALTIES: buildResourceConst('specialties'),
+  PATIENTS: buildResourceConst('patients'),
+  DOCTORS: buildResourceConst('doctors'),
+  CARE_CENTERS: buildResourceConst('care-centers'),
 } as const;
