@@ -1,16 +1,7 @@
 import { Transform, Type } from 'class-transformer';
-import {
-  IsBooleanString,
-  IsDateString,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class QueryPatientsDto {
+export class QueryInsurancesDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -29,14 +20,8 @@ export class QueryPatientsDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['firstName', 'lastName', 'cedula', 'email', 'createdAt', 'updatedAt'])
-  sortBy?:
-    | 'firstName'
-    | 'lastName'
-    | 'cedula'
-    | 'email'
-    | 'createdAt'
-    | 'updatedAt' = 'createdAt';
+  @IsIn(['name', 'createdAt', 'updatedAt'])
+  sortBy?: 'name' | 'createdAt' | 'updatedAt' = 'createdAt';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
@@ -54,16 +39,4 @@ export class QueryPatientsDto {
   @IsOptional()
   @IsBooleanString()
   isActive?: string;
-
-  @IsOptional()
-  @IsDateString()
-  birthDateFrom?: string;
-
-  @IsOptional()
-  @IsDateString()
-  birthDateTo?: string;
-
-  @IsOptional()
-  @IsString()
-  insuranceId?: string;
 }

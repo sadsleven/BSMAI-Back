@@ -3,11 +3,14 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  JoinTable,
+  ManyToMany,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { PatientPhone } from './patient-phone.entity';
+import { Insurance } from '../../insurances/entities/insurance.entity';
 
 @Entity({ name: 'patients' })
 export class Patient {
@@ -41,6 +44,14 @@ export class Patient {
     eager: true,
   })
   phones: PatientPhone[];
+
+  @ManyToMany(() => Insurance, (i) => i.patients, { eager: true })
+  @JoinTable({
+    name: 'patient_insurances',
+    joinColumn: { name: 'patientId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'insuranceId', referencedColumnName: 'id' },
+  })
+  insurances: Insurance[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

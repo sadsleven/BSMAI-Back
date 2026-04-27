@@ -19,6 +19,9 @@ import { BanksModule } from './banks/banks.module';
 import { PatientsModule } from './patients/patients.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { CareCentersModule } from './care-centers/care-centers.module';
+import { InsurancesModule } from './insurances/insurances.module';
+import { PathologiesModule } from './pathologies/pathologies.module';
+import { ServiceTypesModule } from './service-types/service-types.module';
 
 @Module({
   imports: [
@@ -37,6 +40,9 @@ import { CareCentersModule } from './care-centers/care-centers.module';
     PatientsModule,
     DoctorsModule,
     CareCentersModule,
+    InsurancesModule,
+    PathologiesModule,
+    ServiceTypesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

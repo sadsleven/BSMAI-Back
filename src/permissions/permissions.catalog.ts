@@ -14,6 +14,9 @@ const SPECIALTIES_GROUP = 'Especialidades';
 const PATIENTS_GROUP = 'Pacientes';
 const DOCTORS_GROUP = 'Doctores';
 const CARE_CENTERS_GROUP = 'Centros de Atención';
+const INSURANCES_GROUP = 'Seguros';
+const PATHOLOGIES_GROUP = 'Patologías';
+const SERVICE_TYPES_GROUP = 'Tipos de servicio';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -235,6 +238,24 @@ const careCentersPermissions = buildResourcePermissions(
   standardActionLabels('centro de atención', 'centros de atención'),
 );
 
+const insurancesPermissions = buildResourcePermissions(
+  'insurances',
+  INSURANCES_GROUP,
+  standardActionLabels('seguro', 'seguros'),
+);
+
+const pathologiesPermissions = buildResourcePermissions(
+  'pathologies',
+  PATHOLOGIES_GROUP,
+  standardActionLabels('patología', 'patologías'),
+);
+
+const serviceTypesPermissions = buildResourcePermissions(
+  'service-types',
+  SERVICE_TYPES_GROUP,
+  standardActionLabels('tipo de servicio', 'tipos de servicio'),
+);
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
@@ -243,6 +264,9 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...patientsPermissions,
   ...doctorsPermissions,
   ...careCentersPermissions,
+  ...insurancesPermissions,
+  ...pathologiesPermissions,
+  ...serviceTypesPermissions,
 ];
 
 const standardActions = {
@@ -301,4 +325,7 @@ export const PERMISSIONS = {
   PATIENTS: buildResourceConst('patients'),
   DOCTORS: buildResourceConst('doctors'),
   CARE_CENTERS: buildResourceConst('care-centers'),
+  INSURANCES: buildResourceConst('insurances'),
+  PATHOLOGIES: buildResourceConst('pathologies'),
+  SERVICE_TYPES: buildResourceConst('service-types'),
 } as const;

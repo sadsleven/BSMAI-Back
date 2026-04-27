@@ -8,6 +8,7 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   MinLength,
@@ -56,6 +57,12 @@ export class CreatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => PhoneDto)
   phones: PhoneDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50, { message: 'Máximo 50 seguros por paciente' })
+  @IsUUID('all', { each: true, message: 'IDs de seguros inválidos' })
+  insuranceIds?: string[];
 
   @IsOptional()
   @IsBoolean()

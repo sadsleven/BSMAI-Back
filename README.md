@@ -260,7 +260,7 @@ Recurso `roles` (grupo "Roles"):
 Recurso `permissions` (grupo "Permisos"):
 - `permissions.list`.
 
-Recurso `specialties` (grupo "Especialidades"), `patients` (grupo "Pacientes"), `doctors` (grupo "Doctores"), `care-centers` (grupo "Centros de atención"):
+Recurso `specialties` (grupo "Especialidades"), `patients` (grupo "Pacientes"), `doctors` (grupo "Doctores"), `care-centers` (grupo "Centros de atención"), `insurances` (grupo "Seguros"), `pathologies` (grupo "Patologías"), `service-types` (grupo "Tipos de servicio"):
 - 8 acciones estándar cada uno: `<resource>.{list,view,create,update,toggle-active,soft-delete,hard-delete,restore}`. Generadas vía helper `buildResourcePermissions` en `permissions.catalog.ts`.
 
 `GET /banks` es público (no requiere permiso).
@@ -283,7 +283,17 @@ CRUD simple. Endpoint extra `GET /specialties/assignable` (permiso `specialties.
 
 ### Pacientes (`patients`)
 
-Cédula + email + nombres + birthDate + dirección + phones (1-10) + isActive. Tabla `patient_phones` OneToMany con cascade+eager. Cédula y email únicos. Standard CRUD + soft delete + toggle-active.
+Cédula + email + nombres + birthDate + dirección + phones (1-10) + insurances M2M (opcional) + isActive. Tabla `patient_phones` OneToMany con cascade+eager. M2M con `insurances` vía pivote `patient_insurances` (FK CASCADE). Cédula y email únicos. Standard CRUD + soft delete + toggle-active.
+
+`insuranceIds` opcional en `CreatePatientDto` / `UpdatePatientDto`. Validación: nuevos IDs (no asignados antes) deben existir, estar `isActive=true` y `deletedAt=null` → si no, `BadRequestException` con lista de IDs inválidos. IDs ya asignados que se volvieron stale (deshabilitados / papelera) se mantienen silenciosamente para que el FE pueda mostrarlos como chips quitables. Filtro `insuranceId` en `GET /patients` usa subquery sobre `patient_insurances` (evita perder otros seguros del mismo paciente al filtrar).
+
+### Seguros (`insurances`)
+
+Name (único) + description + phones (1-10) + isActive. Tabla `insurance_phones` siguiendo convención **per-owner** (consistente con `patient_phones`/`doctor_phones`/`care_center_phones`). Replace-all en PATCH. M2M inversa hacia `Patient` (no eager — el patient sí lo es). Endpoint extra `GET /insurances/assignable` (permiso `insurances.list`) devuelve activos + no eliminados.
+
+### Patologías (`pathologies`) y Tipos de servicio (`service-types`)
+
+CRUD simple paralelo a Especialidades: name (único) + description + isActive + soft delete + toggle-active + restore + assignable.
 
 ### Doctores (`doctors`) y Centros de atención (`care-centers`)
 
@@ -294,7 +304,7 @@ Estructura paralela:
 
 Decisiones de diseño:
 
-1. **Phones por owner**: tablas `doctor_phones`, `care_center_phones`, `patient_phones`. Polimórfica única evaluada y descartada — relaciones TypeORM y cascadas más simples por owner.
+1. **Phones por owner**: tablas `doctor_phones`, `care_center_phones`, `patient_phones`, `insurance_phones`. Polimórfica única evaluada y descartada — relaciones TypeORM y cascadas más simples por owner. **Cualquier nuevo módulo con phones crea su propia `<owner>_phones`.**
 2. **Payment methods STI**: `doctor_payment_methods` y `care_center_payment_methods`. Discriminador `type` ∈ `mobile_payment | bank_transfer | other`. Columnas tipo-específicas todas nullable. El DTO valida campo a campo con `@ValidateIf((o) => o.type === '...')`.
 3. **Replace-all en PATCH**: el service borra y re-inserta phones/paymentMethods en cada update. El payload es self-contained, sin sub-recursos REST. Razón: simplifica el FE — el cliente envía siempre el array final como lo quiere.
 4. **Cross-validation `isLegalEntity ↔ rif`** (sólo doctores): `@ValidateIf((o) => o.isLegalEntity === true)` en el DTO + check en service que lanza `BadRequestException` ambos sentidos (RIF requerido si jurídica; ausente si natural). Defensa en profundidad ante clientes maliciosos.

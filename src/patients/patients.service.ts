@@ -1,12 +1,14 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Patient } from './entities/patient.entity';
 import { PatientPhone } from './entities/patient-phone.entity';
+import { Insurance } from '../insurances/entities/insurance.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { QueryPatientsDto } from './dto/query-patients.dto';
@@ -21,6 +23,8 @@ export class PatientsService {
     @InjectRepository(Patient) private readonly repo: Repository<Patient>,
     @InjectRepository(PatientPhone)
     private readonly phonesRepo: Repository<PatientPhone>,
+    @InjectRepository(Insurance)
+    private readonly insurancesRepo: Repository<Insurance>,
   ) {}
 
   async findAll(query: QueryPatientsDto): Promise<PaginatedResponse<Patient>> {
@@ -35,11 +39,13 @@ export class PatientsService {
       isActive,
       birthDateFrom,
       birthDateTo,
+      insuranceId,
     } = query;
 
     const qb = this.repo
       .createQueryBuilder('patient')
       .leftJoinAndSelect('patient.phones', 'phone')
+      .leftJoinAndSelect('patient.insurances', 'insurance')
       .orderBy(`patient.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -66,13 +72,23 @@ export class PatientsService {
       qb.andWhere('patient.birthDate <= :bdt', { bdt: birthDateTo });
     }
 
+    if (insuranceId) {
+      // Filter via subquery so the JOIN doesn't lose other insurances of the patient
+      qb.andWhere(
+        `patient.id IN (
+          SELECT pi."patientId" FROM patient_insurances pi WHERE pi."insuranceId" = :insId
+        )`,
+        { insId: insuranceId },
+      );
+    }
+
     return paginateBuilder<Patient>(qb, page, limit);
   }
 
   async findOne(id: string, withDeleted = false): Promise<Patient> {
     const patient = await this.repo.findOne({
       where: { id },
-      relations: { phones: true },
+      relations: { phones: true, insurances: true },
       withDeleted,
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
@@ -86,6 +102,8 @@ export class PatientsService {
     await this.assertUniqueCedula(cedula);
     await this.assertUniqueEmail(email);
 
+    const insurances = await this.resolveInsurances(dto.insuranceIds ?? []);
+
     const patient = this.repo.create({
       cedula,
       email,
@@ -95,6 +113,7 @@ export class PatientsService {
       address: dto.address.trim(),
       isActive: dto.isActive ?? true,
       phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
+      insurances,
     });
     return this.repo.save(patient);
   }
@@ -123,10 +142,16 @@ export class PatientsService {
     if (dto.isActive !== undefined) patient.isActive = dto.isActive;
 
     if (dto.phones) {
-      // Replace-all strategy: drop existing, insert new (cascade orphanRemoval).
       await this.phonesRepo.delete({ patientId: patient.id });
       patient.phones = dto.phones.map((p) =>
         this.phonesRepo.create({ ...this.phonePayload(p), patientId: patient.id }),
+      );
+    }
+
+    if (dto.insuranceIds !== undefined) {
+      patient.insurances = await this.resolveInsurances(
+        dto.insuranceIds,
+        patient.insurances ?? [],
       );
     }
 
@@ -169,5 +194,41 @@ export class PatientsService {
   private async assertUniqueEmail(email: string): Promise<void> {
     const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
     if (existing) throw new ConflictException('Ya existe un paciente con ese email');
+  }
+
+  /**
+   * Resolve insurance IDs into entities. New IDs (not already in `current`) must be
+   * active and non-deleted. Stale IDs already attached to the patient are kept silently
+   * so the caller can keep them as removable chips in the UI.
+   */
+  private async resolveInsurances(
+    ids: string[],
+    current: Insurance[] = [],
+  ): Promise<Insurance[]> {
+    if (!ids.length) return [];
+    const unique = Array.from(new Set(ids));
+    const currentIds = new Set(current.map((i) => i.id));
+    const newIds = unique.filter((id) => !currentIds.has(id));
+
+    // For new IDs (additions), require active + non-deleted
+    if (newIds.length) {
+      const valid = await this.insurancesRepo.find({
+        where: { id: In(newIds), isActive: true, deletedAt: IsNull() },
+      });
+      if (valid.length !== newIds.length) {
+        const validIds = new Set(valid.map((v) => v.id));
+        const missing = newIds.filter((id) => !validIds.has(id));
+        throw new BadRequestException(
+          `Algunos seguros no existen, están deshabilitados o en papelera: ${missing.join(', ')}`,
+        );
+      }
+    }
+
+    // Hydrate full set (including stale already-attached ones) using withDeleted to keep them
+    const entities = await this.insurancesRepo.find({
+      where: { id: In(unique) },
+      withDeleted: true,
+    });
+    return entities;
   }
 }
