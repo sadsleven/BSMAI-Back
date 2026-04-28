@@ -1,16 +1,7 @@
 import { Transform, Type } from 'class-transformer';
-import {
-  IsBooleanString,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class QueryCareCentersDto {
+export class QueryContractorsDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -29,8 +20,8 @@ export class QueryCareCentersDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['businessName', 'email', 'rif', 'createdAt', 'updatedAt'])
-  sortBy?: 'businessName' | 'email' | 'rif' | 'createdAt' | 'updatedAt' = 'createdAt';
+  @IsIn(['name', 'createdAt', 'updatedAt'])
+  sortBy?: 'name' | 'createdAt' | 'updatedAt' = 'createdAt';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
@@ -48,8 +39,4 @@ export class QueryCareCentersDto {
   @IsOptional()
   @IsBooleanString()
   isActive?: string;
-
-  @IsOptional()
-  @IsUUID('4')
-  specialtyId?: string;
 }

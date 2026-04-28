@@ -22,6 +22,8 @@ import { CareCentersModule } from './care-centers/care-centers.module';
 import { InsurancesModule } from './insurances/insurances.module';
 import { PathologiesModule } from './pathologies/pathologies.module';
 import { ServiceTypesModule } from './service-types/service-types.module';
+import { ContractorsModule } from './contractors/contractors.module';
+import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 
 @Module({
   imports: [
@@ -43,6 +45,8 @@ import { ServiceTypesModule } from './service-types/service-types.module';
     InsurancesModule,
     PathologiesModule,
     ServiceTypesModule,
+    ContractorsModule,
+    ExchangeRatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -18,8 +18,9 @@ export class CareCenter {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /** Razón social. Antes era `name`. */
   @Column({ type: 'varchar', length: 200, unique: true })
-  name: string;
+  businessName: string;
 
   @Column({ type: 'varchar', length: 200, unique: true })
   email: string;

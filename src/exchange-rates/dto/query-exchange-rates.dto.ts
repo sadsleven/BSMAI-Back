@@ -1,16 +1,8 @@
 import { Transform, Type } from 'class-transformer';
-import {
-  IsBooleanString,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsBooleanString, IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { CURRENCIES, Currency } from '../entities/exchange-rate.entity';
 
-export class QueryCareCentersDto {
+export class QueryExchangeRatesDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -25,17 +17,25 @@ export class QueryCareCentersDto {
   limit?: number = 10;
 
   @IsOptional()
-  @IsString()
-  search?: string;
-
-  @IsOptional()
-  @IsIn(['businessName', 'email', 'rif', 'createdAt', 'updatedAt'])
-  sortBy?: 'businessName' | 'email' | 'rif' | 'createdAt' | 'updatedAt' = 'createdAt';
+  @IsIn(['effectiveDate', 'amountBs', 'currency', 'createdAt', 'updatedAt'])
+  sortBy?: 'effectiveDate' | 'amountBs' | 'currency' | 'createdAt' | 'updatedAt' = 'effectiveDate';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
   @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
   sortDir?: 'ASC' | 'DESC' = 'DESC';
+
+  @IsOptional()
+  @IsIn(CURRENCIES)
+  currency?: Currency;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveDateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveDateTo?: string;
 
   @IsOptional()
   @IsBooleanString()
@@ -48,8 +48,4 @@ export class QueryCareCentersDto {
   @IsOptional()
   @IsBooleanString()
   isActive?: string;
-
-  @IsOptional()
-  @IsUUID('4')
-  specialtyId?: string;
 }

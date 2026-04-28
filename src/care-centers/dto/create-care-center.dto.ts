@@ -23,9 +23,9 @@ import { PaymentMethodDto } from './payment-method.dto';
 
 export class CreateCareCenterDto {
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: 'La razón social debe tener al menos 2 caracteres' })
   @MaxLength(200)
-  name: string;
+  businessName: string;
 
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)

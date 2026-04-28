@@ -61,7 +61,7 @@ export class CareCentersService {
 
     if (search && search.trim()) {
       qb.andWhere(
-        '(LOWER(center.name) LIKE :s OR LOWER(center.email) LIKE :s OR LOWER(center.rif) LIKE :s)',
+        '(LOWER(center.businessName) LIKE :s OR LOWER(center.email) LIKE :s OR LOWER(center.rif) LIKE :s)',
         { s: `%${search.trim().toLowerCase()}%` },
       );
     }
@@ -91,11 +91,11 @@ export class CareCentersService {
   }
 
   async create(dto: CreateCareCenterDto): Promise<CareCenter> {
-    const name = dto.name.trim();
+    const businessName = dto.businessName.trim();
     const email = dto.email.toLowerCase().trim();
     const rif = normalizeRif(dto.rif);
 
-    await this.assertUniqueName(name);
+    await this.assertUniqueBusinessName(businessName);
     await this.assertUniqueEmail(email);
     await this.assertUniqueRif(rif);
 
@@ -103,7 +103,7 @@ export class CareCentersService {
     await this.validatePaymentMethods(dto.paymentMethods ?? []);
 
     const center = this.repo.create({
-      name,
+      businessName,
       email,
       rif,
       isActive: dto.isActive ?? true,
@@ -119,11 +119,11 @@ export class CareCentersService {
   async update(id: string, dto: UpdateCareCenterDto): Promise<CareCenter> {
     const center = await this.findOne(id);
 
-    if (dto.name) {
-      const name = dto.name.trim();
-      if (name !== center.name) {
-        await this.assertUniqueName(name);
-        center.name = name;
+    if (dto.businessName) {
+      const businessName = dto.businessName.trim();
+      if (businessName !== center.businessName) {
+        await this.assertUniqueBusinessName(businessName);
+        center.businessName = businessName;
       }
     }
     if (dto.email) {
@@ -232,9 +232,9 @@ export class CareCentersService {
     }
   }
 
-  private async assertUniqueName(name: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { name }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un centro con ese nombre');
+  private async assertUniqueBusinessName(businessName: string): Promise<void> {
+    const existing = await this.repo.findOne({ where: { businessName }, withDeleted: true });
+    if (existing) throw new ConflictException('Ya existe un centro con esa razón social');
   }
 
   private async assertUniqueEmail(email: string): Promise<void> {

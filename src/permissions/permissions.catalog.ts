@@ -17,6 +17,8 @@ const CARE_CENTERS_GROUP = 'Centros de Atención';
 const INSURANCES_GROUP = 'Seguros';
 const PATHOLOGIES_GROUP = 'Patologías';
 const SERVICE_TYPES_GROUP = 'Tipos de servicio';
+const CONTRACTORS_GROUP = 'Contratistas';
+const EXCHANGE_RATES_GROUP = 'Tasa de cambio';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -256,6 +258,18 @@ const serviceTypesPermissions = buildResourcePermissions(
   standardActionLabels('tipo de servicio', 'tipos de servicio'),
 );
 
+const contractorsPermissions = buildResourcePermissions(
+  'contractors',
+  CONTRACTORS_GROUP,
+  standardActionLabels('contratista', 'contratistas'),
+);
+
+const exchangeRatesPermissions = buildResourcePermissions(
+  'exchange-rates',
+  EXCHANGE_RATES_GROUP,
+  standardActionLabels('tasa de cambio', 'tasas de cambio'),
+);
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
@@ -267,6 +281,8 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...insurancesPermissions,
   ...pathologiesPermissions,
   ...serviceTypesPermissions,
+  ...contractorsPermissions,
+  ...exchangeRatesPermissions,
 ];
 
 const standardActions = {
@@ -328,4 +344,6 @@ export const PERMISSIONS = {
   INSURANCES: buildResourceConst('insurances'),
   PATHOLOGIES: buildResourceConst('pathologies'),
   SERVICE_TYPES: buildResourceConst('service-types'),
+  CONTRACTORS: buildResourceConst('contractors'),
+  EXCHANGE_RATES: buildResourceConst('exchange-rates'),
 } as const;

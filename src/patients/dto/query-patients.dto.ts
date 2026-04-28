@@ -9,6 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { PERSON_TYPES, PersonType } from '../entities/patient.entity';
 
 export class QueryPatientsDto {
   @IsOptional()
@@ -29,11 +30,13 @@ export class QueryPatientsDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['firstName', 'lastName', 'cedula', 'email', 'createdAt', 'updatedAt'])
+  @IsIn(['firstName', 'lastName', 'businessName', 'cedula', 'rif', 'email', 'createdAt', 'updatedAt'])
   sortBy?:
     | 'firstName'
     | 'lastName'
+    | 'businessName'
     | 'cedula'
+    | 'rif'
     | 'email'
     | 'createdAt'
     | 'updatedAt' = 'createdAt';
@@ -66,4 +69,12 @@ export class QueryPatientsDto {
   @IsOptional()
   @IsString()
   insuranceId?: string;
+
+  @IsOptional()
+  @IsString()
+  contractorId?: string;
+
+  @IsOptional()
+  @IsIn(PERSON_TYPES)
+  personType?: PersonType;
 }
