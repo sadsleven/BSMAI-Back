@@ -20,6 +20,7 @@ const SERVICE_TYPES_GROUP = 'Tipos de servicio';
 const CONTRACTORS_GROUP = 'Contratistas';
 const EXCHANGE_RATES_GROUP = 'Tasa de cambio';
 const BRANCHES_GROUP = 'Sucursales';
+const ORDERS_GROUP = 'Órdenes';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -277,6 +278,65 @@ const branchesPermissions = buildResourcePermissions(
   standardActionLabels('sucursal', 'sucursales'),
 );
 
+const ordersPermissions: PermissionDefinition[] = [
+  {
+    name: 'orders.list',
+    resource: 'orders',
+    action: 'list',
+    label: 'Listar órdenes',
+    description: 'Permite ver el listado de órdenes del sistema',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.view',
+    resource: 'orders',
+    action: 'view',
+    label: 'Ver detalle de orden',
+    description: 'Permite ver el detalle de una orden específica',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.create',
+    resource: 'orders',
+    action: 'create',
+    label: 'Crear órdenes',
+    description: 'Permite crear nuevas órdenes',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.update',
+    resource: 'orders',
+    action: 'update',
+    label: 'Editar órdenes',
+    description: 'Permite modificar órdenes en borrador (incluye gestión de pagos)',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.soft-delete',
+    resource: 'orders',
+    action: 'soft-delete',
+    label: 'Mover órdenes a la papelera',
+    description: 'Permite enviar órdenes a la papelera (borrado lógico)',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.hard-delete',
+    resource: 'orders',
+    action: 'hard-delete',
+    label: 'Eliminar órdenes permanentemente',
+    description: 'Permite eliminar órdenes de forma definitiva',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.restore',
+    resource: 'orders',
+    action: 'restore',
+    label: 'Restaurar órdenes',
+    description: 'Permite restaurar órdenes desde la papelera',
+    group: ORDERS_GROUP,
+  },
+];
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
@@ -291,6 +351,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...contractorsPermissions,
   ...exchangeRatesPermissions,
   ...branchesPermissions,
+  ...ordersPermissions,
 ];
 
 const standardActions = {
@@ -355,4 +416,13 @@ export const PERMISSIONS = {
   CONTRACTORS: buildResourceConst('contractors'),
   EXCHANGE_RATES: buildResourceConst('exchange-rates'),
   BRANCHES: buildResourceConst('branches'),
+  ORDERS: {
+    LIST: 'orders.list',
+    VIEW: 'orders.view',
+    CREATE: 'orders.create',
+    UPDATE: 'orders.update',
+    SOFT_DELETE: 'orders.soft-delete',
+    HARD_DELETE: 'orders.hard-delete',
+    RESTORE: 'orders.restore',
+  },
 } as const;

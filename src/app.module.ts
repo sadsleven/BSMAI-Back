@@ -25,6 +25,7 @@ import { ServiceTypesModule } from './service-types/service-types.module';
 import { ContractorsModule } from './contractors/contractors.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { BranchesModule } from './branches/branches.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { BranchesModule } from './branches/branches.module';
     ContractorsModule,
     ExchangeRatesModule,
     BranchesModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -77,4 +77,12 @@ export class QueryPatientsDto {
   @IsOptional()
   @IsIn(PERSON_TYPES)
   personType?: PersonType;
+
+  /**
+   * Si `'true'`, restringe a pacientes con al menos un contratista y al menos un seguro
+   * asignados (no eliminados/activos). Usado por el flujo de creación de orden tipo seguro.
+   */
+  @IsOptional()
+  @IsString()
+  hasInsuranceAndContractor?: string;
 }

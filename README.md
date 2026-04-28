@@ -263,6 +263,8 @@ Recurso `permissions` (grupo "Permisos"):
 Recurso `specialties` (grupo "Especialidades"), `patients` (grupo "Pacientes"), `doctors` (grupo "Doctores"), `care-centers` (grupo "Centros de atención"), `insurances` (grupo "Seguros"), `pathologies` (grupo "Patologías"), `service-types` (grupo "Tipos de servicio"), `branches` (grupo "Sucursales"):
 - 8 acciones estándar cada uno: `<resource>.{list,view,create,update,toggle-active,soft-delete,hard-delete,restore}`. Generadas vía helper `buildResourcePermissions` en `permissions.catalog.ts`.
 
+Recurso `orders` (grupo "Órdenes"): 7 acciones — `orders.{list,view,create,update,soft-delete,hard-delete,restore}`. **No tiene `toggle-active`** porque las órdenes no se habilitan/deshabilitan; transitan por estados. `orders.update` cubre tanto edición de la orden (sólo en `draft`) como gestión de pagos (sub-recurso `/orders/:id/payments`).
+
 `GET /banks` es público (no requiere permiso).
 
 ---
@@ -294,6 +296,33 @@ Name (único) + description + phones (1-10) + isActive. Tabla `insurance_phones`
 ### Patologías (`pathologies`) y Tipos de servicio (`service-types`)
 
 CRUD simple paralelo a Especialidades: name (único) + description + isActive + soft delete + toggle-active + restore + assignable.
+
+### Órdenes (`orders`) — Paso 1 (registro)
+
+Entity con FKs: `branchId`, `holderId`, `patientId` (ambos a `patients`, pueden coincidir), `contractorId?`, `insuranceId?`, `providerType ∈ {doctor, care_center}` con `doctorId?`/`careCenterId?` (exactamente uno según `providerType`), `specialtyId`, `serviceTypeId`, `pathologyId`, `orderDate`, `appointmentDate`, `priceCurrency`, `priceAmount`, `createdById`. Subtabla `order_payments` con FK `orderId` (CASCADE) + `exchangeRateId?` (RESTRICT, histórica).
+
+**Sin `isActive` ni `toggle-active`**. Estados (`OrderStatus`): `draft → in_progress → attended → report_issued → finalized` + `cancelled` (terminal alterno). Map `ALLOWED_TRANSITIONS` en el service define las transiciones permitidas. Toda orden nueva nace `draft`. Edición permitida sólo si `status === 'draft'`. Los endpoints de transición de estado (`/advance`, etc.) **no están implementados aún** — sólo CRUD básico + sub-recurso pagos. `finalized` no admite cambios salvo soft delete.
+
+`orderNumber` autogenerado vía `nextval('orders_seq')` con formato `ORD-YYYY-NNNNNN`.
+
+**Filtrado por sucursal del usuario**: en `findAll`/`findOne`, si `user.isSuperAdmin === false`, se restringe a las sucursales asignadas al usuario (consulta directa a `user_branches` filtrada por `isActive` + no eliminadas). Super Admin ve todo. Regla análoga a la de Sucursales pero aplicada en la consulta de órdenes — **enforcement server-side de visibilidad**.
+
+**Validaciones cruzadas** en `validateCoreReferences`:
+- Doctor o centro mutuamente excluyentes según `providerType`.
+- `specialtyId` debe estar entre las del proveedor (`doctor.specialties` o `careCenter.specialties`).
+- Si `type === 'insurance'`: `contractorId` e `insuranceId` deben pertenecer al `holder` (`holder.contractors` y `holder.insurances`). Para otros tipos, ambos campos deben estar ausentes.
+- `appointmentDate >= orderDate`.
+- `branchId` debe estar en las sucursales visibles del usuario (Super Admin lo evade).
+
+**Pagos** (`order_payments`): tipos `mobile_payment | bank_transfer | cash_foreign | cash_bs | other`. Cada tipo valida sus campos en `resolvePaymentForSave`:
+- `mobile_payment`/`bank_transfer`: `bankCode` (lookup contra `banks`), `referenceNumber`, `exchangeRateId` (histórica), `amountCurrency = 'BS'`.
+- `cash_bs`: `exchangeRateId`, `amountCurrency = 'BS'`.
+- `cash_foreign`: `amountCurrency` debe coincidir con `priceCurrency` de la orden.
+- `other`: `referenceNumber`, `amountCurrency` debe coincidir con `priceCurrency`.
+
+**Replace-all en update**: si el body de update incluye `payments`, se borra el conjunto previo y se re-inserta. Mismo patrón que doctor/centro. Pagos sólo se admiten para órdenes `cash` y `cashea`.
+
+Endpoints: `GET /orders`, `GET /orders/:id`, `POST /orders`, `PATCH /orders/:id`, `DELETE /orders/:id`, `DELETE /orders/:id/permanent`, `PATCH /orders/:id/restore`, `POST /orders/:id/payments`, `PATCH /orders/:id/payments/:paymentId`, `DELETE /orders/:id/payments/:paymentId`. Permiso `orders.update` cubre tanto el cuerpo de la orden como su sub-recurso de pagos.
 
 ### Sucursales (`branches`)
 

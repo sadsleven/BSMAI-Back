@@ -45,6 +45,7 @@ export class PatientsService {
       insuranceId,
       contractorId,
       personType,
+      hasInsuranceAndContractor,
     } = query;
 
     const qb = this.repo
@@ -103,6 +104,11 @@ export class PatientsService {
         )`,
         { ctrId: contractorId },
       );
+    }
+
+    if (hasInsuranceAndContractor === 'true') {
+      qb.andWhere(`EXISTS (SELECT 1 FROM patient_insurances pi WHERE pi."patientId" = patient.id)`);
+      qb.andWhere(`EXISTS (SELECT 1 FROM patient_contractors pc WHERE pc."patientId" = patient.id)`);
     }
 
     return paginateBuilder<Patient>(qb, page, limit);
