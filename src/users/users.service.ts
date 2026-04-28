@@ -7,10 +7,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
+import { Branch } from '../branches/entities/branch.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -28,6 +29,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
+    @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
   ) {}
 
   async findAll(query: QueryUsersDto): Promise<PaginatedResponse<PublicUserView>> {
@@ -38,6 +40,7 @@ export class UsersService {
       isActive,
       isSuperAdmin,
       roleId,
+      branchId,
       sortBy = 'createdAt',
       sortDir = 'DESC',
       withDeleted,
@@ -48,6 +51,7 @@ export class UsersService {
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.roles', 'role')
       .leftJoinAndSelect('role.permissions', 'permission')
+      .leftJoinAndSelect('user.branches', 'branch')
       .orderBy(`user.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -81,6 +85,15 @@ export class UsersService {
         { rids: query.roleIds },
       );
     }
+    if (branchId) {
+      // Super Admins always match any branch filter (acceso implícito a todas).
+      qb.andWhere(
+        `(user."isSuperAdmin" = true OR user.id IN (
+          SELECT ub."userId" FROM user_branches ub WHERE ub."branchId" = :branchId
+        ))`,
+        { branchId },
+      );
+    }
 
     return paginateBuilder<User>(qb, page, limit) as unknown as Promise<
       PaginatedResponse<PublicUserView>
@@ -90,7 +103,7 @@ export class UsersService {
   async findOne(id: string, withDeleted = false): Promise<PublicUserView> {
     const user = await this.usersRepo.findOne({
       where: { id },
-      relations: { roles: { permissions: true } },
+      relations: { roles: { permissions: true }, branches: true },
       withDeleted,
     });
     if (!user) throw new NotFoundException('Usuario no encontrado');
@@ -102,6 +115,9 @@ export class UsersService {
     const exists = await this.usersRepo.findOne({ where: { email }, withDeleted: true });
     if (exists) throw new ConflictException('Ya existe un usuario con ese email');
     const roles = await this.resolveRoles(dto.roleIds);
+    const isSuperAdmin = dto.isSuperAdmin ?? false;
+    // Super Admins ignoran branchIds — acceso implícito a todas.
+    const branches = isSuperAdmin ? [] : await this.resolveBranches(dto.branchIds ?? []);
     const hash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const user = this.usersRepo.create({
       firstName: dto.firstName,
@@ -110,15 +126,19 @@ export class UsersService {
       phoneNumber: dto.phoneNumber ?? null,
       password: hash,
       isActive: dto.isActive ?? true,
-      isSuperAdmin: dto.isSuperAdmin ?? false,
+      isSuperAdmin,
       roles,
+      branches,
     });
     const saved = await this.usersRepo.save(user);
     return this.findOne(saved.id);
   }
 
   async update(id: string, dto: UpdateUserDto, actor: AuthenticatedUser): Promise<PublicUserView> {
-    const user = await this.usersRepo.findOne({ where: { id }, relations: { roles: true } });
+    const user = await this.usersRepo.findOne({
+      where: { id },
+      relations: { roles: true, branches: true },
+    });
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (user.isSuperAdmin && !actor.isSuperAdmin) {
       throw new ForbiddenException('No puedes modificar un Super Admin');
@@ -151,6 +171,14 @@ export class UsersService {
       user.isSuperAdmin = dto.isSuperAdmin;
     }
     if (dto.roleIds) user.roles = await this.resolveRoles(dto.roleIds);
+
+    // Branch handling: Super Admins never carry branches in DB.
+    if (user.isSuperAdmin) {
+      user.branches = [];
+    } else if (dto.branchIds !== undefined) {
+      user.branches = await this.resolveBranches(dto.branchIds, user.branches ?? []);
+    }
+
     await this.usersRepo.save(user);
     return this.findOne(id);
   }
@@ -233,5 +261,39 @@ export class UsersService {
       throw new BadRequestException('Algunos roles no existen');
     }
     return roles;
+  }
+
+  /**
+   * Resolve branch IDs into entities. New IDs (not already in `current`) must
+   * be active and non-deleted; stale IDs already attached are kept silently.
+   * Mirrors `resolveInsurances` / `resolveContractors`.
+   */
+  private async resolveBranches(
+    ids: string[],
+    current: Branch[] = [],
+  ): Promise<Branch[]> {
+    if (!ids.length) return [];
+    const unique = Array.from(new Set(ids));
+    const currentIds = new Set(current.map((b) => b.id));
+    const newIds = unique.filter((id) => !currentIds.has(id));
+
+    if (newIds.length) {
+      const valid = await this.branchesRepo.find({
+        where: { id: In(newIds), isActive: true, deletedAt: IsNull() },
+      });
+      if (valid.length !== newIds.length) {
+        const validIds = new Set(valid.map((v) => v.id));
+        const missing = newIds.filter((id) => !validIds.has(id));
+        throw new BadRequestException(
+          `Algunas sucursales no existen, están deshabilitadas o en papelera: ${missing.join(', ')}`,
+        );
+      }
+    }
+
+    const entities = await this.branchesRepo.find({
+      where: { id: In(unique) },
+      withDeleted: true,
+    });
+    return entities;
   }
 }

@@ -67,4 +67,13 @@ export class CreateUserDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   roleIds?: string[];
+
+  /**
+   * Sucursales asignadas. Ignorado para Super Admins (acceso implícito a todas).
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  branchIds?: string[];
 }

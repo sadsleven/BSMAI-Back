@@ -24,6 +24,7 @@ import { PathologiesModule } from './pathologies/pathologies.module';
 import { ServiceTypesModule } from './service-types/service-types.module';
 import { ContractorsModule } from './contractors/contractors.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
+import { BranchesModule } from './branches/branches.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
     ServiceTypesModule,
     ContractorsModule,
     ExchangeRatesModule,
+    BranchesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

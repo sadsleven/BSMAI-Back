@@ -260,7 +260,7 @@ Recurso `roles` (grupo "Roles"):
 Recurso `permissions` (grupo "Permisos"):
 - `permissions.list`.
 
-Recurso `specialties` (grupo "Especialidades"), `patients` (grupo "Pacientes"), `doctors` (grupo "Doctores"), `care-centers` (grupo "Centros de atención"), `insurances` (grupo "Seguros"), `pathologies` (grupo "Patologías"), `service-types` (grupo "Tipos de servicio"):
+Recurso `specialties` (grupo "Especialidades"), `patients` (grupo "Pacientes"), `doctors` (grupo "Doctores"), `care-centers` (grupo "Centros de atención"), `insurances` (grupo "Seguros"), `pathologies` (grupo "Patologías"), `service-types` (grupo "Tipos de servicio"), `branches` (grupo "Sucursales"):
 - 8 acciones estándar cada uno: `<resource>.{list,view,create,update,toggle-active,soft-delete,hard-delete,restore}`. Generadas vía helper `buildResourcePermissions` en `permissions.catalog.ts`.
 
 `GET /banks` es público (no requiere permiso).
@@ -294,6 +294,17 @@ Name (único) + description + phones (1-10) + isActive. Tabla `insurance_phones`
 ### Patologías (`pathologies`) y Tipos de servicio (`service-types`)
 
 CRUD simple paralelo a Especialidades: name (único) + description + isActive + soft delete + toggle-active + restore + assignable.
+
+### Sucursales (`branches`)
+
+CRUD estándar paralelo a Especialidades + endpoint `GET /branches/assignable` (sólo `isActive = true` y no eliminadas). Relación M2M con `User` vía pivote `user_branches` (FK CASCADE en ambas direcciones).
+
+Convención **Super Admin = todas las sucursales**:
+- En BD: el Super Admin no tiene filas en `user_branches`. Crear/editar Super Admin con `branchIds` no vacío es ignorado en el service (se setea `branches = []`).
+- En `auth/me` y los endpoints `GET /users/:id` / `GET /users`: el backend devuelve la lista efectiva — para Super Admin = todas las sucursales activas y no eliminadas; para usuario regular = sus asignadas filtradas por `isActive` y no eliminadas.
+- El FE consume esa lista directamente y nunca debe replicar la regla del Super Admin.
+
+Validación assignable mismo patrón que `insurances` / `contractors`: IDs nuevos requieren existir + `isActive=true` + `deletedAt=null`; IDs ya asignados que se volvieron stale se mantienen silenciosamente para que el FE pueda mostrarlos como chips quitables. Filtro `branchId` en `GET /users` usa subquery sobre `user_branches` y siempre incluye Super Admins (`user."isSuperAdmin" = true OR user.id IN (SELECT ...)`) — no se pierden por filtrar.
 
 ### Doctores (`doctors`) y Centros de atención (`care-centers`)
 

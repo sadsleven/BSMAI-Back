@@ -42,6 +42,10 @@ export class QueryUsersDto {
   roleId?: string;
 
   @IsOptional()
+  @IsUUID('4')
+  branchId?: string;
+
+  @IsOptional()
   @Transform(({ value }) => {
     if (Array.isArray(value)) return value as string[];
     if (typeof value === 'string' && value.length) return value.split(',').filter(Boolean);

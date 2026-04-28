@@ -8,10 +8,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity';
+import { Branch } from '../branches/entities/branch.entity';
 import { TokenBlacklistService } from './services/token-blacklist.service';
 import type { AuthenticatedUser } from './types/authenticated-user';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -23,6 +24,7 @@ const BCRYPT_ROUNDS = 10;
 export class AuthService {
   constructor(
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
+    @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly blacklist: TokenBlacklistService,
@@ -33,6 +35,7 @@ export class AuthService {
       .createQueryBuilder('u')
       .leftJoinAndSelect('u.roles', 'r')
       .leftJoinAndSelect('r.permissions', 'p')
+      .leftJoinAndSelect('u.branches', 'b')
       .addSelect('u.password')
       .where('u.email = :email', { email: email.toLowerCase() })
       .getOne();
@@ -53,7 +56,8 @@ export class AuthService {
       },
     );
 
-    return { accessToken, user: toPublicUser(user) };
+    const branches = await this.resolveVisibleBranches(user);
+    return { accessToken, user: toPublicUser(user, branches) };
   }
 
   async logout(authUser: AuthenticatedUser, exp?: number): Promise<void> {
@@ -63,10 +67,11 @@ export class AuthService {
   async me(userId: string): Promise<PublicUser> {
     const user = await this.usersRepo.findOne({
       where: { id: userId },
-      relations: { roles: { permissions: true } },
+      relations: { roles: { permissions: true }, branches: true },
     });
     if (!user) throw new UnauthorizedException();
-    return toPublicUser(user);
+    const branches = await this.resolveVisibleBranches(user);
+    return toPublicUser(user, branches);
   }
 
   async updateOwnProfile(userId: string, dto: UpdateProfileDto): Promise<PublicUser> {
@@ -111,6 +116,32 @@ export class AuthService {
     user.password = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.usersRepo.save(user);
   }
+
+  /**
+   * Branches the user can see in the FE.
+   * - Super Admin: all active + non-deleted branches.
+   * - Regular user: own assignments filtered to active + non-deleted.
+   *
+   * Single source of truth — FE helper `getUserBranches()` reads from
+   * `currentUser.branches` directly, no extra fetch needed.
+   */
+  private async resolveVisibleBranches(user: User): Promise<PublicBranch[]> {
+    if (user.isSuperAdmin) {
+      const all = await this.branchesRepo.find({
+        where: { isActive: true, deletedAt: IsNull() },
+        order: { name: 'ASC' },
+      });
+      return all.map((b) => ({ id: b.id, name: b.name }));
+    }
+    return (user.branches ?? [])
+      .filter((b) => b.isActive && !b.deletedAt)
+      .map((b) => ({ id: b.id, name: b.name }));
+  }
+}
+
+export interface PublicBranch {
+  id: string;
+  name: string;
 }
 
 export interface PublicUser {
@@ -123,9 +154,15 @@ export interface PublicUser {
   isSuperAdmin: boolean;
   roles: { id: string; name: string }[];
   permissions: string[];
+  /**
+   * Branches visible to the user. Super Admin: all active branches. Regular:
+   * own assignments filtered to active+non-deleted. Stale assignments are
+   * stripped here, so FE never has to filter them.
+   */
+  branches: PublicBranch[];
 }
 
-export function toPublicUser(user: User): PublicUser {
+export function toPublicUser(user: User, branches: PublicBranch[]): PublicUser {
   const activeRoles = (user.roles ?? []).filter((r) => r.isActive && !r.deletedAt);
   const permissions = new Set<string>();
   for (const role of activeRoles) {
@@ -141,5 +178,6 @@ export function toPublicUser(user: User): PublicUser {
     isSuperAdmin: user.isSuperAdmin,
     roles: activeRoles.map((r) => ({ id: r.id, name: r.name })),
     permissions: Array.from(permissions),
+    branches,
   };
 }

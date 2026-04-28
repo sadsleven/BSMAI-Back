@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { Role } from '../../roles/entities/role.entity';
+import { Branch } from '../../branches/entities/branch.entity';
 
 @Entity({ name: 'users' })
 export class User {
@@ -54,4 +55,12 @@ export class User {
     inverseJoinColumn: { name: 'roleId', referencedColumnName: 'id' },
   })
   roles: Role[];
+
+  @ManyToMany(() => Branch, (b) => b.users, { eager: false })
+  @JoinTable({
+    name: 'user_branches',
+    joinColumn: { name: 'userId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'branchId', referencedColumnName: 'id' },
+  })
+  branches: Branch[];
 }
