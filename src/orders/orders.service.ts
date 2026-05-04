@@ -324,7 +324,7 @@ export class OrdersService {
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
 
-    return this.dataSource.transaction(async (mgr) => {
+    const savedId = await this.dataSource.transaction(async (mgr) => {
       const orderNumber = await this.generateOrderNumber();
       const entity = mgr.create(Order, {
         orderNumber,
@@ -349,15 +349,17 @@ export class OrdersService {
       });
       const saved = await mgr.save(entity);
 
-      if ((dto.type === 'cash' || dto.type === 'cashea') && dto.payments?.length) {
+      if (dto.type === 'cash' && dto.payments?.length) {
         for (const p of dto.payments) {
           const payload = await this.resolvePaymentForSave(p, dto.priceCurrency);
           await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: saved.id }));
         }
       }
 
-      return this.findOne(saved.id, user);
+      return saved.id;
     });
+
+    return this.findOne(savedId, user);
   }
 
   async update(id: string, dto: UpdateOrderDto, user: AuthenticatedUser): Promise<Order> {
@@ -386,7 +388,7 @@ export class OrdersService {
     };
     await this.validateCoreReferences(merged, user);
 
-    return this.dataSource.transaction(async (mgr) => {
+    await this.dataSource.transaction(async (mgr) => {
       Object.assign(existing, {
         branchId: merged.branchId,
         type: merged.type,
@@ -409,16 +411,16 @@ export class OrdersService {
 
       if (dto.payments !== undefined) {
         await mgr.delete(OrderPayment, { orderId: existing.id });
-        if ((merged.type === 'cash' || merged.type === 'cashea') && dto.payments.length) {
+        if (merged.type === 'cash' && dto.payments.length) {
           for (const p of dto.payments) {
             const payload = await this.resolvePaymentForSave(p, merged.priceCurrency);
             await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: existing.id }));
           }
         }
       }
-
-      return this.findOne(existing.id, user);
     });
+
+    return this.findOne(existing.id, user);
   }
 
   async softDelete(id: string, user: AuthenticatedUser): Promise<void> {
@@ -450,8 +452,8 @@ export class OrdersService {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
       throw new BadRequestException('Solo se permiten pagos en órdenes en borrador');
-    if (order.type !== 'cash' && order.type !== 'cashea')
-      throw new BadRequestException('Solo se admiten pagos para órdenes cash o cashea');
+    if (order.type !== 'cash')
+      throw new BadRequestException('Solo se admiten pagos para órdenes de tipo Contado');
     const payload = await this.resolvePaymentForSave(dto, order.priceCurrency);
     const entity = this.paymentsRepo.create({ ...payload, orderId });
     return this.paymentsRepo.save(entity);

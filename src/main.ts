@@ -1,8 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, LogLevel } from '@nestjs/common';
+import type { Express } from 'express';
 import { AppModule } from './app.module';
 
-async function bootstrap() {
+async function bootstrap(): Promise<Express | void> {
   const isProduction = process.env.NODE_ENV === 'production';
   const logLevels: LogLevel[] = isProduction
     ? ['error', 'warn']
@@ -30,6 +31,13 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  if (process.env.VERCEL) {
+    await app.init();
+    return app.getHttpAdapter().getInstance();
+  }
+
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+
+export default bootstrap();

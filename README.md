@@ -20,6 +20,7 @@ API backend construida con [NestJS](https://nestjs.com/) y TypeORM sobre Postgre
 
    | Variable                  | Descripción                                                       |
    | ------------------------- | ----------------------------------------------------------------- |
+   | `VERCEL`                  | Opcional. La inyecta Vercel en despliegues serverless; si está definida, `main.ts` usa `app.init()` y exporta la app para el handler de Vercel. En local no la configures (ver `.env.example`). |
    | `DB_HOST`                 | Host de PostgreSQL                                                |
    | `DB_PORT`                 | Puerto                                                            |
    | `DB_USERNAME`             | Usuario de la base de datos                                       |
@@ -35,6 +36,8 @@ API backend construida con [NestJS](https://nestjs.com/) y TypeORM sobre Postgre
    | `SUPER_ADMIN_EMAIL`       | Email del Super Admin                                             |
    | `SUPER_ADMIN_PHONE`       | Teléfono del Super Admin (opcional)                               |
    | `SUPER_ADMIN_PASSWORD`    | Contraseña del Super Admin (cambiar después del primer login)     |
+
+   En **Vercel**, configura el resto de variables en el panel del proyecto; no hace falta definir `VERCEL` a mano. El build usa `nest build` y `vercel.json` apunta la función a `dist/main.js`.
 
 3. Instala dependencias:
 
