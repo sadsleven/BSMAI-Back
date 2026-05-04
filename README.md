@@ -20,7 +20,6 @@ API backend construida con [NestJS](https://nestjs.com/) y TypeORM sobre Postgre
 
    | Variable                  | Descripción                                                       |
    | ------------------------- | ----------------------------------------------------------------- |
-   | `VERCEL`                  | Opcional. La inyecta Vercel en despliegues serverless; si está definida, `main.ts` usa `app.init()` y exporta la app para el handler de Vercel. En local no la configures (ver `.env.example`). |
    | `DB_HOST`                 | Host de PostgreSQL                                                |
    | `DB_PORT`                 | Puerto                                                            |
    | `DB_USERNAME`             | Usuario de la base de datos                                       |
@@ -36,8 +35,6 @@ API backend construida con [NestJS](https://nestjs.com/) y TypeORM sobre Postgre
    | `SUPER_ADMIN_EMAIL`       | Email del Super Admin                                             |
    | `SUPER_ADMIN_PHONE`       | Teléfono del Super Admin (opcional)                               |
    | `SUPER_ADMIN_PASSWORD`    | Contraseña del Super Admin (cambiar después del primer login)     |
-
-   En **Vercel**, configura el resto de variables en el panel del proyecto; no hace falta definir `VERCEL` a mano. El build usa `nest build` y `vercel.json` apunta la función a `dist/main.js`.
 
 3. Instala dependencias:
 
@@ -55,6 +52,28 @@ API backend construida con [NestJS](https://nestjs.com/) y TypeORM sobre Postgre
    npm run seed
    npm run dev
    ```
+
+## Despliegue en Vercel
+
+Vercel detecta Nest por `src/main.ts` y expone la app como una sola función ([documentación oficial](https://vercel.com/docs/frameworks/backend/nestjs)). **No hace falta `vercel.json`** ni `export default` del adaptador HTTP.
+
+1. **Build Command:** usa sólo compilación (y migraciones si quieres, con base de datos accesible desde el build). Ejemplos válidos:
+   - `npm run build`
+   - `npm run build && npm run migrate` (sólo si `DB_*` / SSL están bien configurados en el entorno de build y la red lo permite).
+
+   **No** incluyas `npm run start` ni `nest start` en el build: son procesos largos que no terminan; el despliegue puede quedar mal o sin rutas útiles, y verás **404 NOT_FOUND** al abrir la URL.
+
+2. **Install Command:** `npm install` (o el que uses en local).
+
+3. **Output Directory:** déjalo **vacío**. Si lo pones en `dist`, Vercel trata el proyecto como sitio estático y las peticiones no llegan a Nest.
+
+4. **Root Directory:** si el repo incluye front y back, apunta el proyecto de Vercel al directorio del backend (por ejemplo `afmi-backend`).
+
+5. Variables de entorno (`DB_*`, `JWT_*`, `CORS_ORIGIN` con la URL del front en producción, etc.) en el panel de Vercel para *Production* y *Preview*.
+
+6. Tras desplegar, prueba un endpoint que exija JWT (por ejemplo `GET /auth/me` sin header `Authorization`): deberías obtener **401** con cuerpo JSON de Nest, no el 404 genérico de Vercel.
+
+> **WebSockets / Socket.IO:** en funciones serverless el modelo es distinto al de un servidor Node largo; revisa límites de tiempo y conexión si dependes del gateway en tiempo real.
 
 ## Inspección de la base de datos (MCP `postgres_afmi`)
 
