@@ -73,6 +73,8 @@ Vercel detecta Nest por `src/main.ts` y expone la app como una sola función ([d
 
 6. Tras desplegar, prueba un endpoint que exija JWT (por ejemplo `GET /auth/me` sin header `Authorization`): deberías obtener **401** con cuerpo JSON de Nest, no el 404 genérico de Vercel.
 
+7. Si usas **`vercel.json`** con `routes` y filtro **`methods`**, incluye siempre **`OPTIONS`** (y conviene **`HEAD`**). Si no, el **preflight CORS** del navegador no llega a Nest y verás errores del tipo «No 'Access-Control-Allow-Origin' header» aunque `enableCors` esté bien. Lo más seguro es **no limitar `methods`** en la ruta catch-all (como en el `vercel.json` del repo).
+
 > **WebSockets / Socket.IO:** en funciones serverless el modelo es distinto al de un servidor Node largo; revisa límites de tiempo y conexión si dependes del gateway en tiempo real.
 
 ## Inspección de la base de datos (MCP `postgres_afmi`)
