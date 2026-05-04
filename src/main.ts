@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, LogLevel } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { getCorsOriginConfig } from './shared/utils/cors-origins.util';
 
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -15,11 +16,19 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
+  const cors = getCorsOriginConfig();
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials:
-      process.env.CORS_ORIGIN && process.env.CORS_ORIGIN !== '*' ? true : false,
+    origin: cors.origin,
+    credentials: cors.credentials,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Requested-With',
+      'If-Match',
+      'If-None-Match',
+    ],
   });
 
   app.useGlobalPipes(

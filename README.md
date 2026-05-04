@@ -27,7 +27,7 @@ API backend construida con [NestJS](https://nestjs.com/) y TypeORM sobre Postgre
    | `DB_NAME`                 | Nombre de la base de datos                                        |
    | `DB_SSL`                  | `true` o `false`                                                  |
    | `PORT`                    | Puerto HTTP (por defecto 3000)                                    |
-   | `CORS_ORIGIN`             | Orígenes permitidos (coma-separados) para HTTP y WebSocket        |
+   | `CORS_ORIGIN`             | Orígenes permitidos separados por coma (deben coincidir con el `Origin` del navegador: `https://…` sin `/` final). Con lista explícita se activa `credentials` (cookies / peticiones con credenciales). `*` = cualquier origen sin credenciales entre dominios. |
    | `JWT_SECRET`              | Secreto para firmar el JWT (cambiar en producción)                |
    | `JWT_EXPIRATION`          | Duración del token (`7d`, `12h`, `3600s`, ...)                    |
    | `SUPER_ADMIN_FIRST_NAME`  | Nombre del Super Admin que crea el seed                           |
@@ -69,7 +69,7 @@ Vercel detecta Nest por `src/main.ts` y expone la app como una sola función ([d
 
 4. **Root Directory:** si el repo incluye front y back, apunta el proyecto de Vercel al directorio del backend (por ejemplo `afmi-backend`).
 
-5. Variables de entorno (`DB_*`, `JWT_*`, `CORS_ORIGIN` con la URL del front en producción, etc.) en el panel de Vercel para *Production* y *Preview*.
+5. Variables de entorno (`DB_*`, `JWT_*`, `CORS_ORIGIN` con **todas** las URLs del front que usen la API: producción, local y, si aplica, previews `*.vercel.app`, separadas por coma, etc.) en el panel de Vercel para *Production* y *Preview*.
 
 6. Tras desplegar, prueba un endpoint que exija JWT (por ejemplo `GET /auth/me` sin header `Authorization`): deberías obtener **401** con cuerpo JSON de Nest, no el 404 genérico de Vercel.
 
@@ -398,4 +398,4 @@ Reglas adicionales:
 
 ## WebSockets
 
-Misma configuración previa: `WebsocketGateway` (Socket.IO) con CORS desde `CORS_ORIGIN`. Inyectar `WebsocketGateway` en un servicio para llamar `emit(event, data)`.
+Misma configuración: `WebsocketGateway` (Socket.IO) usa la misma lógica que HTTP vía `getCorsOriginConfig()` en `cors-origins.util.ts`. Inyectar `WebsocketGateway` en un servicio para llamar `emit(event, data)`.

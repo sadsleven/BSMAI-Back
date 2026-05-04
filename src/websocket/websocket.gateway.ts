@@ -7,10 +7,14 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
+import { getCorsOriginConfig } from '../shared/utils/cors-origins.util';
+
+const wsCors = getCorsOriginConfig();
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
+    origin: wsCors.origin === '*' ? true : wsCors.origin,
+    credentials: wsCors.credentials,
   },
 })
 export class WebsocketGateway
