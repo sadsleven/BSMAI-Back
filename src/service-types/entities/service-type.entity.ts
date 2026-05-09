@@ -3,9 +3,11 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { ServiceTypePrice } from './service-type-price.entity';
 
 @Entity({ name: 'service_types' })
 export class ServiceType {
@@ -20,6 +22,9 @@ export class ServiceType {
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  @OneToMany(() => ServiceTypePrice, (p) => p.serviceType, { cascade: false })
+  prices: ServiceTypePrice[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

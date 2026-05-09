@@ -21,8 +21,8 @@ export class Doctor {
   @Column({ type: 'varchar', length: 16, unique: true })
   cedula: string;
 
-  @Column({ type: 'varchar', length: 200, unique: true })
-  email: string;
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  email?: string | null;
 
   @Column({ type: 'varchar', length: 150 })
   firstName: string;

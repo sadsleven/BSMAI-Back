@@ -5,6 +5,8 @@ import {
   Entity,
   Index,
   JoinColumn,
+  JoinTable,
+  ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -114,19 +116,21 @@ export class Order {
   @JoinColumn({ name: 'specialtyId' })
   specialty: Specialty;
 
-  @Column({ type: 'uuid' })
-  serviceTypeId: string;
+  @ManyToMany(() => ServiceType, { eager: false })
+  @JoinTable({
+    name: 'order_service_types',
+    joinColumn: { name: 'orderId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'serviceTypeId', referencedColumnName: 'id' },
+  })
+  serviceTypes: ServiceType[];
 
-  @ManyToOne(() => ServiceType, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'serviceTypeId' })
-  serviceType: ServiceType;
-
-  @Column({ type: 'uuid' })
-  pathologyId: string;
-
-  @ManyToOne(() => Pathology, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'pathologyId' })
-  pathology: Pathology;
+  @ManyToMany(() => Pathology, { eager: false })
+  @JoinTable({
+    name: 'order_pathologies',
+    joinColumn: { name: 'orderId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'pathologyId', referencedColumnName: 'id' },
+  })
+  pathologies: Pathology[];
 
   @Column({ type: 'date' })
   orderDate: string;

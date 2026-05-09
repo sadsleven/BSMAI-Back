@@ -8,7 +8,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { Patient, PersonType } from './entities/patient.entity';
 import { PatientPhone } from './entities/patient-phone.entity';
-import { Insurance } from '../insurances/entities/insurance.entity';
 import { Contractor } from '../contractors/entities/contractor.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
@@ -24,8 +23,6 @@ export class PatientsService {
     @InjectRepository(Patient) private readonly repo: Repository<Patient>,
     @InjectRepository(PatientPhone)
     private readonly phonesRepo: Repository<PatientPhone>,
-    @InjectRepository(Insurance)
-    private readonly insurancesRepo: Repository<Insurance>,
     @InjectRepository(Contractor)
     private readonly contractorsRepo: Repository<Contractor>,
   ) {}
@@ -51,8 +48,8 @@ export class PatientsService {
     const qb = this.repo
       .createQueryBuilder('patient')
       .leftJoinAndSelect('patient.phones', 'phone')
-      .leftJoinAndSelect('patient.insurances', 'insurance')
       .leftJoinAndSelect('patient.contractors', 'contractor')
+      .leftJoinAndSelect('contractor.insurances', 'contractorInsurance')
       .orderBy(`patient.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -91,7 +88,10 @@ export class PatientsService {
     if (insuranceId) {
       qb.andWhere(
         `patient.id IN (
-          SELECT pi."patientId" FROM patient_insurances pi WHERE pi."insuranceId" = :insId
+          SELECT pc."patientId"
+          FROM patient_contractors pc
+          INNER JOIN contractor_insurances ci ON ci."contractorId" = pc."contractorId"
+          WHERE ci."insuranceId" = :insId
         )`,
         { insId: insuranceId },
       );
@@ -107,8 +107,12 @@ export class PatientsService {
     }
 
     if (hasInsuranceAndContractor === 'true') {
-      qb.andWhere(`EXISTS (SELECT 1 FROM patient_insurances pi WHERE pi."patientId" = patient.id)`);
-      qb.andWhere(`EXISTS (SELECT 1 FROM patient_contractors pc WHERE pc."patientId" = patient.id)`);
+      qb.andWhere(`EXISTS (
+        SELECT 1
+        FROM patient_contractors pc
+        INNER JOIN contractor_insurances ci ON ci."contractorId" = pc."contractorId"
+        WHERE pc."patientId" = patient.id
+      )`);
     }
 
     return paginateBuilder<Patient>(qb, page, limit);
@@ -117,7 +121,7 @@ export class PatientsService {
   async findOne(id: string, withDeleted = false): Promise<Patient> {
     const patient = await this.repo.findOne({
       where: { id },
-      relations: { phones: true, insurances: true, contractors: true },
+      relations: { phones: true, contractors: { insurances: true } },
       withDeleted,
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
@@ -127,8 +131,8 @@ export class PatientsService {
   async create(dto: CreatePatientDto): Promise<Patient> {
     this.assertPersonTypeFields(dto.personType, dto);
 
-    const email = dto.email.toLowerCase().trim();
-    await this.assertUniqueEmail(email);
+    const email = dto.email ? dto.email.toLowerCase().trim() : null;
+    if (email) await this.assertUniqueEmail(email);
 
     const base: Partial<Patient> = {
       personType: dto.personType,
@@ -160,13 +164,11 @@ export class PatientsService {
       });
     }
 
-    const insurances = await this.resolveInsurances(dto.insuranceIds ?? []);
     const contractors = await this.resolveContractors(dto.contractorIds ?? []);
 
     const patient = this.repo.create({
       ...base,
       phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
-      insurances,
       contractors,
     });
     return this.repo.save(patient);
@@ -190,11 +192,11 @@ export class PatientsService {
     };
     this.assertPersonTypeFields(effectiveType, merged);
 
-    if (dto.email) {
-      const email = dto.email.toLowerCase().trim();
-      if (email !== patient.email) {
-        await this.assertUniqueEmail(email);
-        patient.email = email;
+    if (dto.email !== undefined) {
+      const trimmed = dto.email ? dto.email.toLowerCase().trim() : null;
+      if (trimmed !== patient.email) {
+        if (trimmed) await this.assertUniqueEmail(trimmed);
+        patient.email = trimmed;
       }
     }
 
@@ -230,13 +232,6 @@ export class PatientsService {
       await this.phonesRepo.delete({ patientId: patient.id });
       patient.phones = dto.phones.map((p) =>
         this.phonesRepo.create({ ...this.phonePayload(p), patientId: patient.id }),
-      );
-    }
-
-    if (dto.insuranceIds !== undefined) {
-      patient.insurances = await this.resolveInsurances(
-        dto.insuranceIds,
-        patient.insurances ?? [],
       );
     }
 
@@ -329,40 +324,7 @@ export class PatientsService {
     if (existing) throw new ConflictException('Ya existe un paciente con ese email');
   }
 
-  /**
-   * Resolve insurance IDs into entities. New IDs (not already in `current`) must be
-   * active and non-deleted. Stale IDs already attached are kept silently.
-   */
-  private async resolveInsurances(
-    ids: string[],
-    current: Insurance[] = [],
-  ): Promise<Insurance[]> {
-    if (!ids.length) return [];
-    const unique = Array.from(new Set(ids));
-    const currentIds = new Set(current.map((i) => i.id));
-    const newIds = unique.filter((id) => !currentIds.has(id));
-
-    if (newIds.length) {
-      const valid = await this.insurancesRepo.find({
-        where: { id: In(newIds), isActive: true, deletedAt: IsNull() },
-      });
-      if (valid.length !== newIds.length) {
-        const validIds = new Set(valid.map((v) => v.id));
-        const missing = newIds.filter((id) => !validIds.has(id));
-        throw new BadRequestException(
-          `Algunos seguros no existen, están deshabilitados o en papelera: ${missing.join(', ')}`,
-        );
-      }
-    }
-
-    const entities = await this.insurancesRepo.find({
-      where: { id: In(unique) },
-      withDeleted: true,
-    });
-    return entities;
-  }
-
-  /** Mismo patrón que resolveInsurances pero para contratistas. */
+  /** Resolve contractor IDs (active+non-deleted; stale already attached kept silently). */
   private async resolveContractors(
     ids: string[],
     current: Contractor[] = [],

@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -67,9 +66,11 @@ export class CreatePatientDto {
 
   /* ---------- Comunes ---------- */
 
+  @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email: string;
+  email?: string;
 
   @IsDateString({}, { message: 'Fecha de nacimiento inválida' })
   birthDate: string;
@@ -80,17 +81,10 @@ export class CreatePatientDto {
   address: string;
 
   @IsArray()
-  @ArrayMinSize(1, { message: 'Debe ingresar al menos un teléfono' })
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por paciente' })
   @ValidateNested({ each: true })
   @Type(() => PhoneDto)
   phones: PhoneDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(50, { message: 'Máximo 50 seguros por paciente' })
-  @IsUUID('all', { each: true, message: 'IDs de seguros inválidos' })
-  insuranceIds?: string[];
 
   @IsOptional()
   @IsArray()

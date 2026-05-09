@@ -1,4 +1,15 @@
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { ServiceTypePriceDto } from './service-type-price.dto';
 
 export class CreateServiceTypeDto {
   @IsString()
@@ -14,4 +25,11 @@ export class CreateServiceTypeDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => ServiceTypePriceDto)
+  prices?: ServiceTypePriceDto[];
 }

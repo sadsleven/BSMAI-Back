@@ -1,7 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Contractor } from './entities/contractor.entity';
+import { Insurance } from '../insurances/entities/insurance.entity';
 import { CreateContractorDto } from './dto/create-contractor.dto';
 import { UpdateContractorDto } from './dto/update-contractor.dto';
 import { QueryContractorsDto } from './dto/query-contractors.dto';
@@ -12,6 +18,7 @@ import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 export class ContractorsService {
   constructor(
     @InjectRepository(Contractor) private readonly repo: Repository<Contractor>,
+    @InjectRepository(Insurance) private readonly insurancesRepo: Repository<Insurance>,
   ) {}
 
   async findAll(query: QueryContractorsDto): Promise<PaginatedResponse<Contractor>> {
@@ -26,7 +33,10 @@ export class ContractorsService {
       isActive,
     } = query;
 
-    const qb = this.repo.createQueryBuilder('contractor').orderBy(`contractor.${sortBy}`, sortDir);
+    const qb = this.repo
+      .createQueryBuilder('contractor')
+      .leftJoinAndSelect('contractor.insurances', 'insurance')
+      .orderBy(`contractor.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('contractor.deletedAt IS NOT NULL');
@@ -49,11 +59,19 @@ export class ContractorsService {
   }
 
   async findAssignable(): Promise<Contractor[]> {
-    return this.repo.find({ where: { isActive: true }, order: { name: 'ASC' } });
+    return this.repo.find({
+      where: { isActive: true },
+      relations: { insurances: true },
+      order: { name: 'ASC' },
+    });
   }
 
   async findOne(id: string, withDeleted = false): Promise<Contractor> {
-    const contractor = await this.repo.findOne({ where: { id }, withDeleted });
+    const contractor = await this.repo.findOne({
+      where: { id },
+      relations: { insurances: true },
+      withDeleted,
+    });
     if (!contractor) throw new NotFoundException('Contratista no encontrado');
     return contractor;
   }
@@ -62,10 +80,12 @@ export class ContractorsService {
     const name = dto.name.trim();
     const exists = await this.repo.findOne({ where: { name }, withDeleted: true });
     if (exists) throw new ConflictException('Ya existe un contratista con ese nombre');
+    const insurances = await this.resolveInsurances(dto.insuranceIds ?? []);
     const contractor = this.repo.create({
       name,
       description: dto.description?.trim() ?? null,
       isActive: dto.isActive ?? true,
+      insurances,
     });
     return this.repo.save(contractor);
   }
@@ -84,6 +104,13 @@ export class ContractorsService {
       contractor.description = dto.description?.trim() ?? null;
     }
     if (dto.isActive !== undefined) contractor.isActive = dto.isActive;
+
+    if (dto.insuranceIds !== undefined) {
+      contractor.insurances = await this.resolveInsurances(
+        dto.insuranceIds,
+        contractor.insurances ?? [],
+      );
+    }
     return this.repo.save(contractor);
   }
 
@@ -109,5 +136,35 @@ export class ContractorsService {
     if (!contractor.deletedAt) return contractor;
     await this.repo.restore(id);
     return this.findOne(id);
+  }
+
+  /** Nuevos IDs deben estar activos+no eliminados; los stale ya asignados se mantienen. */
+  private async resolveInsurances(
+    ids: string[],
+    current: Insurance[] = [],
+  ): Promise<Insurance[]> {
+    if (!ids.length) return [];
+    const unique = Array.from(new Set(ids));
+    const currentIds = new Set(current.map((i) => i.id));
+    const newIds = unique.filter((id) => !currentIds.has(id));
+
+    if (newIds.length) {
+      const valid = await this.insurancesRepo.find({
+        where: { id: In(newIds), isActive: true, deletedAt: IsNull() },
+      });
+      if (valid.length !== newIds.length) {
+        const validIds = new Set(valid.map((v) => v.id));
+        const missing = newIds.filter((id) => !validIds.has(id));
+        throw new BadRequestException(
+          `Algunos seguros no existen, están deshabilitados o en papelera: ${missing.join(', ')}`,
+        );
+      }
+    }
+
+    const entities = await this.insurancesRepo.find({
+      where: { id: In(unique) },
+      withDeleted: true,
+    });
+    return entities;
   }
 }

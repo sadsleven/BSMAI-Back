@@ -10,6 +10,8 @@ import { CareCenter } from '../care-centers/entities/care-center.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
+import { ServiceType } from '../service-types/entities/service-type.entity';
+import { Pathology } from '../pathologies/entities/pathology.entity';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
       Branch,
       Bank,
       ExchangeRate,
+      ServiceType,
+      Pathology,
     ]),
   ],
   providers: [OrdersService],

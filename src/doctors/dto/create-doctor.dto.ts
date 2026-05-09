@@ -31,9 +31,11 @@ export class CreateDoctorDto {
   @Matches(CEDULA_PATTERN, { message: CEDULA_MESSAGE })
   cedula: string;
 
+  @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email: string;
+  email?: string;
 
   @IsString()
   @MinLength(1)
@@ -58,7 +60,6 @@ export class CreateDoctorDto {
   rif?: string;
 
   @IsArray()
-  @ArrayMinSize(1, { message: 'Debe ingresar al menos un teléfono' })
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por doctor' })
   @ValidateNested({ each: true })
   @Type(() => PhoneDto)

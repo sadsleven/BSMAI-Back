@@ -99,7 +99,7 @@ export class DoctorsService {
 
   async create(dto: CreateDoctorDto): Promise<Doctor> {
     const cedula = normalizeCedula(dto.cedula);
-    const email = dto.email.toLowerCase().trim();
+    const email = dto.email ? dto.email.toLowerCase().trim() : null;
     const isLegal = dto.isLegalEntity ?? false;
     const rif = isLegal && dto.rif ? normalizeRif(dto.rif) : null;
 
@@ -115,7 +115,7 @@ export class DoctorsService {
     }
 
     await this.assertUniqueCedula(cedula);
-    await this.assertUniqueEmail(email);
+    if (email) await this.assertUniqueEmail(email);
     if (rif) await this.assertUniqueRif(rif);
 
     const specialties = await this.resolveSpecialties(dto.specialtyIds);
@@ -148,11 +148,11 @@ export class DoctorsService {
         doctor.cedula = cedula;
       }
     }
-    if (dto.email) {
-      const email = dto.email.toLowerCase().trim();
-      if (email !== doctor.email) {
-        await this.assertUniqueEmail(email);
-        doctor.email = email;
+    if (dto.email !== undefined) {
+      const trimmed = dto.email ? dto.email.toLowerCase().trim() : null;
+      if (trimmed !== doctor.email) {
+        if (trimmed) await this.assertUniqueEmail(trimmed);
+        doctor.email = trimmed;
       }
     }
     if (dto.firstName !== undefined) doctor.firstName = dto.firstName.trim();
