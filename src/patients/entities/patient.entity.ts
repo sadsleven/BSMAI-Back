@@ -10,7 +10,6 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { PatientPhone } from './patient-phone.entity';
-import { Insurance } from '../../insurances/entities/insurance.entity';
 import { Contractor } from '../../contractors/entities/contractor.entity';
 
 export type PersonType = 'natural' | 'legal_entity';
@@ -32,8 +31,8 @@ export class Patient {
   @Column({ type: 'varchar', length: 16, nullable: true })
   cedula?: string | null;
 
-  @Column({ type: 'varchar', length: 200, unique: true })
-  email: string;
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  email?: string | null;
 
   @Column({ type: 'varchar', length: 150, nullable: true })
   firstName?: string | null;
@@ -63,14 +62,6 @@ export class Patient {
     eager: true,
   })
   phones: PatientPhone[];
-
-  @ManyToMany(() => Insurance, (i) => i.patients, { eager: true })
-  @JoinTable({
-    name: 'patient_insurances',
-    joinColumn: { name: 'patientId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'insuranceId', referencedColumnName: 'id' },
-  })
-  insurances: Insurance[];
 
   @ManyToMany(() => Contractor, (c) => c.patients, { eager: true })
   @JoinTable({

@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsIn,
   IsISO8601,
@@ -51,11 +53,19 @@ export class CreateOrderDto {
   @IsUUID()
   specialtyId: string;
 
-  @IsUUID()
-  serviceTypeId: string;
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Asigná al menos un tipo de servicio' })
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  serviceTypeIds: string[];
 
-  @IsUUID()
-  pathologyId: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  pathologyIds?: string[];
 
   @IsISO8601()
   orderDate: string;

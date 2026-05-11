@@ -1,4 +1,13 @@
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateContractorDto {
   /**
@@ -18,4 +27,10 @@ export class CreateContractorDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50, { message: 'Máximo 50 seguros por contratista' })
+  @IsUUID('all', { each: true, message: 'IDs de seguros inválidos' })
+  insuranceIds?: string[];
 }

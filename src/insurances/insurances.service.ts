@@ -47,7 +47,7 @@ export class InsurancesService {
 
     if (search && search.trim()) {
       qb.andWhere(
-        '(LOWER(insurance.name) LIKE :s OR LOWER(insurance.description) LIKE :s)',
+        '(LOWER(insurance.name) LIKE :s OR LOWER(insurance.description) LIKE :s OR LOWER(insurance.email) LIKE :s)',
         { s: `%${search.trim().toLowerCase()}%` },
       );
     }
@@ -78,11 +78,16 @@ export class InsurancesService {
 
   async create(dto: CreateInsuranceDto): Promise<Insurance> {
     await this.assertUniqueName(dto.name.trim());
+    const email = dto.email ? dto.email.toLowerCase().trim() : null;
+    if (email) await this.assertUniqueEmail(email);
     const insurance = this.repo.create({
       name: dto.name.trim(),
       description: dto.description?.trim() ?? null,
+      email,
+      fiscalAddress: dto.fiscalAddress?.trim() || null,
+      policyNumber: dto.policyNumber?.trim() || null,
       isActive: dto.isActive ?? true,
-      phones: dto.phones.map((p) =>
+      phones: (dto.phones ?? []).map((p) =>
         this.phonesRepo.create(this.phonePayload(p)),
       ),
     });
@@ -101,6 +106,19 @@ export class InsurancesService {
     }
     if (dto.description !== undefined)
       insurance.description = dto.description?.trim() ?? null;
+    if (dto.email !== undefined) {
+      const trimmed = dto.email ? dto.email.toLowerCase().trim() : null;
+      if (trimmed !== insurance.email) {
+        if (trimmed) await this.assertUniqueEmail(trimmed);
+        insurance.email = trimmed;
+      }
+    }
+    if (dto.fiscalAddress !== undefined) {
+      insurance.fiscalAddress = dto.fiscalAddress?.trim() || null;
+    }
+    if (dto.policyNumber !== undefined) {
+      insurance.policyNumber = dto.policyNumber?.trim() || null;
+    }
     if (dto.isActive !== undefined) insurance.isActive = dto.isActive;
 
     if (dto.phones) {
@@ -147,5 +165,10 @@ export class InsurancesService {
   private async assertUniqueName(name: string): Promise<void> {
     const existing = await this.repo.findOne({ where: { name }, withDeleted: true });
     if (existing) throw new ConflictException('Ya existe un seguro con ese nombre');
+  }
+
+  private async assertUniqueEmail(email: string): Promise<void> {
+    const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
+    if (existing) throw new ConflictException('Ya existe un seguro con ese email');
   }
 }

@@ -12,6 +12,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -27,16 +28,19 @@ export class CreateCareCenterDto {
   @MaxLength(200)
   businessName: string;
 
+  @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email: string;
+  email?: string;
 
+  @IsOptional()
+  @ValidateIf((o) => o.rif !== undefined && o.rif !== null && o.rif !== '')
   @IsString()
   @Matches(RIF_PATTERN, { message: RIF_MESSAGE })
-  rif: string;
+  rif?: string;
 
   @IsArray()
-  @ArrayMinSize(1, { message: 'Debe ingresar al menos un teléfono' })
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por centro' })
   @ValidateNested({ each: true })
   @Type(() => PhoneDto)

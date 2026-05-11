@@ -22,11 +22,11 @@ export class CareCenter {
   @Column({ type: 'varchar', length: 200, unique: true })
   businessName: string;
 
-  @Column({ type: 'varchar', length: 200, unique: true })
-  email: string;
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  email?: string | null;
 
-  @Column({ type: 'varchar', length: 24, unique: true })
-  rif: string;
+  @Column({ type: 'varchar', length: 24, nullable: true })
+  rif?: string | null;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

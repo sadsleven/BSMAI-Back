@@ -92,12 +92,12 @@ export class CareCentersService {
 
   async create(dto: CreateCareCenterDto): Promise<CareCenter> {
     const businessName = dto.businessName.trim();
-    const email = dto.email.toLowerCase().trim();
-    const rif = normalizeRif(dto.rif);
+    const email = dto.email ? dto.email.toLowerCase().trim() : null;
+    const rif = dto.rif ? normalizeRif(dto.rif) : null;
 
     await this.assertUniqueBusinessName(businessName);
-    await this.assertUniqueEmail(email);
-    await this.assertUniqueRif(rif);
+    if (email) await this.assertUniqueEmail(email);
+    if (rif) await this.assertUniqueRif(rif);
 
     const specialties = await this.resolveSpecialties(dto.specialtyIds);
     await this.validatePaymentMethods(dto.paymentMethods ?? []);
@@ -126,18 +126,18 @@ export class CareCentersService {
         center.businessName = businessName;
       }
     }
-    if (dto.email) {
-      const email = dto.email.toLowerCase().trim();
-      if (email !== center.email) {
-        await this.assertUniqueEmail(email);
-        center.email = email;
+    if (dto.email !== undefined) {
+      const trimmed = dto.email ? dto.email.toLowerCase().trim() : null;
+      if (trimmed !== center.email) {
+        if (trimmed) await this.assertUniqueEmail(trimmed);
+        center.email = trimmed;
       }
     }
-    if (dto.rif) {
-      const rif = normalizeRif(dto.rif);
-      if (rif !== center.rif) {
-        await this.assertUniqueRif(rif);
-        center.rif = rif;
+    if (dto.rif !== undefined) {
+      const next = dto.rif ? normalizeRif(dto.rif) : null;
+      if (next !== center.rif) {
+        if (next) await this.assertUniqueRif(next);
+        center.rif = next;
       }
     }
     if (dto.isActive !== undefined) center.isActive = dto.isActive;

@@ -21,6 +21,8 @@ const CONTRACTORS_GROUP = 'Contratistas';
 const EXCHANGE_RATES_GROUP = 'Tasa de cambio';
 const BRANCHES_GROUP = 'Sucursales';
 const ORDERS_GROUP = 'Órdenes';
+const ACCOUNTS_PAYABLE_GROUP = 'Cuentas por pagar';
+const ACCOUNTS_RECEIVABLE_GROUP = 'Cuentas por cobrar';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -337,6 +339,60 @@ const ordersPermissions: PermissionDefinition[] = [
   },
 ];
 
+const accountsPayablePermissions: PermissionDefinition[] = [
+  {
+    name: 'accounts-payable.list',
+    resource: 'accounts-payable',
+    action: 'list',
+    label: 'Listar cuentas por pagar',
+    description: 'Permite ver el listado de cuentas por pagar',
+    group: ACCOUNTS_PAYABLE_GROUP,
+  },
+  {
+    name: 'accounts-payable.view',
+    resource: 'accounts-payable',
+    action: 'view',
+    label: 'Ver detalle de cuenta por pagar',
+    description: 'Permite ver el detalle de una cuenta por pagar',
+    group: ACCOUNTS_PAYABLE_GROUP,
+  },
+  {
+    name: 'accounts-payable.update',
+    resource: 'accounts-payable',
+    action: 'update',
+    label: 'Registrar pagos a cuentas por pagar',
+    description: 'Permite registrar pagos al doctor o centro de atención',
+    group: ACCOUNTS_PAYABLE_GROUP,
+  },
+];
+
+const accountsReceivablePermissions: PermissionDefinition[] = [
+  {
+    name: 'accounts-receivable.list',
+    resource: 'accounts-receivable',
+    action: 'list',
+    label: 'Listar cuentas por cobrar',
+    description: 'Permite ver el listado de cuentas por cobrar',
+    group: ACCOUNTS_RECEIVABLE_GROUP,
+  },
+  {
+    name: 'accounts-receivable.view',
+    resource: 'accounts-receivable',
+    action: 'view',
+    label: 'Ver detalle de cuenta por cobrar',
+    description: 'Permite ver el detalle de una cuenta por cobrar',
+    group: ACCOUNTS_RECEIVABLE_GROUP,
+  },
+  {
+    name: 'accounts-receivable.update',
+    resource: 'accounts-receivable',
+    action: 'update',
+    label: 'Registrar cobros a cuentas por cobrar',
+    description: 'Permite registrar cobros del seguro',
+    group: ACCOUNTS_RECEIVABLE_GROUP,
+  },
+];
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
@@ -352,6 +408,8 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...exchangeRatesPermissions,
   ...branchesPermissions,
   ...ordersPermissions,
+  ...accountsPayablePermissions,
+  ...accountsReceivablePermissions,
 ];
 
 const standardActions = {
@@ -424,5 +482,15 @@ export const PERMISSIONS = {
     SOFT_DELETE: 'orders.soft-delete',
     HARD_DELETE: 'orders.hard-delete',
     RESTORE: 'orders.restore',
+  },
+  ACCOUNTS_PAYABLE: {
+    LIST: 'accounts-payable.list',
+    VIEW: 'accounts-payable.view',
+    UPDATE: 'accounts-payable.update',
+  },
+  ACCOUNTS_RECEIVABLE: {
+    LIST: 'accounts-receivable.list',
+    VIEW: 'accounts-receivable.view',
+    UPDATE: 'accounts-receivable.update',
   },
 } as const;

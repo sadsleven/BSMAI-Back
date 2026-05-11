@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { InsurancePhone } from './insurance-phone.entity';
-import { Patient } from '../../patients/entities/patient.entity';
+import { Contractor } from '../../contractors/entities/contractor.entity';
 
 @Entity({ name: 'insurances' })
 export class Insurance {
@@ -22,6 +22,16 @@ export class Insurance {
   @Column({ type: 'varchar', length: 500, nullable: true })
   description?: string | null;
 
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  email?: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  fiscalAddress?: string | null;
+
+  /** Número/identificador del seguro. Opcional, sin restricción de unicidad. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  policyNumber?: string | null;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
@@ -31,8 +41,8 @@ export class Insurance {
   })
   phones: InsurancePhone[];
 
-  @ManyToMany(() => Patient, (p) => p.insurances)
-  patients: Patient[];
+  @ManyToMany(() => Contractor, (c) => c.insurances)
+  contractors: Contractor[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

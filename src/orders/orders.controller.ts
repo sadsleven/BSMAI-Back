@@ -16,6 +16,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
+import { AttendOrderDto, BillingOrderDto, ReportOrderDto } from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
@@ -83,6 +84,38 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.restore(id, user);
+  }
+
+  // --- Pasos 2-4 del flujo (transiciones de estado) ---
+
+  @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)
+  @Patch(':id/attend')
+  attend(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AttendOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.attend(id, dto, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)
+  @Patch(':id/report')
+  report(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ReportOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.report(id, dto, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)
+  @Patch(':id/billing')
+  billing(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: BillingOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.billing(id, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)

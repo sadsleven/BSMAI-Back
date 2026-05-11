@@ -5,6 +5,8 @@ import {
   Entity,
   Index,
   JoinColumn,
+  JoinTable,
+  ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -21,6 +23,7 @@ import { ServiceType } from '../../service-types/entities/service-type.entity';
 import { Pathology } from '../../pathologies/entities/pathology.entity';
 import { User } from '../../users/entities/user.entity';
 import { OrderPayment } from './order-payment.entity';
+import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
   | 'draft'
@@ -35,6 +38,8 @@ export type OrderType = 'cash' | 'credit' | 'insurance' | 'cashea';
 export type ProviderType = 'doctor' | 'care_center';
 
 export type OrderCurrency = 'USD' | 'EUR';
+
+export type DoctorAmountCurrency = 'USD' | 'EUR' | 'BS';
 
 @Entity({ name: 'orders' })
 @Index('idx_orders_branch', ['branchId'])
@@ -114,19 +119,21 @@ export class Order {
   @JoinColumn({ name: 'specialtyId' })
   specialty: Specialty;
 
-  @Column({ type: 'uuid' })
-  serviceTypeId: string;
+  @ManyToMany(() => ServiceType, { eager: false })
+  @JoinTable({
+    name: 'order_service_types',
+    joinColumn: { name: 'orderId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'serviceTypeId', referencedColumnName: 'id' },
+  })
+  serviceTypes: ServiceType[];
 
-  @ManyToOne(() => ServiceType, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'serviceTypeId' })
-  serviceType: ServiceType;
-
-  @Column({ type: 'uuid' })
-  pathologyId: string;
-
-  @ManyToOne(() => Pathology, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'pathologyId' })
-  pathology: Pathology;
+  @ManyToMany(() => Pathology, { eager: false })
+  @JoinTable({
+    name: 'order_pathologies',
+    joinColumn: { name: 'orderId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'pathologyId', referencedColumnName: 'id' },
+  })
+  pathologies: Pathology[];
 
   @Column({ type: 'date' })
   orderDate: string;
@@ -149,6 +156,31 @@ export class Order {
 
   @OneToMany(() => OrderPayment, (p) => p.order, { cascade: false })
   payments: OrderPayment[];
+
+  // ---- Paso 2: Atención del paciente ----
+  @Column({ type: 'boolean', default: false })
+  attended: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  attendedAt?: Date | null;
+
+  // ---- Paso 3: Informe médico y estudios ----
+  @Column({ type: 'text', nullable: true })
+  otherStudies?: string | null;
+
+  // ---- Paso 4: Facturación y liquidación ----
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  doctorAmount?: string | null;
+
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  doctorAmountCurrency?: DoctorAmountCurrency | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  billingExchangeRateId?: string | null;
+
+  @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'billingExchangeRateId' })
+  billingExchangeRate?: ExchangeRate | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

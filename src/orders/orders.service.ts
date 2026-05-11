@@ -2,8 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
@@ -12,6 +15,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
+import { AttendOrderDto, BillingOrderDto, ReportOrderDto } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { Patient } from '../patients/entities/patient.entity';
@@ -20,6 +24,8 @@ import { CareCenter } from '../care-centers/entities/care-center.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
+import { ServiceType } from '../service-types/entities/service-type.entity';
+import { Pathology } from '../pathologies/entities/pathology.entity';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -33,7 +39,9 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 void ALLOWED_TRANSITIONS;
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectRepository(Order) private readonly repo: Repository<Order>,
     @InjectRepository(OrderPayment) private readonly paymentsRepo: Repository<OrderPayment>,
@@ -43,8 +51,44 @@ export class OrdersService {
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
+    @InjectRepository(ServiceType) private readonly serviceTypesRepo: Repository<ServiceType>,
+    @InjectRepository(Pathology) private readonly pathologiesRepo: Repository<Pathology>,
     private readonly dataSource: DataSource,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Bump `orders_seq` to ORDER_NUMBER_START on bootstrap (idempotente).
+   * Sólo avanza la secuencia — nunca la retrocede. Si la secuencia ya emitió
+   * un número ≥ START, queda como está.
+   */
+  async onModuleInit(): Promise<void> {
+    await this.bumpSequence('orders_seq', 'ORDER_NUMBER_START');
+    await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
+    await this.bumpSequence('accounts_receivable_seq', 'RECEIVABLE_NUMBER_START');
+  }
+
+  /** Idempotent: bumpea `seq` al valor de `envKey` solo si el próximo nextval está por debajo. */
+  private async bumpSequence(seq: string, envKey: string): Promise<void> {
+    const raw = this.config.get<string>(envKey);
+    const start = raw ? Number(raw) : 1;
+    if (!Number.isFinite(start) || start <= 1) return;
+    try {
+      const rows = await this.dataSource.query<
+        { last_value: string; is_called: boolean }[]
+      >(`SELECT last_value, is_called FROM ${seq}`);
+      const lastValue = rows[0] ? Number(rows[0].last_value) : 0;
+      const isCalled = rows[0]?.is_called ?? false;
+      const nextWouldBe = isCalled ? lastValue + 1 : lastValue;
+      if (nextWouldBe >= start) return;
+      await this.dataSource.query(`SELECT setval('${seq}', $1, true)`, [start - 1]);
+      this.logger.log(`${seq} bumped: próximo número = ${start}`);
+    } catch (e) {
+      this.logger.warn(
+        `No se pudo inicializar ${seq} desde ${envKey}: ${(e as Error).message}`,
+      );
+    }
+  }
 
   /** Sucursales efectivas del usuario actual: Super Admin → todas activas; regular → asignadas activas. */
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
@@ -71,9 +115,7 @@ export class OrdersService {
     const result = await this.dataSource.query<{ nextval: string }[]>(
       "SELECT nextval('orders_seq') AS nextval",
     );
-    const n = Number(result[0].nextval);
-    const year = new Date().getUTCFullYear();
-    return `ORD-${year}-${String(n).padStart(6, '0')}`;
+    return String(result[0].nextval);
   }
 
   private orderRelations() {
@@ -86,10 +128,11 @@ export class OrdersService {
       doctor: true,
       careCenter: true,
       specialty: true,
-      serviceType: true,
-      pathology: true,
+      serviceTypes: true,
+      pathologies: true,
       createdBy: true,
       payments: { exchangeRate: true },
+      billingExchangeRate: true,
     } as const;
   }
 
@@ -125,8 +168,8 @@ export class OrdersService {
       .leftJoinAndSelect('o.doctor', 'doctor')
       .leftJoinAndSelect('o.careCenter', 'careCenter')
       .leftJoinAndSelect('o.specialty', 'specialty')
-      .leftJoinAndSelect('o.serviceType', 'serviceType')
-      .leftJoinAndSelect('o.pathology', 'pathology')
+      .leftJoinAndSelect('o.serviceTypes', 'serviceType')
+      .leftJoinAndSelect('o.pathologies', 'pathology')
       .leftJoinAndSelect('o.contractor', 'contractor')
       .leftJoinAndSelect('o.insurance', 'insurance')
       .orderBy(`o.${sortBy}`, sortDir);
@@ -236,7 +279,7 @@ export class OrdersService {
 
     const holder = await this.patientsRepo.findOne({
       where: { id: dto.holderId!, deletedAt: IsNull() },
-      relations: { contractors: true, insurances: true },
+      relations: { contractors: { insurances: true } },
     });
     if (!holder) throw new BadRequestException('Titular no encontrado o eliminado');
 
@@ -250,11 +293,12 @@ export class OrdersService {
     if (dto.type === 'insurance') {
       if (!dto.contractorId || !dto.insuranceId)
         throw new BadRequestException('Tipo seguro: contractorId e insuranceId requeridos');
-      const okContractor = (holder.contractors ?? []).some((c) => c.id === dto.contractorId);
-      if (!okContractor)
+      const contractor = (holder.contractors ?? []).find((c) => c.id === dto.contractorId);
+      if (!contractor)
         throw new BadRequestException('Contratista no asignado al titular');
-      const okInsurance = (holder.insurances ?? []).some((i) => i.id === dto.insuranceId);
-      if (!okInsurance) throw new BadRequestException('Seguro no asignado al titular');
+      const okInsurance = (contractor.insurances ?? []).some((i) => i.id === dto.insuranceId);
+      if (!okInsurance)
+        throw new BadRequestException('Seguro no asociado al contratista del titular');
     } else if (dto.contractorId || dto.insuranceId) {
       throw new BadRequestException('contractorId/insuranceId solo válidos para tipo seguro');
     }
@@ -262,6 +306,29 @@ export class OrdersService {
     if (dto.orderDate && dto.appointmentDate) {
       if (new Date(dto.appointmentDate) < new Date(dto.orderDate))
         throw new BadRequestException('appointmentDate debe ser ≥ orderDate');
+    }
+
+    if (!dto.serviceTypeIds || dto.serviceTypeIds.length === 0) {
+      throw new BadRequestException('Asigná al menos un tipo de servicio');
+    }
+    const stIds = Array.from(new Set(dto.serviceTypeIds));
+    const sts = await this.serviceTypesRepo.find({
+      where: { id: In(stIds), deletedAt: IsNull() },
+      select: ['id', 'isActive'],
+    });
+    if (sts.length !== stIds.length || sts.some((s) => !s.isActive)) {
+      throw new BadRequestException('Algún tipo de servicio no existe o está deshabilitado');
+    }
+
+    if (dto.pathologyIds && dto.pathologyIds.length) {
+      const pIds = Array.from(new Set(dto.pathologyIds));
+      const ps = await this.pathologiesRepo.find({
+        where: { id: In(pIds), deletedAt: IsNull() },
+        select: ['id', 'isActive'],
+      });
+      if (ps.length !== pIds.length || ps.some((p) => !p.isActive)) {
+        throw new BadRequestException('Alguna patología no existe o está deshabilitada');
+      }
     }
 
     return { holder };
@@ -339,8 +406,6 @@ export class OrdersService {
         doctorId: dto.providerType === 'doctor' ? dto.doctorId : null,
         careCenterId: dto.providerType === 'care_center' ? dto.careCenterId : null,
         specialtyId: dto.specialtyId,
-        serviceTypeId: dto.serviceTypeId,
-        pathologyId: dto.pathologyId,
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
         priceCurrency: dto.priceCurrency,
@@ -349,11 +414,58 @@ export class OrdersService {
       });
       const saved = await mgr.save(entity);
 
+      const stIds = Array.from(new Set(dto.serviceTypeIds));
+      await mgr
+        .createQueryBuilder()
+        .relation(Order, 'serviceTypes')
+        .of(saved.id)
+        .add(stIds);
+
+      const pIds = Array.from(new Set(dto.pathologyIds ?? []));
+      if (pIds.length) {
+        await mgr
+          .createQueryBuilder()
+          .relation(Order, 'pathologies')
+          .of(saved.id)
+          .add(pIds);
+      }
+
       if (dto.type === 'cash' && dto.payments?.length) {
         for (const p of dto.payments) {
           const payload = await this.resolvePaymentForSave(p, dto.priceCurrency);
           await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: saved.id }));
         }
+      }
+
+      // Auto-generación de cuentas (idempotente vía UNIQUE(orderId)).
+      // Números human-readable desde sequences propias (`accounts_payable_seq`, `accounts_receivable_seq`).
+      const payableNumberRows = await mgr.query<{ nextval: string }[]>(
+        `SELECT nextval('accounts_payable_seq') AS nextval`,
+      );
+      const payableNumber = String(payableNumberRows[0].nextval);
+      await mgr.query(
+        `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT ("orderId") DO NOTHING`,
+        [
+          saved.id,
+          payableNumber,
+          dto.providerType,
+          dto.providerType === 'doctor' ? dto.doctorId ?? null : null,
+          dto.providerType === 'care_center' ? dto.careCenterId ?? null : null,
+        ],
+      );
+      if (dto.type === 'insurance' && dto.insuranceId) {
+        const receivableNumberRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('accounts_receivable_seq') AS nextval`,
+        );
+        const receivableNumber = String(receivableNumberRows[0].nextval);
+        await mgr.query(
+          `INSERT INTO "accounts_receivable" ("orderId", "receivableNumber", "insuranceId")
+           VALUES ($1, $2, $3)
+           ON CONFLICT ("orderId") DO NOTHING`,
+          [saved.id, receivableNumber, dto.insuranceId],
+        );
       }
 
       return saved.id;
@@ -362,10 +474,103 @@ export class OrdersService {
     return this.findOne(savedId, user);
   }
 
+  // ----- Transiciones de estado (Pasos 2-4) -----
+
+  /** Paso 2: Atención del paciente. status (draft|in_progress) → attended. */
+  async attend(id: string, dto: AttendOrderDto, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (!['draft', 'in_progress', 'attended'].includes(order.status)) {
+      throw new BadRequestException(
+        'La orden no puede pasar a atendida desde su estado actual',
+      );
+    }
+    order.attended = dto.attended;
+    order.attendedAt = dto.attended
+      ? dto.attendedAt
+        ? new Date(dto.attendedAt)
+        : new Date()
+      : null;
+    if (dto.attended) {
+      order.status = 'attended';
+    } else if (order.status === 'attended') {
+      order.status = 'in_progress';
+    }
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /** Paso 3: Informe médico y estudios. status attended → report_issued. */
+  async report(id: string, dto: ReportOrderDto, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (!['attended', 'report_issued'].includes(order.status)) {
+      throw new BadRequestException('La orden debe estar atendida para emitir informe');
+    }
+    if (dto.otherStudies !== undefined) {
+      order.otherStudies = dto.otherStudies && dto.otherStudies.trim() !== ''
+        ? dto.otherStudies
+        : null;
+    }
+    if (order.status === 'attended') order.status = 'report_issued';
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /** Paso 4: Facturación y liquidación. status report_issued → finalized. Aplica cap. */
+  async billing(id: string, dto: BillingOrderDto, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (order.status !== 'report_issued') {
+      throw new BadRequestException(
+        'La orden debe tener informe emitido para pasar a facturación',
+      );
+    }
+
+    const rate = await this.ratesRepo.findOne({ where: { id: dto.billingExchangeRateId } });
+    if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+
+    // Convertir doctorAmount a la moneda de la orden y validar cap.
+    const priceAmount = Number(order.priceAmount);
+    const doctorAmountInOrderCurrency = this.convertToOrderCurrency(
+      dto.doctorAmount,
+      dto.doctorAmountCurrency,
+      order.priceCurrency,
+      Number(rate.amountBs),
+    );
+    if (doctorAmountInOrderCurrency > priceAmount + 0.005) {
+      throw new BadRequestException(
+        'El monto al doctor no puede superar el monto declarado de la orden',
+      );
+    }
+
+    order.doctorAmount = dto.doctorAmount.toFixed(2);
+    order.doctorAmountCurrency = dto.doctorAmountCurrency;
+    order.billingExchangeRateId = dto.billingExchangeRateId;
+    order.status = 'finalized';
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /** Convierte un monto + moneda al `targetCurrency` de la orden usando tasa. */
+  private convertToOrderCurrency(
+    amount: number,
+    currency: 'USD' | 'EUR' | 'BS',
+    targetCurrency: 'USD' | 'EUR',
+    rateAmountBs: number,
+  ): number {
+    if (currency === targetCurrency) return amount;
+    if (currency === 'BS') return amount / rateAmountBs;
+    // currency es USD/EUR distinta a targetCurrency. Sin tasa cruzada → rechazar.
+    throw new BadRequestException(
+      `No se puede convertir entre ${currency} y ${targetCurrency} con la tasa registrada`,
+    );
+  }
+
   async update(id: string, dto: UpdateOrderDto, user: AuthenticatedUser): Promise<Order> {
     const existing = await this.findOne(id, user);
     if (existing.status !== 'draft')
       throw new BadRequestException('Solo se puede editar órdenes en borrador');
+
+    const existingServiceTypeIds = (existing.serviceTypes ?? []).map((s) => s.id);
+    const existingPathologyIds = (existing.pathologies ?? []).map((p) => p.id);
 
     const merged: CreateOrderDto = {
       branchId: dto.branchId ?? existing.branchId,
@@ -378,8 +583,8 @@ export class OrdersService {
       doctorId: dto.doctorId ?? existing.doctorId ?? undefined,
       careCenterId: dto.careCenterId ?? existing.careCenterId ?? undefined,
       specialtyId: dto.specialtyId ?? existing.specialtyId,
-      serviceTypeId: dto.serviceTypeId ?? existing.serviceTypeId,
-      pathologyId: dto.pathologyId ?? existing.pathologyId,
+      serviceTypeIds: dto.serviceTypeIds ?? existingServiceTypeIds,
+      pathologyIds: dto.pathologyIds ?? existingPathologyIds,
       orderDate: dto.orderDate ?? existing.orderDate,
       appointmentDate:
         dto.appointmentDate ?? existing.appointmentDate.toISOString(),
@@ -400,14 +605,22 @@ export class OrdersService {
         doctorId: merged.providerType === 'doctor' ? merged.doctorId : null,
         careCenterId: merged.providerType === 'care_center' ? merged.careCenterId : null,
         specialtyId: merged.specialtyId,
-        serviceTypeId: merged.serviceTypeId,
-        pathologyId: merged.pathologyId,
         orderDate: merged.orderDate,
         appointmentDate: new Date(merged.appointmentDate),
         priceCurrency: merged.priceCurrency,
         priceAmount: merged.priceAmount.toFixed(2),
       });
       await mgr.save(existing);
+
+      // Replace M2M relations.
+      const stRel = mgr.createQueryBuilder().relation(Order, 'serviceTypes').of(existing.id);
+      if (existingServiceTypeIds.length) await stRel.remove(existingServiceTypeIds);
+      if (merged.serviceTypeIds.length) await stRel.add(Array.from(new Set(merged.serviceTypeIds)));
+
+      const pRel = mgr.createQueryBuilder().relation(Order, 'pathologies').of(existing.id);
+      if (existingPathologyIds.length) await pRel.remove(existingPathologyIds);
+      if (merged.pathologyIds && merged.pathologyIds.length)
+        await pRel.add(Array.from(new Set(merged.pathologyIds)));
 
       if (dto.payments !== undefined) {
         await mgr.delete(OrderPayment, { orderId: existing.id });

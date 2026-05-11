@@ -34,6 +34,12 @@ export class PatientsController {
     return this.service.findOne(id, true);
   }
 
+  @RequirePermissions(PERMISSIONS.PATIENTS.VIEW)
+  @Get(':id/available-insurances')
+  availableInsurances(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.getAvailableInsurances(id);
+  }
+
   @RequirePermissions(PERMISSIONS.PATIENTS.CREATE)
   @Post()
   create(@Body() dto: CreatePatientDto) {

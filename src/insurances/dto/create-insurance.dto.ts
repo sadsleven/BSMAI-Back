@@ -1,13 +1,14 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { PhoneDto } from './phone.dto';
@@ -23,8 +24,23 @@ export class CreateInsuranceDto {
   @MaxLength(500)
   description?: string;
 
+  @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @IsEmail({}, { message: 'Email inválido' })
+  @MaxLength(200)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500, { message: 'El domicilio fiscal no puede superar 500 caracteres' })
+  fiscalAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64, { message: 'El número de póliza no puede superar 64 caracteres' })
+  policyNumber?: string;
+
   @IsArray()
-  @ArrayMinSize(1, { message: 'Debe ingresar al menos un teléfono' })
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por seguro' })
   @ValidateNested({ each: true })
   @Type(() => PhoneDto)
