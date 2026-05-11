@@ -26,6 +26,9 @@ import { ContractorsModule } from './contractors/contractors.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { BranchesModule } from './branches/branches.module';
 import { OrdersModule } from './orders/orders.module';
+import { AccountsPayableModule } from './accounts-payable/accounts-payable.module';
+import { AccountsReceivableModule } from './accounts-receivable/accounts-receivable.module';
+import { AppConfigModule } from './config/app-config.module';
 
 @Module({
   imports: [
@@ -51,6 +54,9 @@ import { OrdersModule } from './orders/orders.module';
     ExchangeRatesModule,
     BranchesModule,
     OrdersModule,
+    AccountsPayableModule,
+    AccountsReceivableModule,
+    AppConfigModule,
   ],
   controllers: [AppController],
   providers: [AppService],

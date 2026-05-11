@@ -15,6 +15,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
+import { AttendOrderDto, BillingOrderDto, ReportOrderDto } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { Patient } from '../patients/entities/patient.entity';
@@ -62,24 +63,29 @@ export class OrdersService implements OnModuleInit {
    * un número ≥ START, queda como está.
    */
   async onModuleInit(): Promise<void> {
-    const raw = this.config.get<string>('ORDER_NUMBER_START');
+    await this.bumpSequence('orders_seq', 'ORDER_NUMBER_START');
+    await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
+    await this.bumpSequence('accounts_receivable_seq', 'RECEIVABLE_NUMBER_START');
+  }
+
+  /** Idempotent: bumpea `seq` al valor de `envKey` solo si el próximo nextval está por debajo. */
+  private async bumpSequence(seq: string, envKey: string): Promise<void> {
+    const raw = this.config.get<string>(envKey);
     const start = raw ? Number(raw) : 1;
     if (!Number.isFinite(start) || start <= 1) return;
     try {
-      const rows = await this.dataSource.query<{ last_value: string; is_called: boolean }[]>(
-        `SELECT last_value, is_called FROM orders_seq`,
-      );
+      const rows = await this.dataSource.query<
+        { last_value: string; is_called: boolean }[]
+      >(`SELECT last_value, is_called FROM ${seq}`);
       const lastValue = rows[0] ? Number(rows[0].last_value) : 0;
       const isCalled = rows[0]?.is_called ?? false;
-      // Próximo nextval: isCalled ? last_value + 1 : last_value.
       const nextWouldBe = isCalled ? lastValue + 1 : lastValue;
       if (nextWouldBe >= start) return;
-      // setval(START - 1, true) → próximo nextval = START.
-      await this.dataSource.query(`SELECT setval('orders_seq', $1, true)`, [start - 1]);
-      this.logger.log(`orders_seq bumped: próximo número de orden = ${start}`);
+      await this.dataSource.query(`SELECT setval('${seq}', $1, true)`, [start - 1]);
+      this.logger.log(`${seq} bumped: próximo número = ${start}`);
     } catch (e) {
       this.logger.warn(
-        `No se pudo inicializar orders_seq desde ORDER_NUMBER_START: ${(e as Error).message}`,
+        `No se pudo inicializar ${seq} desde ${envKey}: ${(e as Error).message}`,
       );
     }
   }
@@ -126,6 +132,7 @@ export class OrdersService implements OnModuleInit {
       pathologies: true,
       createdBy: true,
       payments: { exchangeRate: true },
+      billingExchangeRate: true,
     } as const;
   }
 
@@ -430,10 +437,131 @@ export class OrdersService implements OnModuleInit {
         }
       }
 
+      // Auto-generación de cuentas (idempotente vía UNIQUE(orderId)).
+      // Números human-readable desde sequences propias (`accounts_payable_seq`, `accounts_receivable_seq`).
+      const payableNumberRows = await mgr.query<{ nextval: string }[]>(
+        `SELECT nextval('accounts_payable_seq') AS nextval`,
+      );
+      const payableNumber = String(payableNumberRows[0].nextval);
+      await mgr.query(
+        `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT ("orderId") DO NOTHING`,
+        [
+          saved.id,
+          payableNumber,
+          dto.providerType,
+          dto.providerType === 'doctor' ? dto.doctorId ?? null : null,
+          dto.providerType === 'care_center' ? dto.careCenterId ?? null : null,
+        ],
+      );
+      if (dto.type === 'insurance' && dto.insuranceId) {
+        const receivableNumberRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('accounts_receivable_seq') AS nextval`,
+        );
+        const receivableNumber = String(receivableNumberRows[0].nextval);
+        await mgr.query(
+          `INSERT INTO "accounts_receivable" ("orderId", "receivableNumber", "insuranceId")
+           VALUES ($1, $2, $3)
+           ON CONFLICT ("orderId") DO NOTHING`,
+          [saved.id, receivableNumber, dto.insuranceId],
+        );
+      }
+
       return saved.id;
     });
 
     return this.findOne(savedId, user);
+  }
+
+  // ----- Transiciones de estado (Pasos 2-4) -----
+
+  /** Paso 2: Atención del paciente. status (draft|in_progress) → attended. */
+  async attend(id: string, dto: AttendOrderDto, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (!['draft', 'in_progress', 'attended'].includes(order.status)) {
+      throw new BadRequestException(
+        'La orden no puede pasar a atendida desde su estado actual',
+      );
+    }
+    order.attended = dto.attended;
+    order.attendedAt = dto.attended
+      ? dto.attendedAt
+        ? new Date(dto.attendedAt)
+        : new Date()
+      : null;
+    if (dto.attended) {
+      order.status = 'attended';
+    } else if (order.status === 'attended') {
+      order.status = 'in_progress';
+    }
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /** Paso 3: Informe médico y estudios. status attended → report_issued. */
+  async report(id: string, dto: ReportOrderDto, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (!['attended', 'report_issued'].includes(order.status)) {
+      throw new BadRequestException('La orden debe estar atendida para emitir informe');
+    }
+    if (dto.otherStudies !== undefined) {
+      order.otherStudies = dto.otherStudies && dto.otherStudies.trim() !== ''
+        ? dto.otherStudies
+        : null;
+    }
+    if (order.status === 'attended') order.status = 'report_issued';
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /** Paso 4: Facturación y liquidación. status report_issued → finalized. Aplica cap. */
+  async billing(id: string, dto: BillingOrderDto, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (order.status !== 'report_issued') {
+      throw new BadRequestException(
+        'La orden debe tener informe emitido para pasar a facturación',
+      );
+    }
+
+    const rate = await this.ratesRepo.findOne({ where: { id: dto.billingExchangeRateId } });
+    if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+
+    // Convertir doctorAmount a la moneda de la orden y validar cap.
+    const priceAmount = Number(order.priceAmount);
+    const doctorAmountInOrderCurrency = this.convertToOrderCurrency(
+      dto.doctorAmount,
+      dto.doctorAmountCurrency,
+      order.priceCurrency,
+      Number(rate.amountBs),
+    );
+    if (doctorAmountInOrderCurrency > priceAmount + 0.005) {
+      throw new BadRequestException(
+        'El monto al doctor no puede superar el monto declarado de la orden',
+      );
+    }
+
+    order.doctorAmount = dto.doctorAmount.toFixed(2);
+    order.doctorAmountCurrency = dto.doctorAmountCurrency;
+    order.billingExchangeRateId = dto.billingExchangeRateId;
+    order.status = 'finalized';
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /** Convierte un monto + moneda al `targetCurrency` de la orden usando tasa. */
+  private convertToOrderCurrency(
+    amount: number,
+    currency: 'USD' | 'EUR' | 'BS',
+    targetCurrency: 'USD' | 'EUR',
+    rateAmountBs: number,
+  ): number {
+    if (currency === targetCurrency) return amount;
+    if (currency === 'BS') return amount / rateAmountBs;
+    // currency es USD/EUR distinta a targetCurrency. Sin tasa cruzada → rechazar.
+    throw new BadRequestException(
+      `No se puede convertir entre ${currency} y ${targetCurrency} con la tasa registrada`,
+    );
   }
 
   async update(id: string, dto: UpdateOrderDto, user: AuthenticatedUser): Promise<Order> {

@@ -382,6 +382,67 @@ Replace-all M2M en update vía `mgr.createQueryBuilder().relation(Order, 'servic
 
 Endpoints: `GET /orders`, `GET /orders/:id`, `POST /orders`, `PATCH /orders/:id`, `DELETE /orders/:id`, `DELETE /orders/:id/permanent`, `PATCH /orders/:id/restore`, `POST /orders/:id/payments`, `PATCH /orders/:id/payments/:paymentId`, `DELETE /orders/:id/payments/:paymentId`. Permiso `orders.update` cubre tanto el cuerpo de la orden como su sub-recurso de pagos.
 
+### Órdenes — Pasos 2-4 (implementado, file storage Paso 3 TBD)
+
+Tras `Creación de orden` (Paso 1, ya implementado), restan 3 etapas. Naming canónico UI: **Atención del paciente / Informe médico y estudios / Facturación y liquidación**.
+
+| # | Etapa | Estado destino | Columnas / acciones nuevas |
+| - | ----- | -------------- | -------------------------- |
+| 2 | Atención del paciente | `in_progress → attended` | `attended boolean default false`, `attendedAt timestamptz null` |
+| 3 | Informe médico y estudios | `attended → report_issued` | dropzone multi-file (PDF/img) — **FE-only en MVP, BE storage TBD** + `otherStudies text null` |
+| 4 | Facturación y liquidación | `report_issued → finalized` | `doctorAmount numeric(14,2) null`, `doctorAmountCurrency varchar(3) null` (`USD|EUR|BS`), `billingExchangeRateId uuid null` (FK `exchange_rates` RESTRICT, capturada al entrar a facturación) |
+
+**Cap doctor amount**: `doctorAmount` convertido a `priceCurrency` (Bs ↔ USD/EUR vía `billingExchangeRateId`) debe ser ≤ `priceAmount`. Validado en `OrdersService.transitionToBilling` / `update` cuando estado ≥ `report_issued`.
+
+**Tax doctor**: solo si `providerType === 'doctor'`. `taxRate = doctor.isLegalEntity ? 0.05 : 0.03`. Calculado al vuelo, **no se persiste** (`doctor.isLegalEntity` puede cambiar pero la cuenta congela `doctorAmount` y `billingExchangeRateId`). Mostrado en moneda original + Bs vía `billingExchangeRateId`.
+
+**Net profit empresa** = `priceAmount - doctorAmount` en `priceCurrency`. Tax NO se resta del net — es retención al doctor.
+
+**"Orden interna" por ST** = artefacto imprimible / línea de factura por ST. **No entidad nueva** — derivado de `order_service_types`. Atención, Informe, `doctorAmount` viven a nivel de la orden completa.
+
+**Botón "Descargar factura"** — endpoint `GET /orders/:id/invoice.pdf` (gen PDF lib TBD).
+
+Endpoints planned (extender `OrdersController`):
+- `PATCH /orders/:id/attend` — body `{ attended, attendedAt }`. Transición `in_progress → attended`. Permiso `orders.update`.
+- `PATCH /orders/:id/report` — body `{ otherStudies?, files? }` (files MVP no-op en BE). Transición `attended → report_issued`.
+- `PATCH /orders/:id/billing` — body `{ doctorAmount, doctorAmountCurrency, billingExchangeRateId }`. Transición `report_issued → finalized`. Validación cap + congela tasa.
+
+### Cuentas por pagar (`accounts-payable`) — implementado
+
+Módulo auto-generado al crear orden. Permisos: `accounts-payable.{list, view, update}` — **excepción a `buildResource`** (sin `create | toggle-active | soft-delete | hard-delete | restore`). Catálogo lo declara explícito.
+
+- Entity `AccountsPayable { id uuid PK, orderId uuid FK orders CASCADE UNIQUE, recipientType ∈ {doctor, care_center}, doctorId uuid? FK doctors RESTRICT, careCenterId uuid? FK care_centers RESTRICT, status ∈ {paid, unpaid} default unpaid, paidAt timestamptz?, createdAt, updatedAt, deletedAt }`. Migración: índices `(status)`, `(doctorId)`, `(careCenterId)`, UNIQUE `(orderId)`.
+- Subtabla `accounts_payable_payments` (esquema espejado de `order_payments`: tipos `mobile_payment | bank_transfer | cash_foreign | cash_bs | other`, `bankCode`, `referenceNumber`, `amount numeric(14,2)`, `amountCurrency`, `exchangeRateId? FK exchange_rates RESTRICT`).
+- Pivot `accounts_payable_payment_links(payableId uuid, paymentId uuid, PK (payableId, paymentId))` — **N:N** pago↔cuenta. Un pago puede saldar varias cuentas (suma de assigned amounts); una cuenta puede recibir varios pagos.
+- **Acción "Registrar pago"** (`POST /accounts-payable/register-payment`): body `{ payableIds: string[] (≥1), payments: PaymentDto[] (≥1) }`. Constraints validados:
+  - Cuentas seleccionadas comparten `doctorId` (todas) o `careCenterId` (todas) — rechazo si mezclan.
+  - Estado todas `unpaid` — re-pago de cuenta `paid` rechaza.
+  - `Σ pagos = Σ amountToReceive(cuenta)` en moneda común. Bs convertido vía `billingExchangeRateId` de la **orden de origen de cada cuenta** (cada cuenta puede tener tasa distinta).
+  - Tras éxito: marca todas las cuentas `paid`, `paidAt = now()`.
+- **`amountToReceive(cuenta)`**:
+  - recipient = doctor: `order.doctorAmount × (1 - taxRate)` (empresa retiene tax).
+  - recipient = careCenter: `order.doctorAmount` (sin retención).
+- Endpoints planned: `GET /accounts-payable` (paginado, filtros `status` / `doctorId` / `careCenterId` / `branchId` / `search` por `orderNumber`), `GET /accounts-payable/:id`, `PATCH /accounts-payable/:id` (editar pagos asociados; replace-all subtabla), `POST /accounts-payable/register-payment`.
+
+### Cuentas por cobrar (`accounts-receivable`) — implementado
+
+Mismo patrón que payable, generado **solo si `order.type === 'insurance'`**. Permisos: `accounts-receivable.{list, view, update}` — misma excepción a `buildResource`.
+
+- Entity `AccountsReceivable { id uuid, orderId uuid FK orders CASCADE UNIQUE, insuranceId uuid FK insurances RESTRICT, status ∈ {collected, uncollected} default uncollected, collectedAt timestamptz?, createdAt, updatedAt, deletedAt }`.
+- Subtabla `accounts_receivable_payments` (esquema espejado).
+- Pivot `accounts_receivable_payment_links(receivableId, paymentId, PK)`.
+- **Agrupación**: cuentas comparten `insuranceId`.
+- **Sin cap de monto** — seguro paga por encima del agregado de órdenes. Endpoint **no bloquea** cuando `Σ pagos > Σ priceAmount`. UI muestra diferencia.
+- Endpoints planned: `GET /accounts-receivable`, `GET /accounts-receivable/:id`, `PATCH /accounts-receivable/:id`, `POST /accounts-receivable/register-collection`.
+
+### Auto-generación de cuentas
+
+`OrdersService.create` (post-insert, mismo transactional context):
+- Insert 1 `accounts_payable` (recipient derivado de `providerType` + `doctorId`/`careCenterId`).
+- Si `order.type === 'insurance'`: insert 1 `accounts_receivable` con `insuranceId` de la orden.
+
+Idempotente vía UNIQUE en `orderId`. **Tipo de orden inmutable post-`draft`** (no flow cash↔insurance) → no se reconcilia. Borrado de orden (`softDelete`/`delete`) cascada a las cuentas vía FK CASCADE.
+
 ### Sucursales (`branches`)
 
 CRUD estándar paralelo a Especialidades + endpoint `GET /branches/assignable` (sólo `isActive = true` y no eliminadas). Relación M2M con `User` vía pivote `user_branches` (FK CASCADE en ambas direcciones).

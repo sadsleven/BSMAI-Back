@@ -35,6 +35,11 @@ export class CreateInsuranceDto {
   @MaxLength(500, { message: 'El domicilio fiscal no puede superar 500 caracteres' })
   fiscalAddress?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(64, { message: 'El número de póliza no puede superar 64 caracteres' })
+  policyNumber?: string;
+
   @IsArray()
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por seguro' })
   @ValidateNested({ each: true })

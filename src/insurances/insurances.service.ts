@@ -85,6 +85,7 @@ export class InsurancesService {
       description: dto.description?.trim() ?? null,
       email,
       fiscalAddress: dto.fiscalAddress?.trim() || null,
+      policyNumber: dto.policyNumber?.trim() || null,
       isActive: dto.isActive ?? true,
       phones: (dto.phones ?? []).map((p) =>
         this.phonesRepo.create(this.phonePayload(p)),
@@ -114,6 +115,9 @@ export class InsurancesService {
     }
     if (dto.fiscalAddress !== undefined) {
       insurance.fiscalAddress = dto.fiscalAddress?.trim() || null;
+    }
+    if (dto.policyNumber !== undefined) {
+      insurance.policyNumber = dto.policyNumber?.trim() || null;
     }
     if (dto.isActive !== undefined) insurance.isActive = dto.isActive;
 

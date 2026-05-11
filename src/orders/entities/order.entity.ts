@@ -23,6 +23,7 @@ import { ServiceType } from '../../service-types/entities/service-type.entity';
 import { Pathology } from '../../pathologies/entities/pathology.entity';
 import { User } from '../../users/entities/user.entity';
 import { OrderPayment } from './order-payment.entity';
+import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
   | 'draft'
@@ -37,6 +38,8 @@ export type OrderType = 'cash' | 'credit' | 'insurance' | 'cashea';
 export type ProviderType = 'doctor' | 'care_center';
 
 export type OrderCurrency = 'USD' | 'EUR';
+
+export type DoctorAmountCurrency = 'USD' | 'EUR' | 'BS';
 
 @Entity({ name: 'orders' })
 @Index('idx_orders_branch', ['branchId'])
@@ -153,6 +156,31 @@ export class Order {
 
   @OneToMany(() => OrderPayment, (p) => p.order, { cascade: false })
   payments: OrderPayment[];
+
+  // ---- Paso 2: Atención del paciente ----
+  @Column({ type: 'boolean', default: false })
+  attended: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  attendedAt?: Date | null;
+
+  // ---- Paso 3: Informe médico y estudios ----
+  @Column({ type: 'text', nullable: true })
+  otherStudies?: string | null;
+
+  // ---- Paso 4: Facturación y liquidación ----
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  doctorAmount?: string | null;
+
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  doctorAmountCurrency?: DoctorAmountCurrency | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  billingExchangeRateId?: string | null;
+
+  @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'billingExchangeRateId' })
+  billingExchangeRate?: ExchangeRate | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

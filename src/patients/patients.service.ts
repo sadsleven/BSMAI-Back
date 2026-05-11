@@ -128,6 +128,29 @@ export class PatientsService {
     return patient;
   }
 
+  /**
+   * Devuelve los seguros disponibles para un paciente, derivados de los seguros
+   * asignados a sus contratistas activos. Sin duplicados, ordenados por nombre.
+   */
+  async getAvailableInsurances(
+    id: string,
+  ): Promise<Array<{ id: string; name: string }>> {
+    const patient = await this.repo.findOne({
+      where: { id, deletedAt: IsNull() },
+      relations: { contractors: { insurances: true } },
+    });
+    if (!patient) throw new NotFoundException('Paciente no encontrado');
+    const map = new Map<string, { id: string; name: string }>();
+    for (const c of patient.contractors ?? []) {
+      if (c.deletedAt || !c.isActive) continue;
+      for (const ins of c.insurances ?? []) {
+        if (ins.deletedAt || !ins.isActive) continue;
+        if (!map.has(ins.id)) map.set(ins.id, { id: ins.id, name: ins.name });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async create(dto: CreatePatientDto): Promise<Patient> {
     this.assertPersonTypeFields(dto.personType, dto);
 
