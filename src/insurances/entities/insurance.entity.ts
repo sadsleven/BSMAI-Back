@@ -28,10 +28,6 @@ export class Insurance {
   @Column({ type: 'varchar', length: 500, nullable: true })
   fiscalAddress?: string | null;
 
-  /** Número/identificador del seguro. Opcional, sin restricción de unicidad. */
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  policyNumber?: string | null;
-
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 

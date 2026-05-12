@@ -248,12 +248,15 @@ export class AccountsReceivableService {
             [acc.id, paymentId],
           );
         }
-        acc.status = newStatus;
-        acc.collectedAt =
+        const collectedAt =
           newStatus === 'collected' || newStatus === 'overcollected'
             ? acc.collectedAt ?? new Date()
             : null;
-        await mgr.save(acc);
+        // update() instead of save() — save() would reconcile M2M and wipe links.
+        await mgr.update(AccountsReceivable, acc.id, {
+          status: newStatus,
+          collectedAt,
+        });
       }
       return accounts.map((a) => a.id);
     });
