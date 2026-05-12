@@ -321,9 +321,12 @@ export class AccountsPayableService {
             [acc.id, paymentId],
           );
         }
-        acc.status = newStatus;
-        acc.paidAt = isFullyPaid ? new Date() : null;
-        await mgr.save(acc);
+        // Use update() instead of save() — save() reconciles M2M and would wipe
+        // the links we just inserted (acc.payments was loaded as the prior set).
+        await mgr.update(AccountsPayable, acc.id, {
+          status: newStatus,
+          paidAt: isFullyPaid ? new Date() : null,
+        });
       }
       return accounts.map((a) => a.id);
     });
