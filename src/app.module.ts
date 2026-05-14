@@ -29,6 +29,7 @@ import { OrdersModule } from './orders/orders.module';
 import { AccountsPayableModule } from './accounts-payable/accounts-payable.module';
 import { AccountsReceivableModule } from './accounts-receivable/accounts-receivable.module';
 import { AppConfigModule } from './config/app-config.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { AppConfigModule } from './config/app-config.module';
     AccountsPayableModule,
     AccountsReceivableModule,
     AppConfigModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
