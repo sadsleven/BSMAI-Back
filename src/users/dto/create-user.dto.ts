@@ -46,6 +46,16 @@ export class CreateUserDto {
   @MaxLength(40)
   phoneNumber?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(40, { message: 'El grado académico no puede superar 40 caracteres' })
+  academicDegree?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100, { message: 'El cargo no puede superar 100 caracteres' })
+  jobTitle?: string;
+
   @IsString()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   password: string;

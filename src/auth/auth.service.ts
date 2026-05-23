@@ -91,6 +91,9 @@ export class AuthService {
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
     if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber ?? null;
+    if (dto.academicDegree !== undefined)
+      user.academicDegree = dto.academicDegree?.trim() || null;
+    if (dto.jobTitle !== undefined) user.jobTitle = dto.jobTitle?.trim() || null;
 
     await this.usersRepo.save(user);
     return this.me(userId);
@@ -150,6 +153,8 @@ export interface PublicUser {
   lastName: string;
   email: string;
   phoneNumber?: string | null;
+  academicDegree?: string | null;
+  jobTitle?: string | null;
   isActive: boolean;
   isSuperAdmin: boolean;
   roles: { id: string; name: string }[];
@@ -174,6 +179,8 @@ export function toPublicUser(user: User, branches: PublicBranch[]): PublicUser {
     lastName: user.lastName,
     email: user.email,
     phoneNumber: user.phoneNumber ?? null,
+    academicDegree: user.academicDegree ?? null,
+    jobTitle: user.jobTitle ?? null,
     isActive: user.isActive,
     isSuperAdmin: user.isSuperAdmin,
     roles: activeRoles.map((r) => ({ id: r.id, name: r.name })),

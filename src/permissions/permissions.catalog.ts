@@ -23,6 +23,7 @@ const BRANCHES_GROUP = 'Sucursales';
 const ORDERS_GROUP = 'Órdenes';
 const ACCOUNTS_PAYABLE_GROUP = 'Cuentas por pagar';
 const ACCOUNTS_RECEIVABLE_GROUP = 'Cuentas por cobrar';
+const TAXES_PAYABLE_GROUP = 'Impuestos por pagar';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -393,6 +394,33 @@ const accountsReceivablePermissions: PermissionDefinition[] = [
   },
 ];
 
+const taxesPayablePermissions: PermissionDefinition[] = [
+  {
+    name: 'taxes-payable.list',
+    resource: 'taxes-payable',
+    action: 'list',
+    label: 'Listar impuestos por pagar',
+    description: 'Permite ver el listado de impuestos por pagar',
+    group: TAXES_PAYABLE_GROUP,
+  },
+  {
+    name: 'taxes-payable.view',
+    resource: 'taxes-payable',
+    action: 'view',
+    label: 'Ver detalle de impuesto por pagar',
+    description: 'Permite ver el detalle de un impuesto por pagar',
+    group: TAXES_PAYABLE_GROUP,
+  },
+  {
+    name: 'taxes-payable.update',
+    resource: 'taxes-payable',
+    action: 'update',
+    label: 'Registrar pagos a impuestos por pagar',
+    description: 'Permite registrar pagos del impuesto retenido al fisco',
+    group: TAXES_PAYABLE_GROUP,
+  },
+];
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
@@ -410,6 +438,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...ordersPermissions,
   ...accountsPayablePermissions,
   ...accountsReceivablePermissions,
+  ...taxesPayablePermissions,
 ];
 
 const standardActions = {
@@ -492,5 +521,10 @@ export const PERMISSIONS = {
     LIST: 'accounts-receivable.list',
     VIEW: 'accounts-receivable.view',
     UPDATE: 'accounts-receivable.update',
+  },
+  TAXES_PAYABLE: {
+    LIST: 'taxes-payable.list',
+    VIEW: 'taxes-payable.view',
+    UPDATE: 'taxes-payable.update',
   },
 } as const;

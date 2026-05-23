@@ -5,12 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Doctor } from './entities/doctor.entity';
 import { DoctorPhone } from './entities/doctor-phone.entity';
 import { DoctorPaymentMethod } from './entities/doctor-payment-method.entity';
+import { DoctorServicePrice } from './entities/doctor-service-price.entity';
 import { Specialty } from '../specialties/entities/specialty.entity';
 import { Bank } from '../banks/entities/bank.entity';
+import { ServiceType } from '../service-types/entities/service-type.entity';
+import { ServicePriceDto } from '../shared/dto/service-price.dto';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { QueryDoctorsDto } from './dto/query-doctors.dto';
@@ -34,6 +37,10 @@ export class DoctorsService {
     @InjectRepository(Specialty)
     private readonly specialtiesRepo: Repository<Specialty>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
+    @InjectRepository(DoctorServicePrice)
+    private readonly pricesRepo: Repository<DoctorServicePrice>,
+    @InjectRepository(ServiceType)
+    private readonly serviceTypesRepo: Repository<ServiceType>,
   ) {}
 
   async findAll(query: QueryDoctorsDto): Promise<PaginatedResponse<Doctor>> {
@@ -55,6 +62,8 @@ export class DoctorsService {
       .leftJoinAndSelect('doctor.phones', 'phone')
       .leftJoinAndSelect('doctor.specialties', 'specialty')
       .leftJoinAndSelect('doctor.paymentMethods', 'method')
+      .leftJoinAndSelect('doctor.servicePrices', 'sp')
+      .leftJoinAndSelect('sp.serviceType', 'spST')
       .orderBy(`doctor.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -87,10 +96,22 @@ export class DoctorsService {
     return paginateBuilder<Doctor>(qb, page, limit);
   }
 
+  async findAssignable(): Promise<Doctor[]> {
+    return this.repo.find({
+      where: { isActive: true },
+      order: { firstName: 'ASC', lastName: 'ASC' },
+    });
+  }
+
   async findOne(id: string, withDeleted = false): Promise<Doctor> {
     const doctor = await this.repo.findOne({
       where: { id },
-      relations: { phones: true, specialties: true, paymentMethods: true },
+      relations: {
+        phones: true,
+        specialties: true,
+        paymentMethods: true,
+        servicePrices: { serviceType: true },
+      },
       withDeleted,
     });
     if (!doctor) throw new NotFoundException('Doctor no encontrado');
@@ -120,6 +141,7 @@ export class DoctorsService {
 
     const specialties = await this.resolveSpecialties(dto.specialtyIds);
     await this.validatePaymentMethods(dto.paymentMethods ?? []);
+    await this.validateServicePrices(dto.servicePrices ?? []);
 
     const doctor = this.repo.create({
       cedula,
@@ -135,7 +157,19 @@ export class DoctorsService {
         this.methodsRepo.create(this.methodPayload(m)),
       ),
     });
-    return this.repo.save(doctor);
+    const saved = await this.repo.save(doctor);
+
+    if (dto.servicePrices?.length) {
+      await this.pricesRepo.insert(
+        dto.servicePrices.map((sp) => ({
+          doctorId: saved.id,
+          serviceTypeId: sp.serviceTypeId,
+          priceUsd: sp.priceUsd.toFixed(2),
+          priceEur: sp.priceEur.toFixed(2),
+        })),
+      );
+    }
+    return this.findOne(saved.id);
   }
 
   async update(id: string, dto: UpdateDoctorDto): Promise<Doctor> {
@@ -197,7 +231,43 @@ export class DoctorsService {
       );
     }
 
-    return this.repo.save(doctor);
+    const saved = await this.repo.save(doctor);
+
+    if (dto.servicePrices !== undefined) {
+      await this.validateServicePrices(dto.servicePrices);
+      await this.pricesRepo.delete({ doctorId: saved.id });
+      if (dto.servicePrices.length) {
+        await this.pricesRepo.insert(
+          dto.servicePrices.map((sp) => ({
+            doctorId: saved.id,
+            serviceTypeId: sp.serviceTypeId,
+            priceUsd: sp.priceUsd.toFixed(2),
+            priceEur: sp.priceEur.toFixed(2),
+          })),
+        );
+      }
+    }
+
+    return this.findOne(saved.id);
+  }
+
+  private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
+    if (!prices.length) return;
+    const ids = prices.map((p) => p.serviceTypeId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException(
+        'No pueden repetirse tipos de servicio en los precios',
+      );
+    }
+    const found = await this.serviceTypesRepo.find({
+      where: { id: In(ids), deletedAt: IsNull() },
+      select: ['id', 'isActive'],
+    });
+    if (found.length !== ids.length || found.some((s) => !s.isActive)) {
+      throw new BadRequestException(
+        'Algún tipo de servicio en los precios no existe o está deshabilitado',
+      );
+    }
   }
 
   async toggleActive(id: string): Promise<Doctor> {

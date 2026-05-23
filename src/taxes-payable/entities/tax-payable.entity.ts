@@ -14,21 +14,30 @@ import {
 import { Order } from '../../orders/entities/order.entity';
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
-import { AccountsPayablePayment } from './accounts-payable-payment.entity';
+import { AccountsPayable } from '../../accounts-payable/entities/accounts-payable.entity';
+import { TaxPayablePayment } from './tax-payable-payment.entity';
 
-export type AccountsPayableStatus = 'paid' | 'unpaid' | 'partially_paid';
-export type AccountsPayableRecipientType = 'doctor' | 'care_center';
+export type TaxPayableStatus = 'paid' | 'unpaid' | 'partially_paid';
+export type TaxPayableRecipientType = 'doctor' | 'care_center';
 
-@Entity({ name: 'accounts_payable' })
-@Index('idx_ap_status', ['status'])
-@Index('idx_ap_doctor', ['doctorId'])
-@Index('idx_ap_careCenter', ['careCenterId'])
-export class AccountsPayable {
+@Entity({ name: 'taxes_payable' })
+@Index('idx_tp_status', ['status'])
+@Index('idx_tp_doctor', ['doctorId'])
+@Index('idx_tp_careCenter', ['careCenterId'])
+@Index('idx_tp_order', ['orderId'])
+export class TaxPayable {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'varchar', length: 32, unique: true })
-  payableNumber: string;
+  taxPayableNumber: string;
+
+  @Column({ type: 'uuid' })
+  accountsPayableId: string;
+
+  @ManyToOne(() => AccountsPayable, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'accountsPayableId' })
+  accountsPayable: AccountsPayable;
 
   @Column({ type: 'uuid' })
   orderId: string;
@@ -38,7 +47,7 @@ export class AccountsPayable {
   order: Order;
 
   @Column({ type: 'varchar', length: 16 })
-  recipientType: AccountsPayableRecipientType;
+  recipientType: TaxPayableRecipientType;
 
   @Column({ type: 'uuid', nullable: true })
   doctorId?: string | null;
@@ -55,29 +64,31 @@ export class AccountsPayable {
   careCenter?: CareCenter | null;
 
   /**
-   * Monto a pagar a este proveedor específico, en la moneda original. Se
-   * popula durante el Paso 4 (`OrdersService.billing`) con el valor de
-   * `BillingProviderDto.amount`. `null` mientras la orden aún no se factura.
+   * Monto del impuesto en moneda original (= providerAmount × taxRate).
+   * Capturado al facturar (OrdersService.billing). Null mientras no se factura.
    */
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
-  providerAmount?: string | null;
+  taxAmount?: string | null;
 
   @Column({ type: 'varchar', length: 3, nullable: true })
-  providerAmountCurrency?: 'USD' | 'EUR' | 'BS' | null;
+  taxAmountCurrency?: 'USD' | 'EUR' | 'BS' | null;
+
+  @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
+  taxRate?: string | null;
 
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
-  status: AccountsPayableStatus;
+  status: TaxPayableStatus;
 
   @Column({ type: 'timestamptz', nullable: true })
   paidAt?: Date | null;
 
-  @ManyToMany(() => AccountsPayablePayment, (p) => p.accounts, { cascade: false })
+  @ManyToMany(() => TaxPayablePayment, (p) => p.taxes, { cascade: false })
   @JoinTable({
-    name: 'accounts_payable_payment_links',
-    joinColumn: { name: 'payableId', referencedColumnName: 'id' },
+    name: 'taxes_payable_payment_links',
+    joinColumn: { name: 'taxPayableId', referencedColumnName: 'id' },
     inverseJoinColumn: { name: 'paymentId', referencedColumnName: 'id' },
   })
-  payments: AccountsPayablePayment[];
+  payments: TaxPayablePayment[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

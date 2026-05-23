@@ -124,6 +124,8 @@ export class UsersService {
       lastName: dto.lastName,
       email,
       phoneNumber: dto.phoneNumber ?? null,
+      academicDegree: dto.academicDegree?.trim() || null,
+      jobTitle: dto.jobTitle?.trim() || null,
       password: hash,
       isActive: dto.isActive ?? true,
       isSuperAdmin,
@@ -154,6 +156,9 @@ export class UsersService {
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
     if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber ?? null;
+    if (dto.academicDegree !== undefined)
+      user.academicDegree = dto.academicDegree?.trim() || null;
+    if (dto.jobTitle !== undefined) user.jobTitle = dto.jobTitle?.trim() || null;
     const isSelf = actor.id === id;
     if (dto.isActive !== undefined) {
       if (isSelf && dto.isActive !== user.isActive) {

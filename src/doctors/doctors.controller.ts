@@ -28,6 +28,12 @@ export class DoctorsController {
     return this.service.findAll(query);
   }
 
+  @RequirePermissions(PERMISSIONS.DOCTORS.LIST)
+  @Get('assignable')
+  findAssignable() {
+    return this.service.findAssignable();
+  }
+
   @RequirePermissions(PERMISSIONS.DOCTORS.VIEW)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {

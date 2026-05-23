@@ -28,6 +28,12 @@ export class CareCentersController {
     return this.service.findAll(query);
   }
 
+  @RequirePermissions(PERMISSIONS.CARE_CENTERS.LIST)
+  @Get('assignable')
+  findAssignable() {
+    return this.service.findAssignable();
+  }
+
   @RequirePermissions(PERMISSIONS.CARE_CENTERS.VIEW)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {

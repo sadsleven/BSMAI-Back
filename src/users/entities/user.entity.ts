@@ -29,6 +29,14 @@ export class User {
   @Column({ type: 'varchar', length: 40, nullable: true })
   phoneNumber?: string | null;
 
+  /** Título académico (controlado por FE, sin enum BD). Opcional. */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  academicDegree?: string | null;
+
+  /** Cargo. Texto libre opcional. */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  jobTitle?: string | null;
+
   @Exclude({ toPlainOnly: true })
   @Column({ type: 'varchar', length: 255, select: false })
   password: string;

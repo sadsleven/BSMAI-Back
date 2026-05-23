@@ -4,21 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
-import { AccountsPayable } from './entities/accounts-payable.entity';
-import { AccountsPayablePayment } from './entities/accounts-payable-payment.entity';
+import { TaxPayable } from './entities/tax-payable.entity';
+import { TaxPayablePayment } from './entities/tax-payable-payment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
-import { Doctor } from '../doctors/entities/doctor.entity';
 import {
-  AccountsPayablePaymentDto,
-  QueryAccountsPayableDto,
-  RegisterPaymentDto,
-} from './dto/register-payment.dto';
+  QueryTaxesPayableDto,
+  RegisterTaxPaymentDto,
+  TaxPayablePaymentDto,
+} from './dto/register-tax-payment.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
@@ -26,35 +24,18 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 const TOLERANCE_BS = 0.01;
 
 @Injectable()
-export class AccountsPayableService {
+export class TaxesPayableService {
   constructor(
-    @InjectRepository(AccountsPayable)
-    private readonly repo: Repository<AccountsPayable>,
-    @InjectRepository(AccountsPayablePayment)
-    private readonly paymentsRepo: Repository<AccountsPayablePayment>,
+    @InjectRepository(TaxPayable)
+    private readonly repo: Repository<TaxPayable>,
+    @InjectRepository(TaxPayablePayment)
+    private readonly paymentsRepo: Repository<TaxPayablePayment>,
     @InjectRepository(Order) private readonly ordersRepo: Repository<Order>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
-    @InjectRepository(Doctor) private readonly doctorsRepo: Repository<Doctor>,
     private readonly dataSource: DataSource,
-    private readonly config: ConfigService,
   ) {}
-
-  private taxRateFor(isLegalEntity: boolean): number {
-    const key = isLegalEntity ? 'DOCTOR_LEGAL_TAX_RATE' : 'DOCTOR_NATURAL_TAX_RATE';
-    const fallback = isLegalEntity ? 0.05 : 0.03;
-    const raw = this.config.get<string>(key);
-    if (!raw) return fallback;
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0 || n > 1) return fallback;
-    return n;
-  }
-
-  /** Tasa aplicada al centro de atención. Asumido jurídico → DOCTOR_LEGAL_TAX_RATE. */
-  private careCenterTaxRate(): number {
-    return this.taxRateFor(true);
-  }
 
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
     if (user.isSuperAdmin) {
@@ -77,9 +58,9 @@ export class AccountsPayableService {
   }
 
   async findAll(
-    query: QueryAccountsPayableDto,
+    query: QueryTaxesPayableDto,
     user: AuthenticatedUser,
-  ): Promise<PaginatedResponse<AccountsPayable>> {
+  ): Promise<PaginatedResponse<TaxPayable>> {
     const {
       page = 1,
       limit = 10,
@@ -94,19 +75,20 @@ export class AccountsPayableService {
     } = query;
 
     const qb = this.repo
-      .createQueryBuilder('ap')
-      .leftJoinAndSelect('ap.order', 'order')
+      .createQueryBuilder('tp')
+      .leftJoinAndSelect('tp.order', 'order')
       .leftJoinAndSelect('order.branch', 'branch')
       .leftJoinAndSelect('order.billingExchangeRate', 'billingRate')
-      .leftJoinAndSelect('ap.doctor', 'doctor')
-      .leftJoinAndSelect('ap.careCenter', 'careCenter')
-      .leftJoinAndSelect('ap.payments', 'payments')
+      .leftJoinAndSelect('tp.accountsPayable', 'ap')
+      .leftJoinAndSelect('tp.doctor', 'doctor')
+      .leftJoinAndSelect('tp.careCenter', 'careCenter')
+      .leftJoinAndSelect('tp.payments', 'payments')
       .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
 
     if (sortBy === 'orderNumber') {
       qb.orderBy('order.orderNumber', sortDir);
     } else {
-      qb.orderBy(`ap.${sortBy}`, sortDir);
+      qb.orderBy(`tp.${sortBy}`, sortDir);
     }
 
     if (!user.isSuperAdmin) {
@@ -115,94 +97,75 @@ export class AccountsPayableService {
       else qb.andWhere('order.branchId IN (:...allowed)', { allowed });
     }
 
-    if (status) qb.andWhere('ap.status = :status', { status });
-    if (doctorId) qb.andWhere('ap.doctorId = :doctorId', { doctorId });
-    if (careCenterId) qb.andWhere('ap.careCenterId = :careCenterId', { careCenterId });
+    if (status) qb.andWhere('tp.status = :status', { status });
+    if (doctorId) qb.andWhere('tp.doctorId = :doctorId', { doctorId });
+    if (careCenterId) qb.andWhere('tp.careCenterId = :careCenterId', { careCenterId });
     if (branchId) qb.andWhere('order.branchId = :branchId', { branchId });
-    if (orderId) qb.andWhere('ap.orderId = :orderId', { orderId });
+    if (orderId) qb.andWhere('tp.orderId = :orderId', { orderId });
 
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
-      qb.andWhere(`LOWER(order."orderNumber") LIKE :s`, { s });
+      qb.andWhere(
+        `(LOWER(order."orderNumber") LIKE :s OR LOWER(tp."taxPayableNumber") LIKE :s)`,
+        { s },
+      );
     }
 
-    return paginateBuilder<AccountsPayable>(qb, page, limit);
+    return paginateBuilder<TaxPayable>(qb, page, limit);
   }
 
-  async findOne(id: string, user: AuthenticatedUser): Promise<AccountsPayable> {
-    const account = await this.repo.findOne({
+  async findOne(id: string, user: AuthenticatedUser): Promise<TaxPayable> {
+    const tax = await this.repo.findOne({
       where: { id },
       relations: {
         order: { branch: true, billingExchangeRate: true },
+        accountsPayable: true,
         doctor: true,
         careCenter: true,
         payments: { exchangeRate: true },
       },
     });
-    if (!account) throw new NotFoundException('Cuenta por pagar no encontrada');
-    await this.assertVisibility(account, user);
-    return account;
+    if (!tax) throw new NotFoundException('Impuesto por pagar no encontrado');
+    await this.assertVisibility(tax, user);
+    return tax;
   }
 
-  private async assertVisibility(
-    account: AccountsPayable,
-    user: AuthenticatedUser,
-  ): Promise<void> {
+  private async assertVisibility(tax: TaxPayable, user: AuthenticatedUser): Promise<void> {
     if (user.isSuperAdmin) return;
     const allowed = await this.resolveUserBranchIds(user);
-    if (!allowed.includes(account.order.branchId)) {
+    if (!allowed.includes(tax.order.branchId)) {
       throw new ForbiddenException('No tenés acceso a esta cuenta');
     }
   }
 
   /**
-   * Computa el monto a recibir (en Bs) para una cuenta usando `providerAmount`
-   * y `providerAmountCurrency` propios de la cuenta. Cada cuenta corresponde a
-   * un proveedor distinto, así que su monto es independiente del total de la
-   * orden y de las demás cuentas.
+   * Monto a pagar al fisco en Bs por esta cuenta.
+   * = taxAmount × (tasa de facturación si no es BS).
    */
-  private async amountToReceiveBs(
-    account: AccountsPayable,
-    order: Order,
-  ): Promise<number> {
-    if (!account.providerAmount || !account.providerAmountCurrency) {
+  private async targetBs(tax: TaxPayable, order: Order): Promise<number> {
+    if (!tax.taxAmount || !tax.taxAmountCurrency) {
       throw new BadRequestException(
-        `Orden ${order.orderNumber}: aún no tiene monto definido para este proveedor (Paso 4)`,
+        `Orden ${order.orderNumber}: aún no tiene monto de impuesto definido (Paso 4)`,
       );
     }
-    const amount = Number(account.providerAmount);
-    let amountBs: number;
-    if (account.providerAmountCurrency === 'BS') {
-      amountBs = amount;
-    } else {
-      if (!order.billingExchangeRateId) {
-        throw new BadRequestException(
-          `Orden ${order.orderNumber}: tasa de facturación no encontrada`,
-        );
-      }
-      const rate =
-        order.billingExchangeRate ??
-        (await this.ratesRepo.findOne({ where: { id: order.billingExchangeRateId } }));
-      if (!rate) throw new BadRequestException('Tasa de facturación no encontrada');
-      amountBs = amount * Number(rate.amountBs);
+    const amount = Number(tax.taxAmount);
+    if (tax.taxAmountCurrency === 'BS') return amount;
+    if (!order.billingExchangeRateId) {
+      throw new BadRequestException(
+        `Orden ${order.orderNumber}: tasa de facturación no encontrada`,
+      );
     }
-
-    if (account.recipientType === 'doctor') {
-      const doctorId = account.doctorId;
-      if (!doctorId) throw new BadRequestException('Doctor no encontrado en cuenta');
-      const doctor = await this.doctorsRepo.findOne({ where: { id: doctorId } });
-      if (!doctor) throw new BadRequestException('Doctor no encontrado');
-      const taxRate = this.taxRateFor(doctor.isLegalEntity);
-      return amountBs * (1 - taxRate);
-    }
-    // care_center: asumido jurídico, retención fija.
-    return amountBs * (1 - this.careCenterTaxRate());
+    const rate =
+      order.billingExchangeRate ??
+      (await this.ratesRepo.findOne({ where: { id: order.billingExchangeRateId } }));
+    if (!rate) throw new BadRequestException('Tasa de facturación no encontrada');
+    return amount * Number(rate.amountBs);
   }
 
   private async resolvePaymentForSave(
-    p: AccountsPayablePaymentDto,
-  ): Promise<Partial<AccountsPayablePayment>> {
-    const out: Partial<AccountsPayablePayment> = {
+    p: TaxPayablePaymentDto,
+  ): Promise<Partial<TaxPayablePayment>> {
+    const out: Partial<TaxPayablePayment> = {
       type: p.type,
       paymentDate: p.paymentDate,
       referenceNumber: p.referenceNumber ?? null,
@@ -252,101 +215,96 @@ export class AccountsPayableService {
   }
 
   async registerPayment(
-    dto: RegisterPaymentDto,
+    dto: RegisterTaxPaymentDto,
     user: AuthenticatedUser,
-  ): Promise<AccountsPayable[]> {
-    const accounts = await this.repo.find({
-      where: { id: In(dto.payableIds) },
+  ): Promise<TaxPayable[]> {
+    const taxes = await this.repo.find({
+      where: { id: In(dto.taxPayableIds) },
       relations: {
         order: { branch: true, billingExchangeRate: true },
+        accountsPayable: true,
         doctor: true,
         careCenter: true,
         payments: true,
       },
     });
-    if (accounts.length !== dto.payableIds.length)
+    if (taxes.length !== dto.taxPayableIds.length)
       throw new BadRequestException('Alguna cuenta no existe');
 
     // Visibilidad
-    for (const acc of accounts) await this.assertVisibility(acc, user);
+    for (const t of taxes) await this.assertVisibility(t, user);
 
-    // Estado: rechaza solo cuentas ya pagadas; permite unpaid + partially_paid.
-    if (accounts.some((a) => a.status === 'paid')) {
+    // Estado: rechaza solo cuentas ya pagadas.
+    if (taxes.some((t) => t.status === 'paid')) {
       throw new BadRequestException('Hay cuentas ya pagadas en la selección');
     }
 
-    // Agrupación: mismo doctor o mismo centro
-    const doctorIds = new Set(accounts.map((a) => a.doctorId).filter(Boolean));
-    const careCenterIds = new Set(accounts.map((a) => a.careCenterId).filter(Boolean));
-    if (doctorIds.size > 1 || careCenterIds.size > 1 || (doctorIds.size > 0 && careCenterIds.size > 0)) {
+    // Agrupación: mismo doctor o mismo centro.
+    const doctorIds = new Set(taxes.map((t) => t.doctorId).filter(Boolean));
+    const careCenterIds = new Set(taxes.map((t) => t.careCenterId).filter(Boolean));
+    if (
+      doctorIds.size > 1 ||
+      careCenterIds.size > 1 ||
+      (doctorIds.size > 0 && careCenterIds.size > 0)
+    ) {
       throw new BadRequestException(
         'Solo se pueden agrupar cuentas del mismo doctor o centro de atención',
       );
     }
 
-    // Monto target en Bs
+    // Monto target en Bs.
     let totalToReceiveBs = 0;
-    for (const acc of accounts) {
-      totalToReceiveBs += await this.amountToReceiveBs(acc, acc.order);
+    for (const t of taxes) {
+      totalToReceiveBs += await this.targetBs(t, t.order);
     }
-    // Pagos previos ya aplicados (suma en Bs de los linked payments).
-    const existingPaidBs = accounts.reduce(
-      (sum, acc) =>
+    const existingPaidBs = taxes.reduce(
+      (sum, t) =>
         sum +
-        (acc.payments ?? []).reduce(
-          (s, p) => s + (Number(p.amountInBs) || 0),
-          0,
-        ),
+        (t.payments ?? []).reduce((s, p) => s + (Number(p.amountInBs) || 0), 0),
       0,
     );
     const totalPaymentsBs = await this.computePaymentsTotalBs(dto.payments);
     const newTotalBs = existingPaidBs + totalPaymentsBs;
 
-    // Cap: no permite sobrepagar (payable tiene techo).
     if (newTotalBs > totalToReceiveBs + TOLERANCE_BS) {
       throw new BadRequestException(
         `El total de pagos (Bs. ${newTotalBs.toFixed(2)}) excede el monto a pagar (Bs. ${totalToReceiveBs.toFixed(2)})`,
       );
     }
 
-    // Determinar estado nuevo del grupo: paid si cubre el target con tolerancia, sino partially_paid.
     const isFullyPaid = Math.abs(totalToReceiveBs - newTotalBs) <= TOLERANCE_BS;
     const newStatus: 'paid' | 'partially_paid' = isFullyPaid ? 'paid' : 'partially_paid';
 
-    // Persistir transaccionalmente
     const ids = await this.dataSource.transaction(async (mgr) => {
       const savedPaymentIds: string[] = [];
       for (const p of dto.payments) {
         const payload = await this.resolvePaymentForSave(p);
-        const entity = mgr.create(AccountsPayablePayment, payload);
+        const entity = mgr.create(TaxPayablePayment, payload);
         const saved = await mgr.save(entity);
         savedPaymentIds.push(saved.id);
       }
-
-      for (const acc of accounts) {
+      for (const t of taxes) {
         for (const paymentId of savedPaymentIds) {
           await mgr.query(
-            `INSERT INTO "accounts_payable_payment_links" ("payableId", "paymentId")
+            `INSERT INTO "taxes_payable_payment_links" ("taxPayableId", "paymentId")
              VALUES ($1, $2)
              ON CONFLICT DO NOTHING`,
-            [acc.id, paymentId],
+            [t.id, paymentId],
           );
         }
-        // Use update() instead of save() — save() reconciles M2M and would wipe
-        // the links we just inserted (acc.payments was loaded as the prior set).
-        await mgr.update(AccountsPayable, acc.id, {
+        await mgr.update(TaxPayable, t.id, {
           status: newStatus,
           paidAt: isFullyPaid ? new Date() : null,
         });
       }
-      return accounts.map((a) => a.id);
+      return taxes.map((t) => t.id);
     });
 
     return Promise.all(ids.map((id) => this.findOne(id, user)));
   }
 
   private async computePaymentsTotalBs(
-    payments: AccountsPayablePaymentDto[],
+    payments: TaxPayablePaymentDto[],
   ): Promise<number> {
     let total = 0;
     for (const p of payments) {

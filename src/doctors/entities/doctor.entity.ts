@@ -12,6 +12,7 @@ import {
 import { Specialty } from '../../specialties/entities/specialty.entity';
 import { DoctorPhone } from './doctor-phone.entity';
 import { DoctorPaymentMethod } from './doctor-payment-method.entity';
+import { DoctorServicePrice } from './doctor-service-price.entity';
 
 @Entity({ name: 'doctors' })
 export class Doctor {
@@ -59,6 +60,13 @@ export class Doctor {
     eager: true,
   })
   paymentMethods: DoctorPaymentMethod[];
+
+  /**
+   * Precios que se pagan al doctor por Tipo de Servicio realizado. Sólo los STs
+   * que el doctor efectivamente realiza. Replace-all en update.
+   */
+  @OneToMany(() => DoctorServicePrice, (sp) => sp.doctor, { eager: true })
+  servicePrices: DoctorServicePrice[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

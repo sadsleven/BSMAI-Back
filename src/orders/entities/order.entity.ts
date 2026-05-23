@@ -16,13 +16,12 @@ import { Branch } from '../../branches/entities/branch.entity';
 import { Patient } from '../../patients/entities/patient.entity';
 import { Contractor } from '../../contractors/entities/contractor.entity';
 import { Insurance } from '../../insurances/entities/insurance.entity';
-import { Doctor } from '../../doctors/entities/doctor.entity';
-import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import { Specialty } from '../../specialties/entities/specialty.entity';
-import { ServiceType } from '../../service-types/entities/service-type.entity';
 import { Pathology } from '../../pathologies/entities/pathology.entity';
 import { User } from '../../users/entities/user.entity';
 import { OrderPayment } from './order-payment.entity';
+import { OrderServiceType } from './order-service-type.entity';
+import { OrderServicePricing } from './order-service-pricing.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
@@ -36,6 +35,8 @@ export type OrderStatus =
 export type OrderType = 'cash' | 'credit' | 'insurance' | 'cashea';
 
 export type ProviderType = 'doctor' | 'care_center';
+
+export type InsuranceSource = 'direct' | 'via_contractor';
 
 export type OrderCurrency = 'USD' | 'EUR';
 
@@ -95,22 +96,23 @@ export class Order {
   @JoinColumn({ name: 'insuranceId' })
   insurance?: Insurance | null;
 
-  @Column({ type: 'varchar', length: 16 })
-  providerType: ProviderType;
+  /**
+   * Origen del seguro al crear la orden. Requerido sólo si `type='insurance'`.
+   *  - 'direct': el seguro fue asignado directamente al titular (sin contratista).
+   *  - 'via_contractor': el seguro proviene de un contratista del titular.
+   *
+   * Cuando `source='via_contractor'`, `contractorId` es requerido; cuando
+   * `source='direct'`, `contractorId` debe ser null. Validado en service.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  insuranceSource?: InsuranceSource | null;
 
-  @Column({ type: 'uuid', nullable: true })
-  doctorId?: string | null;
-
-  @ManyToOne(() => Doctor, { onDelete: 'RESTRICT', nullable: true })
-  @JoinColumn({ name: 'doctorId' })
-  doctor?: Doctor | null;
-
-  @Column({ type: 'uuid', nullable: true })
-  careCenterId?: string | null;
-
-  @ManyToOne(() => CareCenter, { onDelete: 'RESTRICT', nullable: true })
-  @JoinColumn({ name: 'careCenterId' })
-  careCenter?: CareCenter | null;
+  /**
+   * Clave de servicio externa del seguro (referencia/autorización). Aplica
+   * sólo a órdenes `type='insurance'`. Opcional. Texto libre ≤30 chars.
+   */
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  serviceKey?: string | null;
 
   @Column({ type: 'uuid' })
   specialtyId: string;
@@ -119,13 +121,12 @@ export class Order {
   @JoinColumn({ name: 'specialtyId' })
   specialty: Specialty;
 
-  @ManyToMany(() => ServiceType, { eager: false })
-  @JoinTable({
-    name: 'order_service_types',
-    joinColumn: { name: 'orderId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'serviceTypeId', referencedColumnName: 'id' },
-  })
-  serviceTypes: ServiceType[];
+  /**
+   * Tipos de servicio + su proveedor (Doctor o CareCenter). Una orden puede
+   * combinar STs prestados por distintos proveedores.
+   */
+  @OneToMany(() => OrderServiceType, (ost) => ost.order, { cascade: false })
+  orderServiceTypes: OrderServiceType[];
 
   @ManyToMany(() => Pathology, { eager: false })
   @JoinTable({
@@ -157,6 +158,10 @@ export class Order {
   @OneToMany(() => OrderPayment, (p) => p.order, { cascade: false })
   payments: OrderPayment[];
 
+  /** Snapshots de precios por ST + kind. Capturados en Paso 1 (cobro) y Paso 4 (pago). */
+  @OneToMany(() => OrderServicePricing, (osp) => osp.order, { cascade: false })
+  servicePricing: OrderServicePricing[];
+
   // ---- Paso 2: Atención del paciente ----
   @Column({ type: 'boolean', default: false })
   attended: boolean;
@@ -169,6 +174,15 @@ export class Order {
   otherStudies?: string | null;
 
   // ---- Paso 4: Facturación y liquidación ----
+  /**
+   * Monto sugerido calculado al entrar al Paso 4 = sum de precios del Doctor o
+   * Centro de Atención para los STs de la orden en `priceCurrency`. Snapshot al
+   * momento de facturar. Si el admin ajusta `doctorAmount`, este campo conserva
+   * el sugerido para auditoría.
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  doctorAmountSuggested?: string | null;
+
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   doctorAmount?: string | null;
 

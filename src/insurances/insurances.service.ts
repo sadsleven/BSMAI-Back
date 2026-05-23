@@ -1,18 +1,23 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Insurance } from './entities/insurance.entity';
 import { InsurancePhone } from './entities/insurance-phone.entity';
+import { InsuranceServicePrice } from './entities/insurance-service-price.entity';
+import { ServiceType } from '../service-types/entities/service-type.entity';
 import { CreateInsuranceDto } from './dto/create-insurance.dto';
 import { UpdateInsuranceDto } from './dto/update-insurance.dto';
 import { QueryInsurancesDto } from './dto/query-insurances.dto';
 import { PhoneDto } from './dto/phone.dto';
+import { ServicePriceDto } from '../shared/dto/service-price.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
+import { normalizeRif } from '../shared/validators/ve-formats';
 
 @Injectable()
 export class InsurancesService {
@@ -20,6 +25,10 @@ export class InsurancesService {
     @InjectRepository(Insurance) private readonly repo: Repository<Insurance>,
     @InjectRepository(InsurancePhone)
     private readonly phonesRepo: Repository<InsurancePhone>,
+    @InjectRepository(InsuranceServicePrice)
+    private readonly pricesRepo: Repository<InsuranceServicePrice>,
+    @InjectRepository(ServiceType)
+    private readonly serviceTypesRepo: Repository<ServiceType>,
   ) {}
 
   async findAll(query: QueryInsurancesDto): Promise<PaginatedResponse<Insurance>> {
@@ -69,7 +78,7 @@ export class InsurancesService {
   async findOne(id: string, withDeleted = false): Promise<Insurance> {
     const insurance = await this.repo.findOne({
       where: { id },
-      relations: { phones: true },
+      relations: { phones: true, servicePrices: { serviceType: true } },
       withDeleted,
     });
     if (!insurance) throw new NotFoundException('Seguro no encontrado');
@@ -80,17 +89,33 @@ export class InsurancesService {
     await this.assertUniqueName(dto.name.trim());
     const email = dto.email ? dto.email.toLowerCase().trim() : null;
     if (email) await this.assertUniqueEmail(email);
+    const rif = dto.rif ? normalizeRif(dto.rif) : null;
+    if (rif) await this.assertUniqueRif(rif);
+    await this.validateServicePrices(dto.servicePrices ?? []);
     const insurance = this.repo.create({
       name: dto.name.trim(),
       description: dto.description?.trim() ?? null,
       email,
       fiscalAddress: dto.fiscalAddress?.trim() || null,
+      rif,
       isActive: dto.isActive ?? true,
       phones: (dto.phones ?? []).map((p) =>
         this.phonesRepo.create(this.phonePayload(p)),
       ),
     });
-    return this.repo.save(insurance);
+    const saved = await this.repo.save(insurance);
+
+    if (dto.servicePrices?.length) {
+      await this.pricesRepo.insert(
+        dto.servicePrices.map((sp) => ({
+          insuranceId: saved.id,
+          serviceTypeId: sp.serviceTypeId,
+          priceUsd: sp.priceUsd.toFixed(2),
+          priceEur: sp.priceEur.toFixed(2),
+        })),
+      );
+    }
+    return this.findOne(saved.id);
   }
 
   async update(id: string, dto: UpdateInsuranceDto): Promise<Insurance> {
@@ -115,6 +140,13 @@ export class InsurancesService {
     if (dto.fiscalAddress !== undefined) {
       insurance.fiscalAddress = dto.fiscalAddress?.trim() || null;
     }
+    if (dto.rif !== undefined) {
+      const next = dto.rif ? normalizeRif(dto.rif) : null;
+      if (next !== insurance.rif) {
+        if (next) await this.assertUniqueRif(next);
+        insurance.rif = next;
+      }
+    }
     if (dto.isActive !== undefined) insurance.isActive = dto.isActive;
 
     if (dto.phones) {
@@ -127,7 +159,45 @@ export class InsurancesService {
       );
     }
 
-    return this.repo.save(insurance);
+    const saved = await this.repo.save(insurance);
+
+    if (dto.servicePrices !== undefined) {
+      await this.validateServicePrices(dto.servicePrices);
+      await this.pricesRepo.delete({ insuranceId: saved.id });
+      if (dto.servicePrices.length) {
+        await this.pricesRepo.insert(
+          dto.servicePrices.map((sp) => ({
+            insuranceId: saved.id,
+            serviceTypeId: sp.serviceTypeId,
+            priceUsd: sp.priceUsd.toFixed(2),
+            priceEur: sp.priceEur.toFixed(2),
+          })),
+        );
+      }
+    }
+
+    return this.findOne(saved.id);
+  }
+
+  /** Valida unicidad por serviceTypeId + existencia/activos. */
+  private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
+    if (!prices.length) return;
+    const ids = prices.map((p) => p.serviceTypeId);
+    const unique = new Set(ids);
+    if (unique.size !== ids.length) {
+      throw new BadRequestException(
+        'No pueden repetirse tipos de servicio en los precios',
+      );
+    }
+    const found = await this.serviceTypesRepo.find({
+      where: { id: In(ids), deletedAt: IsNull() },
+      select: ['id', 'isActive'],
+    });
+    if (found.length !== ids.length || found.some((s) => !s.isActive)) {
+      throw new BadRequestException(
+        'Algún tipo de servicio en los precios no existe o está deshabilitado',
+      );
+    }
   }
 
   async toggleActive(id: string): Promise<Insurance> {
@@ -166,5 +236,10 @@ export class InsurancesService {
   private async assertUniqueEmail(email: string): Promise<void> {
     const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
     if (existing) throw new ConflictException('Ya existe un seguro con ese email');
+  }
+
+  private async assertUniqueRif(rif: string): Promise<void> {
+    const existing = await this.repo.findOne({ where: { rif }, withDeleted: true });
+    if (existing) throw new ConflictException('Ya existe un seguro con ese RIF');
   }
 }

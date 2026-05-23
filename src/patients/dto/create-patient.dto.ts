@@ -32,7 +32,9 @@ export class CreatePatientDto {
 
   /* ---------- Persona natural ---------- */
 
-  @ValidateIf((o) => o.personType === 'natural')
+  // Cédula opcional. Si se informa, debe respetar formato VE.
+  @IsOptional()
+  @ValidateIf((o) => o.cedula !== undefined && o.cedula !== null && o.cedula !== '')
   @IsString()
   @Matches(CEDULA_PATTERN, { message: CEDULA_MESSAGE })
   cedula?: string;
@@ -91,6 +93,16 @@ export class CreatePatientDto {
   @ArrayMaxSize(50, { message: 'Máximo 50 contratistas por paciente' })
   @IsUUID('all', { each: true, message: 'IDs de contratistas inválidos' })
   contractorIds?: string[];
+
+  /**
+   * Seguros directos asignados al paciente. NO pueden solaparse con los
+   * seguros derivados de `contractorIds` — service rechaza con detalle.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50, { message: 'Máximo 50 seguros directos por paciente' })
+  @IsUUID('all', { each: true, message: 'IDs de seguros inválidos' })
+  directInsuranceIds?: string[];
 
   @IsOptional()
   @IsBoolean()

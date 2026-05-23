@@ -21,6 +21,7 @@ import {
 } from '../../shared/validators/ve-formats';
 import { PhoneDto } from './phone.dto';
 import { PaymentMethodDto } from './payment-method.dto';
+import { ServicePriceDto } from '../../shared/dto/service-price.dto';
 
 export class CreateCareCenterDto {
   @IsString()
@@ -58,6 +59,17 @@ export class CreateCareCenterDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentMethodDto)
   paymentMethods?: PaymentMethodDto[];
+
+  /**
+   * Precios que se pagan al centro por Tipo de Servicio. Sólo los STs que el
+   * centro efectivamente realiza. Replace-all en update.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => ServicePriceDto)
+  servicePrices?: ServicePriceDto[];
 
   @IsOptional()
   @IsBoolean()
