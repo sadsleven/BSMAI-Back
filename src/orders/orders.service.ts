@@ -1185,9 +1185,30 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(existing.id, user);
   }
 
+  /**
+   * Soft-delete cascada: marca `deletedAt` con el mismo timestamp en orden,
+   * accounts_payable, accounts_receivable y taxes_payable. Mantener un timestamp
+   * común permite que `restore` revierta exactamente las filas tumbadas por esta
+   * cascada y respete las cuentas que pudieran estar previamente eliminadas.
+   */
   async softDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user);
-    await this.repo.softDelete(id);
+    await this.dataSource.transaction(async (mgr) => {
+      const ts = new Date();
+      await mgr.query(
+        `UPDATE "accounts_payable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.query(
+        `UPDATE "accounts_receivable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.update(Order, { id }, { deletedAt: ts });
+    });
   }
 
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
@@ -1200,7 +1221,22 @@ export class OrdersService implements OnModuleInit {
     if (!order) throw new NotFoundException('Orden no encontrada');
     await this.assertBranchVisibility(order.branchId, user);
     if (!order.deletedAt) return this.findOne(id, user);
-    await this.repo.restore(id);
+    const ts = order.deletedAt;
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.query(
+        `UPDATE "accounts_payable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.query(
+        `UPDATE "accounts_receivable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.update(Order, { id }, { deletedAt: null });
+    });
     return this.findOne(id, user);
   }
 
