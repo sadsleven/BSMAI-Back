@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { PatientPhone } from './patient-phone.entity';
 import { Contractor } from '../../contractors/entities/contractor.entity';
+import { Insurance } from '../../insurances/entities/insurance.entity';
 
 export type PersonType = 'natural' | 'legal_entity';
 export const PERSON_TYPES: PersonType[] = ['natural', 'legal_entity'];
@@ -70,6 +71,20 @@ export class Patient {
     inverseJoinColumn: { name: 'contractorId', referencedColumnName: 'id' },
   })
   contractors: Contractor[];
+
+  /**
+   * Seguros directos del paciente. Coexisten con los seguros derivados de
+   * contratistas (`patient.contractors[].insurances`). Regla de exclusión:
+   * un mismo seguro no puede estar simultáneamente directo y cubierto por
+   * algún contratista asignado al paciente — se valida en service.
+   */
+  @ManyToMany(() => Insurance, { eager: true })
+  @JoinTable({
+    name: 'patient_insurances',
+    joinColumn: { name: 'patientId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'insuranceId', referencedColumnName: 'id' },
+  })
+  insurances: Insurance[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

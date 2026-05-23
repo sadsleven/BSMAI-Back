@@ -23,6 +23,7 @@ import {
 } from '../../shared/validators/ve-formats';
 import { PhoneDto } from './phone.dto';
 import { PaymentMethodDto } from './payment-method.dto';
+import { ServicePriceDto } from '../../shared/dto/service-price.dto';
 
 const NAME_PATTERN = /^[A-Za-zÀ-ÿñÑ\s]+$/;
 
@@ -77,6 +78,17 @@ export class CreateDoctorDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentMethodDto)
   paymentMethods?: PaymentMethodDto[];
+
+  /**
+   * Precios que se pagan al doctor por Tipo de Servicio realizado. Sólo los STs
+   * que el doctor efectivamente realiza. Replace-all en update.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => ServicePriceDto)
+  servicePrices?: ServicePriceDto[];
 
   @IsOptional()
   @IsBoolean()

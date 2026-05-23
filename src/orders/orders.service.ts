@@ -8,14 +8,21 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderPayment } from './entities/order-payment.entity';
+import { OrderServiceType } from './entities/order-service-type.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { OrderServiceTypeRowDto } from './dto/order-service-type.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
-import { AttendOrderDto, BillingOrderDto, ReportOrderDto } from './dto/order-stages.dto';
+import {
+  AttendOrderDto,
+  BillingOrderDto,
+  BillingProviderDto,
+  ReportOrderDto,
+} from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { Patient } from '../patients/entities/patient.entity';
@@ -26,6 +33,10 @@ import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { ServiceType } from '../service-types/entities/service-type.entity';
 import { Pathology } from '../pathologies/entities/pathology.entity';
+import { InsuranceServicePrice } from '../insurances/entities/insurance-service-price.entity';
+import { DoctorServicePrice } from '../doctors/entities/doctor-service-price.entity';
+import { CareCenterServicePrice } from '../care-centers/entities/care-center-service-price.entity';
+import { OrderServicePricing } from './entities/order-service-pricing.entity';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -38,6 +49,8 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 void ALLOWED_TRANSITIONS;
 
+type ProviderKey = `doctor:${string}` | `care_center:${string}`;
+
 @Injectable()
 export class OrdersService implements OnModuleInit {
   private readonly logger = new Logger(OrdersService.name);
@@ -45,6 +58,8 @@ export class OrdersService implements OnModuleInit {
   constructor(
     @InjectRepository(Order) private readonly repo: Repository<Order>,
     @InjectRepository(OrderPayment) private readonly paymentsRepo: Repository<OrderPayment>,
+    @InjectRepository(OrderServiceType)
+    private readonly ostRepo: Repository<OrderServiceType>,
     @InjectRepository(Patient) private readonly patientsRepo: Repository<Patient>,
     @InjectRepository(Doctor) private readonly doctorsRepo: Repository<Doctor>,
     @InjectRepository(CareCenter) private readonly careCentersRepo: Repository<CareCenter>,
@@ -53,22 +68,45 @@ export class OrdersService implements OnModuleInit {
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
     @InjectRepository(ServiceType) private readonly serviceTypesRepo: Repository<ServiceType>,
     @InjectRepository(Pathology) private readonly pathologiesRepo: Repository<Pathology>,
+    @InjectRepository(InsuranceServicePrice)
+    private readonly insurancePricesRepo: Repository<InsuranceServicePrice>,
+    @InjectRepository(DoctorServicePrice)
+    private readonly doctorPricesRepo: Repository<DoctorServicePrice>,
+    @InjectRepository(CareCenterServicePrice)
+    private readonly careCenterPricesRepo: Repository<CareCenterServicePrice>,
+    @InjectRepository(OrderServicePricing)
+    private readonly orderPricingRepo: Repository<OrderServicePricing>,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    void this.insurancePricesRepo;
+    void this.orderPricingRepo;
+    void this.ostRepo;
+  }
 
-  /**
-   * Bump `orders_seq` to ORDER_NUMBER_START on bootstrap (idempotente).
-   * Sólo avanza la secuencia — nunca la retrocede. Si la secuencia ya emitió
-   * un número ≥ START, queda como está.
-   */
   async onModuleInit(): Promise<void> {
     await this.bumpSequence('orders_seq', 'ORDER_NUMBER_START');
     await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
     await this.bumpSequence('accounts_receivable_seq', 'RECEIVABLE_NUMBER_START');
+    await this.bumpSequence('taxes_payable_seq', 'TAX_PAYABLE_NUMBER_START');
   }
 
-  /** Idempotent: bumpea `seq` al valor de `envKey` solo si el próximo nextval está por debajo. */
+  /**
+   * Tasa de retención aplicada al proveedor.
+   * - Doctor: depende de isLegalEntity (env DOCTOR_LEGAL_TAX_RATE / DOCTOR_NATURAL_TAX_RATE).
+   * - CareCenter: asumido jurídico (DOCTOR_LEGAL_TAX_RATE).
+   */
+  private taxRateFor(recipientType: 'doctor' | 'care_center', isLegalEntity: boolean): number {
+    const useLegal = recipientType === 'care_center' || isLegalEntity;
+    const key = useLegal ? 'DOCTOR_LEGAL_TAX_RATE' : 'DOCTOR_NATURAL_TAX_RATE';
+    const fallback = useLegal ? 0.05 : 0.03;
+    const raw = this.config.get<string>(key);
+    if (!raw) return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > 1) return fallback;
+    return n;
+  }
+
   private async bumpSequence(seq: string, envKey: string): Promise<void> {
     const raw = this.config.get<string>(envKey);
     const start = raw ? Number(raw) : 1;
@@ -90,7 +128,6 @@ export class OrdersService implements OnModuleInit {
     }
   }
 
-  /** Sucursales efectivas del usuario actual: Super Admin → todas activas; regular → asignadas activas. */
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
@@ -121,18 +158,21 @@ export class OrdersService implements OnModuleInit {
   private orderRelations() {
     return {
       branch: true,
-      holder: true,
-      patient: true,
+      holder: { phones: true },
+      patient: { phones: true },
       contractor: true,
-      insurance: true,
-      doctor: true,
-      careCenter: true,
+      insurance: { phones: true },
       specialty: true,
-      serviceTypes: true,
+      orderServiceTypes: {
+        serviceType: true,
+        doctor: true,
+        careCenter: true,
+      },
       pathologies: true,
       createdBy: true,
       payments: { exchangeRate: true },
       billingExchangeRate: true,
+      servicePricing: true,
     } as const;
   }
 
@@ -164,14 +204,18 @@ export class OrdersService implements OnModuleInit {
       .createQueryBuilder('o')
       .leftJoinAndSelect('o.branch', 'branch')
       .leftJoinAndSelect('o.holder', 'holder')
+      .leftJoinAndSelect('holder.phones', 'holderPhones')
       .leftJoinAndSelect('o.patient', 'patient')
-      .leftJoinAndSelect('o.doctor', 'doctor')
-      .leftJoinAndSelect('o.careCenter', 'careCenter')
+      .leftJoinAndSelect('patient.phones', 'patientPhones')
       .leftJoinAndSelect('o.specialty', 'specialty')
-      .leftJoinAndSelect('o.serviceTypes', 'serviceType')
+      .leftJoinAndSelect('o.orderServiceTypes', 'ost')
+      .leftJoinAndSelect('ost.serviceType', 'serviceType')
+      .leftJoinAndSelect('ost.doctor', 'ostDoctor')
+      .leftJoinAndSelect('ost.careCenter', 'ostCareCenter')
       .leftJoinAndSelect('o.pathologies', 'pathology')
       .leftJoinAndSelect('o.contractor', 'contractor')
       .leftJoinAndSelect('o.insurance', 'insurance')
+      .leftJoinAndSelect('insurance.phones', 'insurancePhones')
       .orderBy(`o.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -192,8 +236,17 @@ export class OrdersService implements OnModuleInit {
     if (branchId) qb.andWhere('o.branchId = :branchId', { branchId });
     if (status) qb.andWhere('o.status = :status', { status });
     if (type) qb.andWhere('o.type = :type', { type });
-    if (doctorId) qb.andWhere('o.doctorId = :doctorId', { doctorId });
-    if (careCenterId) qb.andWhere('o.careCenterId = :careCenterId', { careCenterId });
+    // Filtros doctor/care_center ahora vía OST.
+    if (doctorId)
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM order_service_types fst WHERE fst."orderId" = o.id AND fst."doctorId" = :doctorId)',
+        { doctorId },
+      );
+    if (careCenterId)
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM order_service_types fst WHERE fst."orderId" = o.id AND fst."careCenterId" = :careCenterId)',
+        { careCenterId },
+      );
     if (specialtyId) qb.andWhere('o.specialtyId = :specialtyId', { specialtyId });
     if (orderDateFrom) qb.andWhere('o.orderDate >= :odf', { odf: orderDateFrom });
     if (orderDateTo) qb.andWhere('o.orderDate <= :odt', { odt: orderDateTo });
@@ -241,6 +294,11 @@ export class OrdersService implements OnModuleInit {
     }
   }
 
+  /**
+   * Valida referencias core. Provider validation per ST row: cada fila debe
+   * tener exactamente uno de doctorId/careCenterId coherente con providerType,
+   * y el proveedor debe tener la especialidad de la orden.
+   */
   private async validateCoreReferences(
     dto: Partial<CreateOrderDto>,
     user: AuthenticatedUser,
@@ -248,38 +306,11 @@ export class OrdersService implements OnModuleInit {
     if (!dto.branchId) throw new BadRequestException('branchId requerido');
     await this.assertBranchVisibility(dto.branchId, user);
 
-    if (!dto.providerType) throw new BadRequestException('providerType requerido');
-    if (dto.providerType === 'doctor') {
-      if (!dto.doctorId) throw new BadRequestException('doctorId requerido para providerType=doctor');
-      if (dto.careCenterId) throw new BadRequestException('careCenterId no admitido para providerType=doctor');
-    } else {
-      if (!dto.careCenterId) throw new BadRequestException('careCenterId requerido para providerType=care_center');
-      if (dto.doctorId) throw new BadRequestException('doctorId no admitido para providerType=care_center');
-    }
-
-    if (dto.providerType === 'doctor') {
-      const doc = await this.doctorsRepo.findOne({
-        where: { id: dto.doctorId!, deletedAt: IsNull() },
-        relations: { specialties: true },
-      });
-      if (!doc) throw new BadRequestException('Doctor no encontrado o eliminado');
-      const has = (doc.specialties ?? []).some((s) => s.id === dto.specialtyId);
-      if (!has)
-        throw new BadRequestException('Especialidad no pertenece al doctor seleccionado');
-    } else {
-      const cc = await this.careCentersRepo.findOne({
-        where: { id: dto.careCenterId!, deletedAt: IsNull() },
-        relations: { specialties: true },
-      });
-      if (!cc) throw new BadRequestException('Centro no encontrado o eliminado');
-      const has = (cc.specialties ?? []).some((s) => s.id === dto.specialtyId);
-      if (!has)
-        throw new BadRequestException('Especialidad no pertenece al centro seleccionado');
-    }
+    if (!dto.specialtyId) throw new BadRequestException('specialtyId requerido');
 
     const holder = await this.patientsRepo.findOne({
       where: { id: dto.holderId!, deletedAt: IsNull() },
-      relations: { contractors: { insurances: true } },
+      relations: { contractors: { insurances: true }, insurances: true },
     });
     if (!holder) throw new BadRequestException('Titular no encontrado o eliminado');
 
@@ -291,16 +322,53 @@ export class OrdersService implements OnModuleInit {
     }
 
     if (dto.type === 'insurance') {
-      if (!dto.contractorId || !dto.insuranceId)
-        throw new BadRequestException('Tipo seguro: contractorId e insuranceId requeridos');
-      const contractor = (holder.contractors ?? []).find((c) => c.id === dto.contractorId);
-      if (!contractor)
-        throw new BadRequestException('Contratista no asignado al titular');
-      const okInsurance = (contractor.insurances ?? []).some((i) => i.id === dto.insuranceId);
-      if (!okInsurance)
-        throw new BadRequestException('Seguro no asociado al contratista del titular');
-    } else if (dto.contractorId || dto.insuranceId) {
-      throw new BadRequestException('contractorId/insuranceId solo válidos para tipo seguro');
+      if (!dto.insuranceId)
+        throw new BadRequestException('Tipo seguro: insuranceId requerido');
+      if (!dto.insuranceSource)
+        throw new BadRequestException(
+          'Tipo seguro: insuranceSource requerido (direct | via_contractor)',
+        );
+
+      if (dto.insuranceSource === 'via_contractor') {
+        if (!dto.contractorId)
+          throw new BadRequestException(
+            'insuranceSource=via_contractor requiere contractorId',
+          );
+        const contractor = (holder.contractors ?? []).find(
+          (c) => c.id === dto.contractorId,
+        );
+        if (!contractor)
+          throw new BadRequestException('Contratista no asignado al titular');
+        const okInsurance = (contractor.insurances ?? []).some(
+          (i) => i.id === dto.insuranceId,
+        );
+        if (!okInsurance)
+          throw new BadRequestException(
+            'Seguro no asociado al contratista del titular',
+          );
+      } else {
+        if (dto.contractorId)
+          throw new BadRequestException(
+            'insuranceSource=direct no admite contractorId',
+          );
+        const okDirect = (holder.insurances ?? []).some(
+          (i) => i.id === dto.insuranceId,
+        );
+        if (!okDirect)
+          throw new BadRequestException(
+            'Seguro no asignado directamente al titular',
+          );
+      }
+    } else if (dto.contractorId || dto.insuranceId || dto.insuranceSource) {
+      throw new BadRequestException(
+        'contractorId/insuranceId/insuranceSource solo válidos para tipo seguro',
+      );
+    }
+
+    if (dto.type !== 'insurance' && dto.serviceKey && dto.serviceKey.trim() !== '') {
+      throw new BadRequestException(
+        'serviceKey solo aplica para órdenes tipo seguro',
+      );
     }
 
     if (dto.orderDate && dto.appointmentDate) {
@@ -308,16 +376,90 @@ export class OrdersService implements OnModuleInit {
         throw new BadRequestException('appointmentDate debe ser ≥ orderDate');
     }
 
-    if (!dto.serviceTypeIds || dto.serviceTypeIds.length === 0) {
+    const rows = dto.serviceTypes ?? [];
+    if (!rows.length) {
       throw new BadRequestException('Asigná al menos un tipo de servicio');
     }
-    const stIds = Array.from(new Set(dto.serviceTypeIds));
+    const stIds = rows.map((r) => r.serviceTypeId);
+    if (new Set(stIds).size !== stIds.length) {
+      throw new BadRequestException(
+        'Hay tipos de servicio duplicados — cada ST debe aparecer una sola vez',
+      );
+    }
     const sts = await this.serviceTypesRepo.find({
       where: { id: In(stIds), deletedAt: IsNull() },
       select: ['id', 'isActive'],
     });
     if (sts.length !== stIds.length || sts.some((s) => !s.isActive)) {
-      throw new BadRequestException('Algún tipo de servicio no existe o está deshabilitado');
+      throw new BadRequestException(
+        'Algún tipo de servicio no existe o está deshabilitado',
+      );
+    }
+
+    // Validate provider per row.
+    const doctorIds = Array.from(
+      new Set(rows.filter((r) => r.providerType === 'doctor').map((r) => r.doctorId!)),
+    );
+    const ccIds = Array.from(
+      new Set(rows.filter((r) => r.providerType === 'care_center').map((r) => r.careCenterId!)),
+    );
+    const doctors = doctorIds.length
+      ? await this.doctorsRepo.find({
+          where: { id: In(doctorIds), deletedAt: IsNull() },
+          relations: { specialties: true },
+        })
+      : [];
+    const ccs = ccIds.length
+      ? await this.careCentersRepo.find({
+          where: { id: In(ccIds), deletedAt: IsNull() },
+          relations: { specialties: true },
+        })
+      : [];
+    const docMap = new Map(doctors.map((d) => [d.id, d]));
+    const ccMap = new Map(ccs.map((c) => [c.id, c]));
+
+    for (const row of rows) {
+      if (row.providerType === 'doctor') {
+        if (!row.doctorId) {
+          throw new BadRequestException(
+            'Cada fila Doctor requiere doctorId',
+          );
+        }
+        if (row.careCenterId) {
+          throw new BadRequestException(
+            'Fila Doctor no admite careCenterId',
+          );
+        }
+        const d = docMap.get(row.doctorId);
+        if (!d || !d.isActive)
+          throw new BadRequestException(
+            `Doctor de un tipo de servicio no encontrado o deshabilitado`,
+          );
+        if (!(d.specialties ?? []).some((s) => s.id === dto.specialtyId))
+          throw new BadRequestException(
+            `Doctor "${d.firstName} ${d.lastName}" no tiene la especialidad seleccionada`,
+          );
+      } else {
+        if (!row.careCenterId) {
+          throw new BadRequestException(
+            'Cada fila Centro requiere careCenterId',
+          );
+        }
+        if (row.doctorId) {
+          throw new BadRequestException(
+            'Fila Centro no admite doctorId',
+          );
+        }
+        const cc = ccMap.get(row.careCenterId);
+        if (!cc || !cc.isActive)
+          throw new BadRequestException(
+            `Centro de un tipo de servicio no encontrado o deshabilitado`,
+          );
+        if (!(cc.specialties ?? []).some((s) => s.id === dto.specialtyId))
+          throw new BadRequestException(
+            `Centro "${cc.businessName}" no tiene la especialidad seleccionada`,
+          );
+      }
     }
 
     if (dto.pathologyIds && dto.pathologyIds.length) {
@@ -402,9 +544,11 @@ export class OrdersService implements OnModuleInit {
         patientId: dto.patientId,
         contractorId: dto.contractorId ?? null,
         insuranceId: dto.insuranceId ?? null,
-        providerType: dto.providerType,
-        doctorId: dto.providerType === 'doctor' ? dto.doctorId : null,
-        careCenterId: dto.providerType === 'care_center' ? dto.careCenterId : null,
+        insuranceSource: dto.type === 'insurance' ? dto.insuranceSource ?? null : null,
+        serviceKey:
+          dto.type === 'insurance' && dto.serviceKey?.trim()
+            ? dto.serviceKey.trim()
+            : null,
         specialtyId: dto.specialtyId,
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
@@ -414,12 +558,8 @@ export class OrdersService implements OnModuleInit {
       });
       const saved = await mgr.save(entity);
 
-      const stIds = Array.from(new Set(dto.serviceTypeIds));
-      await mgr
-        .createQueryBuilder()
-        .relation(Order, 'serviceTypes')
-        .of(saved.id)
-        .add(stIds);
+      // Insertar filas OST.
+      await this.persistOrderServiceTypes(mgr, saved.id, dto.serviceTypes);
 
       const pIds = Array.from(new Set(dto.pathologyIds ?? []));
       if (pIds.length) {
@@ -437,24 +577,35 @@ export class OrdersService implements OnModuleInit {
         }
       }
 
-      // Auto-generación de cuentas (idempotente vía UNIQUE(orderId)).
-      // Números human-readable desde sequences propias (`accounts_payable_seq`, `accounts_receivable_seq`).
-      const payableNumberRows = await mgr.query<{ nextval: string }[]>(
-        `SELECT nextval('accounts_payable_seq') AS nextval`,
+      // Snapshot de precios de cobro (Paso 1).
+      await this.snapshotBuyerPricing(
+        mgr,
+        saved.id,
+        dto.type,
+        dto.insuranceId ?? null,
+        dto.serviceTypes.map((r) => r.serviceTypeId),
       );
-      const payableNumber = String(payableNumberRows[0].nextval);
-      await mgr.query(
-        `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT ("orderId") DO NOTHING`,
-        [
-          saved.id,
-          payableNumber,
-          dto.providerType,
-          dto.providerType === 'doctor' ? dto.doctorId ?? null : null,
-          dto.providerType === 'care_center' ? dto.careCenterId ?? null : null,
-        ],
-      );
+
+      // Auto-generación de cuentas: una accounts_payable por proveedor distinto.
+      const distinct = this.distinctProvidersFromRows(dto.serviceTypes);
+      for (const { providerType, providerId } of distinct) {
+        const payableNumberRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('accounts_payable_seq') AS nextval`,
+        );
+        const payableNumber = String(payableNumberRows[0].nextval);
+        await mgr.query(
+          `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [
+            saved.id,
+            payableNumber,
+            providerType,
+            providerType === 'doctor' ? providerId : null,
+            providerType === 'care_center' ? providerId : null,
+          ],
+        );
+      }
       if (dto.type === 'insurance' && dto.insuranceId) {
         const receivableNumberRows = await mgr.query<{ nextval: string }[]>(
           `SELECT nextval('accounts_receivable_seq') AS nextval`,
@@ -474,9 +625,51 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(savedId, user);
   }
 
+  /** Replace-all de filas OST. Usa raw inserts para evitar problemas con composite PK + relations. */
+  private async persistOrderServiceTypes(
+    mgr: EntityManager,
+    orderId: string,
+    rows: OrderServiceTypeRowDto[],
+  ): Promise<void> {
+    await mgr.delete(OrderServiceType, { orderId });
+    if (!rows.length) return;
+    const values = rows.map((r) => ({
+      orderId,
+      serviceTypeId: r.serviceTypeId,
+      providerType: r.providerType,
+      doctorId: r.providerType === 'doctor' ? r.doctorId ?? null : null,
+      careCenterId: r.providerType === 'care_center' ? r.careCenterId ?? null : null,
+    }));
+    await mgr.insert(OrderServiceType, values);
+  }
+
+  /** Set único de proveedores activos en la orden. Preserva orden de aparición. */
+  private distinctProvidersFromRows(
+    rows: OrderServiceTypeRowDto[],
+  ): Array<{
+    providerType: 'doctor' | 'care_center';
+    providerId: string;
+    key: ProviderKey;
+  }> {
+    const seen = new Set<string>();
+    const out: Array<{
+      providerType: 'doctor' | 'care_center';
+      providerId: string;
+      key: ProviderKey;
+    }> = [];
+    for (const r of rows) {
+      const providerId =
+        r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
+      const key = `${r.providerType}:${providerId}` as ProviderKey;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ providerType: r.providerType, providerId, key });
+    }
+    return out;
+  }
+
   // ----- Transiciones de estado (Pasos 2-4) -----
 
-  /** Paso 2: Atención del paciente. status (draft|in_progress) → attended. */
   async attend(id: string, dto: AttendOrderDto, user: AuthenticatedUser): Promise<Order> {
     const order = await this.findOne(id, user);
     if (!['draft', 'in_progress', 'attended'].includes(order.status)) {
@@ -499,7 +692,6 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(id, user);
   }
 
-  /** Paso 3: Informe médico y estudios. status attended → report_issued. */
   async report(id: string, dto: ReportOrderDto, user: AuthenticatedUser): Promise<Order> {
     const order = await this.findOne(id, user);
     if (!['attended', 'report_issued'].includes(order.status)) {
@@ -515,7 +707,16 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(id, user);
   }
 
-  /** Paso 4: Facturación y liquidación. status report_issued → finalized. Aplica cap. */
+  /**
+   * Paso 4 — Facturación con pagos por proveedor.
+   *
+   * - `providers[]` debe cubrir exactamente el set de proveedores distintos de
+   *   la orden (uno por proveedor; sin duplicados; sin sobrantes ni faltantes).
+   * - Total convertido a `priceCurrency` ≤ `priceAmount` (cap global).
+   * - Snapshot replace-all de `kind ∈ {doctor, care_center}` por ST.
+   * - `doctorAmount` / `doctorAmountCurrency` quedan como total agregado en
+   *   `priceCurrency`. `doctorAmountSuggested` como suma de sugeridos.
+   */
   async billing(id: string, dto: BillingOrderDto, user: AuthenticatedUser): Promise<Order> {
     const order = await this.findOne(id, user);
     if (order.status !== 'report_issued') {
@@ -527,29 +728,295 @@ export class OrdersService implements OnModuleInit {
     const rate = await this.ratesRepo.findOne({ where: { id: dto.billingExchangeRateId } });
     if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
 
-    // Convertir doctorAmount a la moneda de la orden y validar cap.
-    const priceAmount = Number(order.priceAmount);
-    const doctorAmountInOrderCurrency = this.convertToOrderCurrency(
-      dto.doctorAmount,
-      dto.doctorAmountCurrency,
-      order.priceCurrency,
-      Number(rate.amountBs),
-    );
-    if (doctorAmountInOrderCurrency > priceAmount + 0.005) {
+    // Set de proveedores esperados según las filas OST de la orden.
+    const orderRows = (order.orderServiceTypes ?? []).map((ost) => ({
+      serviceTypeId: ost.serviceTypeId,
+      providerType: ost.providerType,
+      doctorId: ost.doctorId ?? undefined,
+      careCenterId: ost.careCenterId ?? undefined,
+    }));
+    const expected = this.distinctProvidersFromRows(orderRows);
+    const expectedSet = new Set(expected.map((p) => p.key));
+
+    // Set de proveedores en dto.providers.
+    const seenKeys = new Set<string>();
+    const dtoMap = new Map<ProviderKey, BillingProviderDto>();
+    for (const p of dto.providers) {
+      const pid = p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
+      const key = `${p.providerType}:${pid}` as ProviderKey;
+      if (seenKeys.has(key)) {
+        throw new BadRequestException(
+          'Proveedor duplicado en la facturación',
+        );
+      }
+      seenKeys.add(key);
+      dtoMap.set(key, p);
+    }
+    if (seenKeys.size !== expectedSet.size) {
       throw new BadRequestException(
-        'El monto al doctor no puede superar el monto declarado de la orden',
+        'Cantidad de proveedores facturados no coincide con la orden',
+      );
+    }
+    for (const key of expectedSet) {
+      if (!seenKeys.has(key))
+        throw new BadRequestException(
+          `Falta el pago para un proveedor de la orden (${key})`,
+        );
+    }
+    for (const key of seenKeys) {
+      if (!expectedSet.has(key as ProviderKey))
+        throw new BadRequestException(
+          `Proveedor facturado no participa en la orden (${key})`,
+        );
+    }
+
+    // Total agregado en moneda de la orden + validación cap.
+    const priceAmount = Number(order.priceAmount);
+    let totalInOrderCurrency = 0;
+    for (const p of dto.providers) {
+      totalInOrderCurrency += this.convertToOrderCurrency(
+        p.amount,
+        p.currency,
+        order.priceCurrency,
+        Number(rate.amountBs),
+      );
+    }
+    if (totalInOrderCurrency > priceAmount + 0.005) {
+      throw new BadRequestException(
+        'La suma de pagos a proveedores supera el monto declarado de la orden',
       );
     }
 
-    order.doctorAmount = dto.doctorAmount.toFixed(2);
-    order.doctorAmountCurrency = dto.doctorAmountCurrency;
+    // Sugeridos + snapshots per provider.
+    let suggestedSum = 0;
+    const snapshotRows: Array<{
+      orderId: string;
+      serviceTypeId: string;
+      kind: 'doctor' | 'care_center';
+      priceUsd: string;
+      priceEur: string;
+    }> = [];
+    for (const prov of expected) {
+      const rowsForProv = orderRows.filter((r) => {
+        const pid =
+          r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
+        return r.providerType === prov.providerType && pid === prov.providerId;
+      });
+      const stIds = rowsForProv.map((r) => r.serviceTypeId);
+      const { suggested, snapshotRows: rows } = await this.computeProviderPricing(
+        prov.providerType,
+        prov.providerId,
+        stIds,
+        order.priceCurrency,
+      );
+      suggestedSum += suggested;
+      snapshotRows.push(...rows);
+    }
+
+    order.doctorAmountSuggested = suggestedSum.toFixed(2);
+    order.doctorAmount = totalInOrderCurrency.toFixed(2);
+    order.doctorAmountCurrency = order.priceCurrency;
     order.billingExchangeRateId = dto.billingExchangeRateId;
     order.status = 'finalized';
-    await this.repo.save(order);
+
+    // Replace-all snapshots del lado pago + per-account providerAmount.
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.save(order);
+      await mgr.delete(OrderServicePricing, {
+        orderId: order.id,
+        kind: In(['doctor', 'care_center']),
+      });
+      if (snapshotRows.length) {
+        await mgr.insert(
+          OrderServicePricing,
+          snapshotRows.map((r) => ({ ...r, orderId: order.id })),
+        );
+      }
+
+      // Escribir monto + moneda por cada accounts_payable de la orden, matched por proveedor.
+      for (const p of dto.providers) {
+        const providerId =
+          p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
+        await mgr.query(
+          `UPDATE "accounts_payable"
+           SET "providerAmount" = $1,
+               "providerAmountCurrency" = $2
+           WHERE "orderId" = $3
+             AND "recipientType" = $4
+             AND COALESCE("doctorId", "careCenterId") = $5
+             AND "deletedAt" IS NULL`,
+          [
+            p.amount.toFixed(2),
+            p.currency,
+            order.id,
+            p.providerType,
+            providerId,
+          ],
+        );
+
+        // Espejar en taxes_payable. Una tax_payable 1↔1 con la AP del proveedor.
+        const apRows = await mgr.query<{ id: string }[]>(
+          `SELECT id FROM "accounts_payable"
+           WHERE "orderId" = $1
+             AND "recipientType" = $2
+             AND COALESCE("doctorId", "careCenterId") = $3
+             AND "deletedAt" IS NULL
+           LIMIT 1`,
+          [order.id, p.providerType, providerId],
+        );
+        const apId = apRows[0]?.id;
+        if (!apId) continue;
+
+        let isLegalEntity = false;
+        if (p.providerType === 'doctor') {
+          const doctor = await mgr.getRepository(Doctor).findOne({
+            where: { id: providerId },
+            select: ['id', 'isLegalEntity'],
+          });
+          isLegalEntity = !!doctor?.isLegalEntity;
+        }
+        const taxRate = this.taxRateFor(p.providerType, isLegalEntity);
+        const taxAmount = +(p.amount * taxRate).toFixed(2);
+
+        const existing = await mgr.query<{ id: string }[]>(
+          `SELECT id FROM "taxes_payable" WHERE "accountsPayableId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+          [apId],
+        );
+        if (existing[0]?.id) {
+          await mgr.query(
+            `UPDATE "taxes_payable"
+             SET "taxAmount" = $1, "taxAmountCurrency" = $2, "taxRate" = $3
+             WHERE "id" = $4`,
+            [taxAmount.toFixed(2), p.currency, taxRate.toFixed(4), existing[0].id],
+          );
+        } else {
+          const seqRows = await mgr.query<{ nextval: string }[]>(
+            `SELECT nextval('taxes_payable_seq') AS nextval`,
+          );
+          const taxPayableNumber = String(seqRows[0].nextval);
+          await mgr.query(
+            `INSERT INTO "taxes_payable" (
+              "taxPayableNumber", "accountsPayableId", "orderId", "recipientType",
+              "doctorId", "careCenterId", "taxAmount", "taxAmountCurrency", "taxRate"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+              taxPayableNumber,
+              apId,
+              order.id,
+              p.providerType,
+              p.providerType === 'doctor' ? providerId : null,
+              p.providerType === 'care_center' ? providerId : null,
+              taxAmount.toFixed(2),
+              p.currency,
+              taxRate.toFixed(4),
+            ],
+          );
+        }
+      }
+    });
     return this.findOne(id, user);
   }
 
-  /** Convierte un monto + moneda al `targetCurrency` de la orden usando tasa. */
+  private async snapshotBuyerPricing(
+    mgr: EntityManager,
+    orderId: string,
+    type: 'cash' | 'credit' | 'insurance' | 'cashea',
+    insuranceId: string | null,
+    serviceTypeIds: string[],
+  ): Promise<void> {
+    if (!serviceTypeIds.length) return;
+    if (type === 'insurance' && insuranceId) {
+      const rows = await mgr
+        .getRepository(InsuranceServicePrice)
+        .find({
+          where: { insuranceId, serviceTypeId: In(serviceTypeIds) },
+        });
+      const byST = new Map(rows.map((r) => [r.serviceTypeId, r]));
+      const missing = serviceTypeIds.filter((id) => !byST.has(id));
+      if (missing.length) {
+        throw new BadRequestException(
+          `El seguro seleccionado no tiene precio definido para algún tipo de servicio (${missing.length} pendiente${missing.length === 1 ? '' : 's'}). Cargá los precios en el seguro o quitá esos servicios.`,
+        );
+      }
+      const values = serviceTypeIds.map((stId) => {
+        const r = byST.get(stId)!;
+        return {
+          orderId,
+          serviceTypeId: stId,
+          kind: 'insurance' as const,
+          priceUsd: r.priceUsd,
+          priceEur: r.priceEur,
+        };
+      });
+      await mgr.insert(OrderServicePricing, values);
+    } else {
+      const sts = await mgr.getRepository(ServiceType).find({
+        where: { id: In(serviceTypeIds) },
+      });
+      const values = sts.map((st) => ({
+        orderId,
+        serviceTypeId: st.id,
+        kind: 'particular' as const,
+        priceUsd: st.particularPriceUsd,
+        priceEur: st.particularPriceEur,
+      }));
+      if (values.length) await mgr.insert(OrderServicePricing, values);
+    }
+  }
+
+  /**
+   * Sugerido + snapshots para los STs de un proveedor en una moneda.
+   * STs sin precio definido omitidos del sugerido.
+   */
+  private async computeProviderPricing(
+    providerType: 'doctor' | 'care_center',
+    providerId: string,
+    serviceTypeIds: string[],
+    currency: 'USD' | 'EUR',
+  ): Promise<{
+    suggested: number;
+    snapshotRows: Array<{
+      orderId: string;
+      serviceTypeId: string;
+      kind: 'doctor' | 'care_center';
+      priceUsd: string;
+      priceEur: string;
+    }>;
+  }> {
+    if (!serviceTypeIds.length) return { suggested: 0, snapshotRows: [] };
+
+    const rows =
+      providerType === 'doctor'
+        ? await this.doctorPricesRepo.find({
+            where: { doctorId: providerId, serviceTypeId: In(serviceTypeIds) },
+          })
+        : await this.careCenterPricesRepo.find({
+            where: { careCenterId: providerId, serviceTypeId: In(serviceTypeIds) },
+          });
+
+    let suggested = 0;
+    const snapshotRows: Array<{
+      orderId: string;
+      serviceTypeId: string;
+      kind: 'doctor' | 'care_center';
+      priceUsd: string;
+      priceEur: string;
+    }> = [];
+    for (const r of rows) {
+      const amount =
+        currency === 'USD' ? Number(r.priceUsd) : Number(r.priceEur);
+      if (Number.isFinite(amount)) suggested += amount;
+      snapshotRows.push({
+        orderId: '',
+        serviceTypeId: r.serviceTypeId,
+        kind: providerType,
+        priceUsd: r.priceUsd,
+        priceEur: r.priceEur,
+      });
+    }
+    return { suggested: +suggested.toFixed(2), snapshotRows };
+  }
+
   private convertToOrderCurrency(
     amount: number,
     currency: 'USD' | 'EUR' | 'BS',
@@ -558,7 +1025,6 @@ export class OrdersService implements OnModuleInit {
   ): number {
     if (currency === targetCurrency) return amount;
     if (currency === 'BS') return amount / rateAmountBs;
-    // currency es USD/EUR distinta a targetCurrency. Sin tasa cruzada → rechazar.
     throw new BadRequestException(
       `No se puede convertir entre ${currency} y ${targetCurrency} con la tasa registrada`,
     );
@@ -569,8 +1035,15 @@ export class OrdersService implements OnModuleInit {
     if (existing.status !== 'draft')
       throw new BadRequestException('Solo se puede editar órdenes en borrador');
 
-    const existingServiceTypeIds = (existing.serviceTypes ?? []).map((s) => s.id);
     const existingPathologyIds = (existing.pathologies ?? []).map((p) => p.id);
+    const existingRows: OrderServiceTypeRowDto[] = (
+      existing.orderServiceTypes ?? []
+    ).map((ost) => ({
+      serviceTypeId: ost.serviceTypeId,
+      providerType: ost.providerType,
+      doctorId: ost.doctorId ?? undefined,
+      careCenterId: ost.careCenterId ?? undefined,
+    }));
 
     const merged: CreateOrderDto = {
       branchId: dto.branchId ?? existing.branchId,
@@ -579,11 +1052,17 @@ export class OrdersService implements OnModuleInit {
       patientId: dto.patientId ?? existing.patientId,
       contractorId: dto.contractorId ?? existing.contractorId ?? undefined,
       insuranceId: dto.insuranceId ?? existing.insuranceId ?? undefined,
-      providerType: (dto.providerType ?? existing.providerType) as CreateOrderDto['providerType'],
-      doctorId: dto.doctorId ?? existing.doctorId ?? undefined,
-      careCenterId: dto.careCenterId ?? existing.careCenterId ?? undefined,
+      insuranceSource:
+        (dto.insuranceSource ?? existing.insuranceSource ?? undefined) as
+          | 'direct'
+          | 'via_contractor'
+          | undefined,
+      serviceKey:
+        dto.serviceKey !== undefined
+          ? dto.serviceKey
+          : existing.serviceKey ?? undefined,
       specialtyId: dto.specialtyId ?? existing.specialtyId,
-      serviceTypeIds: dto.serviceTypeIds ?? existingServiceTypeIds,
+      serviceTypes: dto.serviceTypes ?? existingRows,
       pathologyIds: dto.pathologyIds ?? existingPathologyIds,
       orderDate: dto.orderDate ?? existing.orderDate,
       appointmentDate:
@@ -601,9 +1080,12 @@ export class OrdersService implements OnModuleInit {
         patientId: merged.patientId,
         contractorId: merged.contractorId ?? null,
         insuranceId: merged.insuranceId ?? null,
-        providerType: merged.providerType,
-        doctorId: merged.providerType === 'doctor' ? merged.doctorId : null,
-        careCenterId: merged.providerType === 'care_center' ? merged.careCenterId : null,
+        insuranceSource:
+          merged.type === 'insurance' ? merged.insuranceSource ?? null : null,
+        serviceKey:
+          merged.type === 'insurance' && merged.serviceKey?.trim()
+            ? merged.serviceKey.trim()
+            : null,
         specialtyId: merged.specialtyId,
         orderDate: merged.orderDate,
         appointmentDate: new Date(merged.appointmentDate),
@@ -612,11 +1094,10 @@ export class OrdersService implements OnModuleInit {
       });
       await mgr.save(existing);
 
-      // Replace M2M relations.
-      const stRel = mgr.createQueryBuilder().relation(Order, 'serviceTypes').of(existing.id);
-      if (existingServiceTypeIds.length) await stRel.remove(existingServiceTypeIds);
-      if (merged.serviceTypeIds.length) await stRel.add(Array.from(new Set(merged.serviceTypeIds)));
+      // Replace OST rows.
+      await this.persistOrderServiceTypes(mgr, existing.id, merged.serviceTypes);
 
+      // Pathologies replace.
       const pRel = mgr.createQueryBuilder().relation(Order, 'pathologies').of(existing.id);
       if (existingPathologyIds.length) await pRel.remove(existingPathologyIds);
       if (merged.pathologyIds && merged.pathologyIds.length)
@@ -631,14 +1112,103 @@ export class OrdersService implements OnModuleInit {
           }
         }
       }
+
+      // Re-snapshot buyer pricing.
+      await mgr.delete(OrderServicePricing, {
+        orderId: existing.id,
+        kind: In(['particular', 'insurance']),
+      });
+      await this.snapshotBuyerPricing(
+        mgr,
+        existing.id,
+        merged.type,
+        merged.insuranceId ?? null,
+        merged.serviceTypes.map((r) => r.serviceTypeId),
+      );
+
+      // Reconciliar accounts_payable según nuevos proveedores distintos.
+      const distinct = this.distinctProvidersFromRows(merged.serviceTypes);
+      // Mantiene las existentes que aún correspondan; soft-deletea las huérfanas.
+      const existingAccounts = await mgr.query<
+        Array<{ id: string; recipientType: string; doctorId: string | null; careCenterId: string | null }>
+      >(
+        `SELECT id, "recipientType", "doctorId", "careCenterId"
+         FROM "accounts_payable"
+         WHERE "orderId" = $1 AND "deletedAt" IS NULL`,
+        [existing.id],
+      );
+      const keepKeys = new Set(
+        distinct.map((p) => `${p.providerType}:${p.providerId}`),
+      );
+      for (const acc of existingAccounts) {
+        const accKey = `${acc.recipientType}:${
+          acc.recipientType === 'doctor' ? acc.doctorId : acc.careCenterId
+        }`;
+        if (!keepKeys.has(accKey)) {
+          await mgr.query(
+            `UPDATE "accounts_payable" SET "deletedAt" = now() WHERE id = $1`,
+            [acc.id],
+          );
+        }
+      }
+      const existingKeys = new Set(
+        existingAccounts
+          .map(
+            (acc) =>
+              `${acc.recipientType}:${
+                acc.recipientType === 'doctor' ? acc.doctorId : acc.careCenterId
+              }`,
+          )
+          .filter((k) => keepKeys.has(k)),
+      );
+      for (const { providerType, providerId, key } of distinct) {
+        if (existingKeys.has(key)) continue;
+        const payableNumberRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('accounts_payable_seq') AS nextval`,
+        );
+        const payableNumber = String(payableNumberRows[0].nextval);
+        await mgr.query(
+          `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [
+            existing.id,
+            payableNumber,
+            providerType,
+            providerType === 'doctor' ? providerId : null,
+            providerType === 'care_center' ? providerId : null,
+          ],
+        );
+      }
     });
 
     return this.findOne(existing.id, user);
   }
 
+  /**
+   * Soft-delete cascada: marca `deletedAt` con el mismo timestamp en orden,
+   * accounts_payable, accounts_receivable y taxes_payable. Mantener un timestamp
+   * común permite que `restore` revierta exactamente las filas tumbadas por esta
+   * cascada y respete las cuentas que pudieran estar previamente eliminadas.
+   */
   async softDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user);
-    await this.repo.softDelete(id);
+    await this.dataSource.transaction(async (mgr) => {
+      const ts = new Date();
+      await mgr.query(
+        `UPDATE "accounts_payable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.query(
+        `UPDATE "accounts_receivable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.update(Order, { id }, { deletedAt: ts });
+    });
   }
 
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
@@ -651,7 +1221,22 @@ export class OrdersService implements OnModuleInit {
     if (!order) throw new NotFoundException('Orden no encontrada');
     await this.assertBranchVisibility(order.branchId, user);
     if (!order.deletedAt) return this.findOne(id, user);
-    await this.repo.restore(id);
+    const ts = order.deletedAt;
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.query(
+        `UPDATE "accounts_payable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.query(
+        `UPDATE "accounts_receivable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.update(Order, { id }, { deletedAt: null });
+    });
     return this.findOne(id, user);
   }
 

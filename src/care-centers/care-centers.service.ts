@@ -5,12 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { CareCenter } from './entities/care-center.entity';
 import { CareCenterPhone } from './entities/care-center-phone.entity';
 import { CareCenterPaymentMethod } from './entities/care-center-payment-method.entity';
+import { CareCenterServicePrice } from './entities/care-center-service-price.entity';
 import { Specialty } from '../specialties/entities/specialty.entity';
 import { Bank } from '../banks/entities/bank.entity';
+import { ServiceType } from '../service-types/entities/service-type.entity';
+import { ServicePriceDto } from '../shared/dto/service-price.dto';
 import { CreateCareCenterDto } from './dto/create-care-center.dto';
 import { UpdateCareCenterDto } from './dto/update-care-center.dto';
 import { QueryCareCentersDto } from './dto/query-care-centers.dto';
@@ -31,6 +34,10 @@ export class CareCentersService {
     @InjectRepository(Specialty)
     private readonly specialtiesRepo: Repository<Specialty>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
+    @InjectRepository(CareCenterServicePrice)
+    private readonly pricesRepo: Repository<CareCenterServicePrice>,
+    @InjectRepository(ServiceType)
+    private readonly serviceTypesRepo: Repository<ServiceType>,
   ) {}
 
   async findAll(query: QueryCareCentersDto): Promise<PaginatedResponse<CareCenter>> {
@@ -51,6 +58,8 @@ export class CareCentersService {
       .leftJoinAndSelect('center.phones', 'phone')
       .leftJoinAndSelect('center.specialties', 'specialty')
       .leftJoinAndSelect('center.paymentMethods', 'method')
+      .leftJoinAndSelect('center.servicePrices', 'sp')
+      .leftJoinAndSelect('sp.serviceType', 'spST')
       .orderBy(`center.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -80,10 +89,22 @@ export class CareCentersService {
     return paginateBuilder<CareCenter>(qb, page, limit);
   }
 
+  async findAssignable(): Promise<CareCenter[]> {
+    return this.repo.find({
+      where: { isActive: true },
+      order: { businessName: 'ASC' },
+    });
+  }
+
   async findOne(id: string, withDeleted = false): Promise<CareCenter> {
     const center = await this.repo.findOne({
       where: { id },
-      relations: { phones: true, specialties: true, paymentMethods: true },
+      relations: {
+        phones: true,
+        specialties: true,
+        paymentMethods: true,
+        servicePrices: { serviceType: true },
+      },
       withDeleted,
     });
     if (!center) throw new NotFoundException('Centro de atención no encontrado');
@@ -101,6 +122,7 @@ export class CareCentersService {
 
     const specialties = await this.resolveSpecialties(dto.specialtyIds);
     await this.validatePaymentMethods(dto.paymentMethods ?? []);
+    await this.validateServicePrices(dto.servicePrices ?? []);
 
     const center = this.repo.create({
       businessName,
@@ -113,7 +135,19 @@ export class CareCentersService {
         this.methodsRepo.create(this.methodPayload(m)),
       ),
     });
-    return this.repo.save(center);
+    const saved = await this.repo.save(center);
+
+    if (dto.servicePrices?.length) {
+      await this.pricesRepo.insert(
+        dto.servicePrices.map((sp) => ({
+          careCenterId: saved.id,
+          serviceTypeId: sp.serviceTypeId,
+          priceUsd: sp.priceUsd.toFixed(2),
+          priceEur: sp.priceEur.toFixed(2),
+        })),
+      );
+    }
+    return this.findOne(saved.id);
   }
 
   async update(id: string, dto: UpdateCareCenterDto): Promise<CareCenter> {
@@ -161,7 +195,43 @@ export class CareCentersService {
       );
     }
 
-    return this.repo.save(center);
+    const saved = await this.repo.save(center);
+
+    if (dto.servicePrices !== undefined) {
+      await this.validateServicePrices(dto.servicePrices);
+      await this.pricesRepo.delete({ careCenterId: saved.id });
+      if (dto.servicePrices.length) {
+        await this.pricesRepo.insert(
+          dto.servicePrices.map((sp) => ({
+            careCenterId: saved.id,
+            serviceTypeId: sp.serviceTypeId,
+            priceUsd: sp.priceUsd.toFixed(2),
+            priceEur: sp.priceEur.toFixed(2),
+          })),
+        );
+      }
+    }
+
+    return this.findOne(saved.id);
+  }
+
+  private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
+    if (!prices.length) return;
+    const ids = prices.map((p) => p.serviceTypeId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException(
+        'No pueden repetirse tipos de servicio en los precios',
+      );
+    }
+    const found = await this.serviceTypesRepo.find({
+      where: { id: In(ids), deletedAt: IsNull() },
+      select: ['id', 'isActive'],
+    });
+    if (found.length !== ids.length || found.some((s) => !s.isActive)) {
+      throw new BadRequestException(
+        'Algún tipo de servicio en los precios no existe o está deshabilitado',
+      );
+    }
   }
 
   async toggleActive(id: string): Promise<CareCenter> {

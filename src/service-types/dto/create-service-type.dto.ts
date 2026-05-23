@@ -1,15 +1,13 @@
-import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize,
-  IsArray,
   IsBoolean,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
+  Max,
   MaxLength,
   MinLength,
-  ValidateNested,
 } from 'class-validator';
-import { ServiceTypePriceDto } from './service-type-price.dto';
 
 export class CreateServiceTypeDto {
   @IsString()
@@ -26,10 +24,14 @@ export class CreateServiceTypeDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(500)
-  @ValidateNested({ each: true })
-  @Type(() => ServiceTypePriceDto)
-  prices?: ServiceTypePriceDto[];
+  /** Precio Particular obligatorio en USD y EUR. */
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive({ message: 'El precio Particular USD debe ser mayor a 0' })
+  @Max(99999999.99)
+  particularPriceUsd: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive({ message: 'El precio Particular EUR debe ser mayor a 0' })
+  @Max(99999999.99)
+  particularPriceEur: number;
 }

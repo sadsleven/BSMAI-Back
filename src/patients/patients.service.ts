@@ -9,6 +9,7 @@ import { In, IsNull, Repository } from 'typeorm';
 import { Patient, PersonType } from './entities/patient.entity';
 import { PatientPhone } from './entities/patient-phone.entity';
 import { Contractor } from '../contractors/entities/contractor.entity';
+import { Insurance } from '../insurances/entities/insurance.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { QueryPatientsDto } from './dto/query-patients.dto';
@@ -25,6 +26,8 @@ export class PatientsService {
     private readonly phonesRepo: Repository<PatientPhone>,
     @InjectRepository(Contractor)
     private readonly contractorsRepo: Repository<Contractor>,
+    @InjectRepository(Insurance)
+    private readonly insurancesRepo: Repository<Insurance>,
   ) {}
 
   async findAll(query: QueryPatientsDto): Promise<PaginatedResponse<Patient>> {
@@ -50,6 +53,7 @@ export class PatientsService {
       .leftJoinAndSelect('patient.phones', 'phone')
       .leftJoinAndSelect('patient.contractors', 'contractor')
       .leftJoinAndSelect('contractor.insurances', 'contractorInsurance')
+      .leftJoinAndSelect('patient.insurances', 'directInsurance')
       .orderBy(`patient.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -92,6 +96,10 @@ export class PatientsService {
           FROM patient_contractors pc
           INNER JOIN contractor_insurances ci ON ci."contractorId" = pc."contractorId"
           WHERE ci."insuranceId" = :insId
+          UNION
+          SELECT pi."patientId"
+          FROM patient_insurances pi
+          WHERE pi."insuranceId" = :insId
         )`,
         { insId: insuranceId },
       );
@@ -107,12 +115,17 @@ export class PatientsService {
     }
 
     if (hasInsuranceAndContractor === 'true') {
-      qb.andWhere(`EXISTS (
+      // Hay al menos un seguro disponible: vía contratista O directo.
+      qb.andWhere(`(EXISTS (
         SELECT 1
         FROM patient_contractors pc
         INNER JOIN contractor_insurances ci ON ci."contractorId" = pc."contractorId"
         WHERE pc."patientId" = patient.id
-      )`);
+      ) OR EXISTS (
+        SELECT 1
+        FROM patient_insurances pi
+        WHERE pi."patientId" = patient.id
+      ))`);
     }
 
     return paginateBuilder<Patient>(qb, page, limit);
@@ -121,7 +134,11 @@ export class PatientsService {
   async findOne(id: string, withDeleted = false): Promise<Patient> {
     const patient = await this.repo.findOne({
       where: { id },
-      relations: { phones: true, contractors: { insurances: true } },
+      relations: {
+        phones: true,
+        contractors: { insurances: true },
+        insurances: true,
+      },
       withDeleted,
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
@@ -129,26 +146,61 @@ export class PatientsService {
   }
 
   /**
-   * Devuelve los seguros disponibles para un paciente, derivados de los seguros
-   * asignados a sus contratistas activos. Sin duplicados, ordenados por nombre.
+   * Devuelve los seguros disponibles para un paciente con su origen:
+   *  - `direct`: asignado vía `patient_insurances`.
+   *  - `via_contractor`: derivado de un contratista (con ese contratista).
+   *
+   * Un mismo seguro puede aparecer dos veces si está disponible por ambos
+   * caminos (datos inconsistentes que la regla de exclusión normalmente
+   * impide; el BE devuelve ambas entradas si llegan así).
    */
-  async getAvailableInsurances(
-    id: string,
-  ): Promise<Array<{ id: string; name: string }>> {
+  async getAvailableInsurances(id: string): Promise<
+    Array<{
+      insurance: { id: string; name: string };
+      source: 'direct' | 'via_contractor';
+      contractor: { id: string; name: string } | null;
+    }>
+  > {
     const patient = await this.repo.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: { contractors: { insurances: true } },
+      relations: { contractors: { insurances: true }, insurances: true },
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
-    const map = new Map<string, { id: string; name: string }>();
+
+    const items: Array<{
+      insurance: { id: string; name: string };
+      source: 'direct' | 'via_contractor';
+      contractor: { id: string; name: string } | null;
+    }> = [];
+
+    // Directos
+    for (const ins of patient.insurances ?? []) {
+      if (ins.deletedAt || !ins.isActive) continue;
+      items.push({
+        insurance: { id: ins.id, name: ins.name },
+        source: 'direct',
+        contractor: null,
+      });
+    }
+
+    // Vía contratista
     for (const c of patient.contractors ?? []) {
       if (c.deletedAt || !c.isActive) continue;
       for (const ins of c.insurances ?? []) {
         if (ins.deletedAt || !ins.isActive) continue;
-        if (!map.has(ins.id)) map.set(ins.id, { id: ins.id, name: ins.name });
+        items.push({
+          insurance: { id: ins.id, name: ins.name },
+          source: 'via_contractor',
+          contractor: { id: c.id, name: c.name },
+        });
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    return items.sort((a, b) => {
+      const byName = a.insurance.name.localeCompare(b.insurance.name);
+      if (byName !== 0) return byName;
+      return a.source === 'direct' ? -1 : 1;
+    });
   }
 
   async create(dto: CreatePatientDto): Promise<Patient> {
@@ -166,8 +218,8 @@ export class PatientsService {
     };
 
     if (dto.personType === 'natural') {
-      const cedula = normalizeCedula(dto.cedula!);
-      await this.assertUniqueCedula(cedula);
+      const cedula = dto.cedula ? normalizeCedula(dto.cedula) : null;
+      if (cedula) await this.assertUniqueCedula(cedula);
       Object.assign(base, {
         cedula,
         firstName: dto.firstName!.trim(),
@@ -188,11 +240,16 @@ export class PatientsService {
     }
 
     const contractors = await this.resolveContractors(dto.contractorIds ?? []);
+    const directInsurances = await this.resolveDirectInsurances(
+      dto.directInsuranceIds ?? [],
+    );
+    this.assertNoInsuranceOverlap(contractors, directInsurances);
 
     const patient = this.repo.create({
       ...base,
       phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
       contractors,
+      insurances: directInsurances,
     });
     return this.repo.save(patient);
   }
@@ -224,9 +281,9 @@ export class PatientsService {
     }
 
     if (effectiveType === 'natural') {
-      const cedula = normalizeCedula(merged.cedula!);
+      const cedula = merged.cedula ? normalizeCedula(merged.cedula) : null;
       if (cedula !== patient.cedula) {
-        await this.assertUniqueCedula(cedula);
+        if (cedula) await this.assertUniqueCedula(cedula);
       }
       patient.personType = 'natural';
       patient.cedula = cedula;
@@ -264,6 +321,18 @@ export class PatientsService {
         patient.contractors ?? [],
       );
     }
+
+    if (dto.directInsuranceIds !== undefined) {
+      patient.insurances = await this.resolveDirectInsurances(
+        dto.directInsuranceIds,
+        patient.insurances ?? [],
+      );
+    }
+
+    this.assertNoInsuranceOverlap(
+      patient.contractors ?? [],
+      patient.insurances ?? [],
+    );
 
     return this.repo.save(patient);
   }
@@ -308,9 +377,9 @@ export class PatientsService {
     },
   ) {
     if (personType === 'natural') {
-      if (!fields.cedula || !fields.firstName || !fields.lastName) {
+      if (!fields.firstName || !fields.lastName) {
         throw new BadRequestException(
-          'Persona natural requiere cédula, nombre y apellido',
+          'Persona natural requiere nombre y apellido',
         );
       }
       if (fields.businessName || fields.rif) {
@@ -345,6 +414,63 @@ export class PatientsService {
   private async assertUniqueEmail(email: string): Promise<void> {
     const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
     if (existing) throw new ConflictException('Ya existe un paciente con ese email');
+  }
+
+  /**
+   * Valida que ningún seguro directo se solape con los seguros derivados de
+   * los contratistas asignados. Si hay solape, lista cada conflicto con el
+   * contratista que ya cubre ese seguro.
+   */
+  private assertNoInsuranceOverlap(
+    contractors: Contractor[],
+    directInsurances: Insurance[],
+  ): void {
+    if (!directInsurances.length || !contractors.length) return;
+    const conflicts: string[] = [];
+    for (const ins of directInsurances) {
+      for (const c of contractors) {
+        const covered = (c.insurances ?? []).some((i) => i.id === ins.id);
+        if (covered) {
+          conflicts.push(`"${ins.name}" ya cubierto por contratista "${c.name}"`);
+          break;
+        }
+      }
+    }
+    if (conflicts.length) {
+      throw new BadRequestException(
+        `No se pueden asignar como seguros directos los que ya están cubiertos por un contratista: ${conflicts.join('; ')}`,
+      );
+    }
+  }
+
+  /** Resolve direct insurance IDs (active+non-deleted; stale already attached kept silently). */
+  private async resolveDirectInsurances(
+    ids: string[],
+    current: Insurance[] = [],
+  ): Promise<Insurance[]> {
+    if (!ids.length) return [];
+    const unique = Array.from(new Set(ids));
+    const currentIds = new Set(current.map((c) => c.id));
+    const newIds = unique.filter((id) => !currentIds.has(id));
+
+    if (newIds.length) {
+      const valid = await this.insurancesRepo.find({
+        where: { id: In(newIds), isActive: true, deletedAt: IsNull() },
+      });
+      if (valid.length !== newIds.length) {
+        const validIds = new Set(valid.map((v) => v.id));
+        const missing = newIds.filter((id) => !validIds.has(id));
+        throw new BadRequestException(
+          `Algunos seguros no existen, están deshabilitados o en papelera: ${missing.join(', ')}`,
+        );
+      }
+    }
+
+    const entities = await this.insurancesRepo.find({
+      where: { id: In(unique) },
+      withDeleted: true,
+    });
+    return entities;
   }
 
   /** Resolve contractor IDs (active+non-deleted; stale already attached kept silently). */

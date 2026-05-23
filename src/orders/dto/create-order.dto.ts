@@ -2,21 +2,23 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
-  ArrayUnique,
   IsArray,
   IsIn,
   IsISO8601,
   IsNumber,
   IsOptional,
   IsPositive,
+  IsString,
   IsUUID,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { CreateOrderPaymentDto } from './order-payment.dto';
+import { OrderServiceTypeRowDto } from './order-service-type.dto';
 
 export const ORDER_TYPES = ['cash', 'credit', 'insurance', 'cashea'] as const;
-export const PROVIDER_TYPES = ['doctor', 'care_center'] as const;
 export const ORDER_CURRENCIES = ['USD', 'EUR'] as const;
+export const INSURANCE_SOURCES = ['direct', 'via_contractor'] as const;
 
 export class CreateOrderDto {
   @IsUUID()
@@ -39,31 +41,41 @@ export class CreateOrderDto {
   @IsUUID()
   insuranceId?: string;
 
-  @IsIn(PROVIDER_TYPES)
-  providerType: 'doctor' | 'care_center';
-
+  /**
+   * Origen del seguro. Requerido sólo cuando `type='insurance'`. Validado
+   * además junto con `contractorId` en service.
+   */
   @IsOptional()
-  @IsUUID()
-  doctorId?: string;
+  @IsIn(INSURANCE_SOURCES)
+  insuranceSource?: 'direct' | 'via_contractor';
 
+  /**
+   * Clave de servicio externa del seguro (opcional, sólo type='insurance').
+   * Texto libre ≤30 chars.
+   */
   @IsOptional()
-  @IsUUID()
-  careCenterId?: string;
+  @IsString()
+  @MaxLength(30, { message: 'La clave de servicio no puede superar 30 caracteres' })
+  serviceKey?: string;
 
   @IsUUID()
   specialtyId: string;
 
+  /**
+   * Tipos de servicio con su proveedor por fila. Reemplaza el antiguo
+   * `serviceTypeIds: string[]`. Cada fila debe respetar la regla XOR
+   * doctor/care_center según `providerType`.
+   */
   @IsArray()
   @ArrayMinSize(1, { message: 'Asigná al menos un tipo de servicio' })
   @ArrayMaxSize(50)
-  @ArrayUnique()
-  @IsUUID('4', { each: true })
-  serviceTypeIds: string[];
+  @ValidateNested({ each: true })
+  @Type(() => OrderServiceTypeRowDto)
+  serviceTypes: OrderServiceTypeRowDto[];
 
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(50)
-  @ArrayUnique()
   @IsUUID('4', { each: true })
   pathologyIds?: string[];
 

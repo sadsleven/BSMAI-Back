@@ -12,6 +12,7 @@ import {
 import { Specialty } from '../../specialties/entities/specialty.entity';
 import { CareCenterPhone } from './care-center-phone.entity';
 import { CareCenterPaymentMethod } from './care-center-payment-method.entity';
+import { CareCenterServicePrice } from './care-center-service-price.entity';
 
 @Entity({ name: 'care_centers' })
 export class CareCenter {
@@ -50,6 +51,13 @@ export class CareCenter {
     eager: true,
   })
   paymentMethods: CareCenterPaymentMethod[];
+
+  /**
+   * Precios que se pagan al centro por Tipo de Servicio. Sólo los STs que el
+   * centro efectivamente realiza. Replace-all en update.
+   */
+  @OneToMany(() => CareCenterServicePrice, (sp) => sp.careCenter, { eager: true })
+  servicePrices: CareCenterServicePrice[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
