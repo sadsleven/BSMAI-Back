@@ -18,9 +18,11 @@ import { Insurance } from '../insurances/entities/insurance.entity';
 import { InsuranceServicePrice } from '../insurances/entities/insurance-service-price.entity';
 import { DoctorServicePrice } from '../doctors/entities/doctor-service-price.entity';
 import { CareCenterServicePrice } from '../care-centers/entities/care-center-service-price.entity';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    AuthModule,
     TypeOrmModule.forFeature([
       Order,
       OrderPayment,

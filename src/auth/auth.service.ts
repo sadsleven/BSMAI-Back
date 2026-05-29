@@ -60,6 +60,44 @@ export class AuthService {
     return { accessToken, user: toPublicUser(user, branches) };
   }
 
+  /**
+   * Valida credenciales de un usuario validador (email + contraseña) sin emitir
+   * token. Usado por flujos de autorización (ej. autorizar monto de orden).
+   * Devuelve identidad + permisos efectivos. Lanza si credenciales inválidas o
+   * usuario inactivo/eliminado.
+   */
+  async verifyValidator(
+    email: string,
+    password: string,
+  ): Promise<ValidatedUser> {
+    const user = await this.usersRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.roles', 'r')
+      .leftJoinAndSelect('r.permissions', 'p')
+      .addSelect('u.password')
+      .where('u.email = :email', { email: email.toLowerCase() })
+      .getOne();
+
+    if (!user || !user.isActive || user.deletedAt) {
+      throw new UnauthorizedException('Credenciales del validador inválidas');
+    }
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) throw new UnauthorizedException('Credenciales del validador inválidas');
+
+    const permissions = new Set<string>();
+    for (const role of user.roles ?? []) {
+      if (!role.isActive || role.deletedAt) continue;
+      for (const perm of role.permissions ?? []) permissions.add(perm.name);
+    }
+    return {
+      id: user.id,
+      fullName: `${user.firstName} ${user.lastName}`.trim(),
+      email: user.email,
+      isSuperAdmin: user.isSuperAdmin,
+      permissions: Array.from(permissions),
+    };
+  }
+
   async logout(authUser: AuthenticatedUser, exp?: number): Promise<void> {
     if (authUser.jti && exp) this.blacklist.add(authUser.jti, exp);
   }
@@ -140,6 +178,14 @@ export class AuthService {
       .filter((b) => b.isActive && !b.deletedAt)
       .map((b) => ({ id: b.id, name: b.name }));
   }
+}
+
+export interface ValidatedUser {
+  id: string;
+  fullName: string;
+  email: string;
+  isSuperAdmin: boolean;
+  permissions: string[];
 }
 
 export interface PublicBranch {
