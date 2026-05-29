@@ -28,6 +28,7 @@ import { BranchesModule } from './branches/branches.module';
 import { OrdersModule } from './orders/orders.module';
 import { AccountsPayableModule } from './accounts-payable/accounts-payable.module';
 import { AccountsReceivableModule } from './accounts-receivable/accounts-receivable.module';
+import { CreditsReceivableModule } from './credits-receivable/credits-receivable.module';
 import { TaxesPayableModule } from './taxes-payable/taxes-payable.module';
 import { AppConfigModule } from './config/app-config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -58,6 +59,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     OrdersModule,
     AccountsPayableModule,
     AccountsReceivableModule,
+    CreditsReceivableModule,
     TaxesPayableModule,
     AppConfigModule,
     DashboardModule,

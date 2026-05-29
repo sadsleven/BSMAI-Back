@@ -19,6 +19,7 @@ import { QueryOrdersDto } from './dto/query-orders.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
 import {
   AttendOrderDto,
+  AuthorizeOrderAmountDto,
   BillingOrderDto,
   BillingProviderDto,
   ReportOrderDto,
@@ -38,6 +39,8 @@ import { DoctorServicePrice } from '../doctors/entities/doctor-service-price.ent
 import { CareCenterServicePrice } from '../care-centers/entities/care-center-service-price.entity';
 import { OrderServicePricing } from './entities/order-service-pricing.entity';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
+import { PERMISSIONS } from '../permissions/permissions.catalog';
+import { AuthService } from '../auth/auth.service';
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   draft: ['in_progress', 'cancelled'],
@@ -78,6 +81,7 @@ export class OrdersService implements OnModuleInit {
     private readonly orderPricingRepo: Repository<OrderServicePricing>,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
+    private readonly authService: AuthService,
   ) {
     void this.insurancePricesRepo;
     void this.orderPricingRepo;
@@ -88,6 +92,7 @@ export class OrdersService implements OnModuleInit {
     await this.bumpSequence('orders_seq', 'ORDER_NUMBER_START');
     await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
     await this.bumpSequence('accounts_receivable_seq', 'RECEIVABLE_NUMBER_START');
+    await this.bumpSequence('credits_receivable_seq', 'CREDIT_NUMBER_START');
     await this.bumpSequence('taxes_payable_seq', 'TAX_PAYABLE_NUMBER_START');
   }
 
@@ -105,6 +110,33 @@ export class OrdersService implements OnModuleInit {
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 0 || n > 1) return fallback;
     return n;
+  }
+
+  private userHasPermission(user: AuthenticatedUser, perm: string): boolean {
+    if (user.isSuperAdmin) return true;
+    return (user.permissions ?? []).includes(perm);
+  }
+
+  /**
+   * Suma de precios Particular (USD/EUR) de los STs dados.
+   * Usado para forzar el monto cuando el usuario no tiene orders.edit-amount.
+   */
+  private async computeParticularSum(
+    serviceTypeIds: string[],
+    currency: 'USD' | 'EUR',
+  ): Promise<number> {
+    if (!serviceTypeIds.length) return 0;
+    const sts = await this.serviceTypesRepo.find({
+      where: { id: In(serviceTypeIds) },
+      select: ['id', 'particularPriceUsd', 'particularPriceEur'],
+    });
+    let sum = 0;
+    for (const st of sts) {
+      const raw = currency === 'USD' ? st.particularPriceUsd : st.particularPriceEur;
+      const n = Number(raw);
+      if (Number.isFinite(n)) sum += n;
+    }
+    return +sum.toFixed(2);
   }
 
   private async bumpSequence(seq: string, envKey: string): Promise<void> {
@@ -170,6 +202,7 @@ export class OrdersService implements OnModuleInit {
       },
       pathologies: true,
       createdBy: true,
+      amountAuthorizedBy: true,
       payments: { exchangeRate: true },
       billingExchangeRate: true,
       servicePricing: true,
@@ -533,6 +566,18 @@ export class OrdersService implements OnModuleInit {
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
 
+    // Sin orders.edit-amount, el monto de órdenes no-seguro se fuerza a la suma Particular.
+    let effectivePriceAmount = dto.priceAmount;
+    if (
+      dto.type !== 'insurance' &&
+      !this.userHasPermission(user, PERMISSIONS.ORDERS.EDIT_AMOUNT)
+    ) {
+      effectivePriceAmount = await this.computeParticularSum(
+        dto.serviceTypes.map((r) => r.serviceTypeId),
+        dto.priceCurrency,
+      );
+    }
+
     const savedId = await this.dataSource.transaction(async (mgr) => {
       const orderNumber = await this.generateOrderNumber();
       const entity = mgr.create(Order, {
@@ -553,7 +598,7 @@ export class OrdersService implements OnModuleInit {
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
         priceCurrency: dto.priceCurrency,
-        priceAmount: dto.priceAmount.toFixed(2),
+        priceAmount: effectivePriceAmount.toFixed(2),
         createdById: user.id,
       });
       const saved = await mgr.save(entity);
@@ -616,6 +661,18 @@ export class OrdersService implements OnModuleInit {
            VALUES ($1, $2, $3)
            ON CONFLICT ("orderId") DO NOTHING`,
           [saved.id, receivableNumber, dto.insuranceId],
+        );
+      }
+      if (dto.type === 'credit') {
+        const creditNumberRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('credits_receivable_seq') AS nextval`,
+        );
+        const creditNumber = String(creditNumberRows[0].nextval);
+        await mgr.query(
+          `INSERT INTO "credits_receivable" ("orderId", "creditNumber", "holderId")
+           VALUES ($1, $2, $3)
+           ON CONFLICT ("orderId") DO NOTHING`,
+          [saved.id, creditNumber, dto.holderId],
         );
       }
 
@@ -703,6 +760,50 @@ export class OrdersService implements OnModuleInit {
         : null;
     }
     if (order.status === 'attended') order.status = 'report_issued';
+    await this.repo.save(order);
+    return this.findOne(id, user);
+  }
+
+  /**
+   * Paso 1 — Autorización de monto por un validador.
+   *
+   * Cuando el usuario que edita la orden no tiene `orders.edit-amount`, otro
+   * usuario que sí lo tenga valida sus credenciales (email + contraseña) e
+   * ingresa el nuevo monto + observación. Queda registrado como autor del cambio.
+   * Sólo aplica a órdenes `draft` no-seguro (el monto de seguro es fijo).
+   */
+  async authorizeAmount(
+    id: string,
+    dto: AuthorizeOrderAmountDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (order.status !== 'draft') {
+      throw new BadRequestException(
+        'Solo se puede autorizar el monto mientras la orden está en borrador',
+      );
+    }
+    if (order.type === 'insurance') {
+      throw new BadRequestException('El monto de las órdenes de seguro es fijo');
+    }
+
+    const validator = await this.authService.verifyValidator(
+      dto.validatorEmail,
+      dto.validatorPassword,
+    );
+    const canEditAmount =
+      validator.isSuperAdmin ||
+      validator.permissions.includes(PERMISSIONS.ORDERS.EDIT_AMOUNT);
+    if (!canEditAmount) {
+      throw new ForbiddenException(
+        'El validador no tiene permiso para modificar el monto',
+      );
+    }
+
+    order.priceAmount = dto.priceAmount.toFixed(2);
+    order.amountAuthorizedById = validator.id;
+    order.amountAuthorizedAt = new Date();
+    order.amountAuthorizationNote = dto.observation.trim();
     await this.repo.save(order);
     return this.findOne(id, user);
   }
@@ -1072,6 +1173,17 @@ export class OrdersService implements OnModuleInit {
     };
     await this.validateCoreReferences(merged, user);
 
+    // Sin orders.edit-amount, el monto de órdenes no-seguro se fuerza a la suma Particular.
+    if (
+      merged.type !== 'insurance' &&
+      !this.userHasPermission(user, PERMISSIONS.ORDERS.EDIT_AMOUNT)
+    ) {
+      merged.priceAmount = await this.computeParticularSum(
+        merged.serviceTypes.map((r) => r.serviceTypeId),
+        merged.priceCurrency,
+      );
+    }
+
     await this.dataSource.transaction(async (mgr) => {
       Object.assign(existing, {
         branchId: merged.branchId,
@@ -1204,6 +1316,10 @@ export class OrdersService implements OnModuleInit {
         [ts, id],
       );
       await mgr.query(
+        `UPDATE "credits_receivable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
+        [ts, id],
+      );
+      await mgr.query(
         `UPDATE "taxes_payable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
         [ts, id],
       );
@@ -1229,6 +1345,10 @@ export class OrdersService implements OnModuleInit {
       );
       await mgr.query(
         `UPDATE "accounts_receivable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
+        [id, ts],
+      );
+      await mgr.query(
+        `UPDATE "credits_receivable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
         [id, ts],
       );
       await mgr.query(

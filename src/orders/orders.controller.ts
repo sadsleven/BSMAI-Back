@@ -16,7 +16,12 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
-import { AttendOrderDto, BillingOrderDto, ReportOrderDto } from './dto/order-stages.dto';
+import {
+  AttendOrderDto,
+  AuthorizeOrderAmountDto,
+  BillingOrderDto,
+  ReportOrderDto,
+} from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
@@ -86,9 +91,21 @@ export class OrdersController {
     return this.service.restore(id, user);
   }
 
-  // --- Pasos 2-4 del flujo (transiciones de estado) ---
+  // --- Paso 1: autorización de monto por validador ---
 
   @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)
+  @Patch(':id/authorize-amount')
+  authorizeAmount(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AuthorizeOrderAmountDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.authorizeAmount(id, dto, user);
+  }
+
+  // --- Pasos 2-4 del flujo (transiciones de estado) ---
+
+  @RequirePermissions(PERMISSIONS.ORDERS.STAGE_ATTENTION)
   @Patch(':id/attend')
   attend(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -98,7 +115,7 @@ export class OrdersController {
     return this.service.attend(id, dto, user);
   }
 
-  @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)
+  @RequirePermissions(PERMISSIONS.ORDERS.STAGE_REPORT)
   @Patch(':id/report')
   report(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -108,7 +125,10 @@ export class OrdersController {
     return this.service.report(id, dto, user);
   }
 
-  @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)
+  @RequirePermissions(
+    PERMISSIONS.ORDERS.STAGE_BILLING,
+    PERMISSIONS.ORDERS.SET_PROVIDER_AMOUNT,
+  )
   @Patch(':id/billing')
   billing(
     @Param('id', new ParseUUIDPipe()) id: string,

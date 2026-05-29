@@ -23,7 +23,9 @@ const BRANCHES_GROUP = 'Sucursales';
 const ORDERS_GROUP = 'Órdenes';
 const ACCOUNTS_PAYABLE_GROUP = 'Cuentas por pagar';
 const ACCOUNTS_RECEIVABLE_GROUP = 'Cuentas por cobrar';
+const CREDITS_RECEIVABLE_GROUP = 'Créditos por cobrar';
 const TAXES_PAYABLE_GROUP = 'Impuestos por pagar';
+const REPORTS_GROUP = 'Reportes';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -338,6 +340,48 @@ const ordersPermissions: PermissionDefinition[] = [
     description: 'Permite restaurar órdenes desde la papelera',
     group: ORDERS_GROUP,
   },
+  {
+    name: 'orders.stage-attention',
+    resource: 'orders',
+    action: 'stage-attention',
+    label: 'Atención del paciente (Paso 2)',
+    description: 'Permite acceder al Paso 2 y marcar la orden como atendida',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.stage-report',
+    resource: 'orders',
+    action: 'stage-report',
+    label: 'Informe médico y estudios (Paso 3)',
+    description: 'Permite acceder al Paso 3 y emitir el informe médico',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.stage-billing',
+    resource: 'orders',
+    action: 'stage-billing',
+    label: 'Facturación y liquidación (Paso 4)',
+    description: 'Permite acceder al Paso 4 y finalizar la facturación de la orden',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.edit-amount',
+    resource: 'orders',
+    action: 'edit-amount',
+    label: 'Editar monto de la orden (Paso 1)',
+    description:
+      'Permite modificar el monto de la orden en el Paso 1 (descuentos o montos mayores al sugerido)',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.set-provider-amount',
+    resource: 'orders',
+    action: 'set-provider-amount',
+    label: 'Asignar liquidación a proveedores (Paso 4)',
+    description:
+      'Permite ver y editar el monto de liquidación a doctores/centros en el Paso 4',
+    group: ORDERS_GROUP,
+  },
 ];
 
 const accountsPayablePermissions: PermissionDefinition[] = [
@@ -394,6 +438,33 @@ const accountsReceivablePermissions: PermissionDefinition[] = [
   },
 ];
 
+const creditsReceivablePermissions: PermissionDefinition[] = [
+  {
+    name: 'credits-receivable.list',
+    resource: 'credits-receivable',
+    action: 'list',
+    label: 'Listar créditos por cobrar',
+    description: 'Permite ver el listado de créditos por cobrar',
+    group: CREDITS_RECEIVABLE_GROUP,
+  },
+  {
+    name: 'credits-receivable.view',
+    resource: 'credits-receivable',
+    action: 'view',
+    label: 'Ver detalle de crédito por cobrar',
+    description: 'Permite ver el detalle de un crédito por cobrar',
+    group: CREDITS_RECEIVABLE_GROUP,
+  },
+  {
+    name: 'credits-receivable.update',
+    resource: 'credits-receivable',
+    action: 'update',
+    label: 'Registrar cobros a créditos por cobrar',
+    description: 'Permite registrar cobros del titular del crédito',
+    group: CREDITS_RECEIVABLE_GROUP,
+  },
+];
+
 const taxesPayablePermissions: PermissionDefinition[] = [
   {
     name: 'taxes-payable.list',
@@ -421,6 +492,88 @@ const taxesPayablePermissions: PermissionDefinition[] = [
   },
 ];
 
+const reportsDefs: Array<{ key: string; label: string; description: string }> = [
+  {
+    key: 'receivables',
+    label: 'Ver reporte de cuentas por cobrar',
+    description: 'Permite acceder al reporte detallado de cuentas por cobrar',
+  },
+  {
+    key: 'payables',
+    label: 'Ver reporte de cuentas por pagar',
+    description: 'Permite acceder al reporte detallado de cuentas por pagar',
+  },
+  {
+    key: 'financial-summary',
+    label: 'Ver resumen financiero',
+    description: 'Permite acceder al reporte de ingresos vs egresos por mes',
+  },
+  {
+    key: 'doctor-production',
+    label: 'Ver producción por médico',
+    description: 'Permite acceder al reporte de producción agrupada por proveedor',
+  },
+  {
+    key: 'insurance-production',
+    label: 'Ver producción por aseguradora',
+    description: 'Permite acceder al reporte de producción agrupada por aseguradora',
+  },
+  {
+    key: 'aging',
+    label: 'Ver antigüedad de saldos',
+    description: 'Permite acceder al reporte de aging de cuentas por cobrar y por pagar',
+  },
+  {
+    key: 'collections',
+    label: 'Ver reporte de cobros recibidos',
+    description: 'Permite acceder al listado de cobros registrados de aseguradoras',
+  },
+  {
+    key: 'disbursements',
+    label: 'Ver reporte de pagos emitidos',
+    description: 'Permite acceder al listado de pagos a proveedores y al fisco',
+  },
+  {
+    key: 'orders-tracking',
+    label: 'Ver seguimiento de órdenes',
+    description: 'Permite acceder al reporte de órdenes por etapa del flujo',
+  },
+  {
+    key: 'services-billed',
+    label: 'Ver servicios facturados',
+    description: 'Permite acceder al reporte de demanda por tipo de servicio',
+  },
+  {
+    key: 'taxes-retained',
+    label: 'Ver reporte de impuestos retenidos',
+    description: 'Permite acceder al reporte detallado de retenciones aplicadas',
+  },
+  {
+    key: 'executive-panel',
+    label: 'Ver panel ejecutivo',
+    description: 'Permite acceder al panel ejecutivo con gráficos de flujo de caja y órdenes',
+  },
+  {
+    key: 'orders-analytics',
+    label: 'Ver análisis de órdenes',
+    description: 'Permite acceder al reporte gráfico de volumen y mezcla de órdenes',
+  },
+  {
+    key: 'insurer-collections',
+    label: 'Ver cobranzas por aseguradora',
+    description: 'Permite acceder al reporte gráfico de cobranzas por compañía de seguros',
+  },
+];
+
+const reportsPermissions: PermissionDefinition[] = reportsDefs.map((d) => ({
+  name: `reports.${d.key}.list`,
+  resource: `reports.${d.key}`,
+  action: 'list',
+  label: d.label,
+  description: d.description,
+  group: REPORTS_GROUP,
+}));
+
 export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...usersPermissions,
   ...rolesPermissions,
@@ -438,7 +591,9 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...ordersPermissions,
   ...accountsPayablePermissions,
   ...accountsReceivablePermissions,
+  ...creditsReceivablePermissions,
   ...taxesPayablePermissions,
+  ...reportsPermissions,
 ];
 
 const standardActions = {
@@ -511,6 +666,11 @@ export const PERMISSIONS = {
     SOFT_DELETE: 'orders.soft-delete',
     HARD_DELETE: 'orders.hard-delete',
     RESTORE: 'orders.restore',
+    STAGE_ATTENTION: 'orders.stage-attention',
+    STAGE_REPORT: 'orders.stage-report',
+    STAGE_BILLING: 'orders.stage-billing',
+    EDIT_AMOUNT: 'orders.edit-amount',
+    SET_PROVIDER_AMOUNT: 'orders.set-provider-amount',
   },
   ACCOUNTS_PAYABLE: {
     LIST: 'accounts-payable.list',
@@ -522,9 +682,27 @@ export const PERMISSIONS = {
     VIEW: 'accounts-receivable.view',
     UPDATE: 'accounts-receivable.update',
   },
+  CREDITS_RECEIVABLE: {
+    LIST: 'credits-receivable.list',
+    VIEW: 'credits-receivable.view',
+    UPDATE: 'credits-receivable.update',
+  },
   TAXES_PAYABLE: {
     LIST: 'taxes-payable.list',
     VIEW: 'taxes-payable.view',
     UPDATE: 'taxes-payable.update',
+  },
+  REPORTS: {
+    RECEIVABLES_LIST: 'reports.receivables.list',
+    PAYABLES_LIST: 'reports.payables.list',
+    FINANCIAL_SUMMARY_LIST: 'reports.financial-summary.list',
+    DOCTOR_PRODUCTION_LIST: 'reports.doctor-production.list',
+    INSURANCE_PRODUCTION_LIST: 'reports.insurance-production.list',
+    AGING_LIST: 'reports.aging.list',
+    COLLECTIONS_LIST: 'reports.collections.list',
+    DISBURSEMENTS_LIST: 'reports.disbursements.list',
+    ORDERS_TRACKING_LIST: 'reports.orders-tracking.list',
+    SERVICES_BILLED_LIST: 'reports.services-billed.list',
+    TAXES_RETAINED_LIST: 'reports.taxes-retained.list',
   },
 } as const;

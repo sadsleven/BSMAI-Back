@@ -155,6 +155,24 @@ export class Order {
   @JoinColumn({ name: 'createdById' })
   createdBy: User;
 
+  /**
+   * Autorización de monto (Paso 1). Cuando el usuario que edita no tiene
+   * `orders.edit-amount`, otro usuario validador autoriza e ingresa el monto.
+   * Se guarda quién lo autorizó, cuándo y la observación.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  amountAuthorizedById?: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'amountAuthorizedById' })
+  amountAuthorizedBy?: User | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  amountAuthorizedAt?: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  amountAuthorizationNote?: string | null;
+
   @OneToMany(() => OrderPayment, (p) => p.order, { cascade: false })
   payments: OrderPayment[];
 

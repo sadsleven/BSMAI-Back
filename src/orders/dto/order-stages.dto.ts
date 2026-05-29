@@ -3,14 +3,17 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsISO8601,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
   IsUUID,
   MaxLength,
+  MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
@@ -76,4 +79,29 @@ export class BillingOrderDto {
 
   @IsUUID()
   billingExchangeRateId: string;
+}
+
+/**
+ * Paso 1 — Autorización de monto por un usuario validador.
+ *
+ * El usuario que edita la orden (sin `orders.edit-amount`) solicita a otro
+ * usuario que sí tenga el permiso que ingrese sus credenciales y el nuevo
+ * monto + una observación. El validador queda registrado como autor del cambio.
+ */
+export class AuthorizeOrderAmountDto {
+  @IsEmail({}, { message: 'Email del validador inválido' })
+  validatorEmail: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Contraseña del validador requerida' })
+  validatorPassword: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive({ message: 'El monto debe ser mayor a 0' })
+  priceAmount: number;
+
+  @IsString()
+  @MinLength(3, { message: 'La observación debe tener al menos 3 caracteres' })
+  @MaxLength(1000)
+  observation: string;
 }
