@@ -34,7 +34,7 @@ export class DoctorsController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.DOCTORS.VIEW)
+  @RequirePermissions(PERMISSIONS.DOCTORS.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

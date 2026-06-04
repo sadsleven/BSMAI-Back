@@ -27,7 +27,7 @@ export class AccountsPayableController {
     return this.service.findAll(query, user);
   }
 
-  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.VIEW)
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.LIST)
   @Get(':id')
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,

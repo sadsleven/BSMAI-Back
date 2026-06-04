@@ -34,7 +34,7 @@ export class InsurancesController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.INSURANCES.VIEW)
+  @RequirePermissions(PERMISSIONS.INSURANCES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

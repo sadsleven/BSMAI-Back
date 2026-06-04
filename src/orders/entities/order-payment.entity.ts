@@ -15,7 +15,8 @@ import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity
 export type OrderPaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
-  | 'cash_foreign'
+  | 'cash_usd'
+  | 'cash_eur'
   | 'cash_bs'
   | 'other';
 
@@ -62,8 +63,8 @@ export class OrderPayment {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amountValue: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  amountInBs: string;
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  amountInUsd: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

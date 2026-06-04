@@ -18,7 +18,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-export const DOCTOR_AMOUNT_CURRENCIES = ['USD', 'EUR', 'BS'] as const;
 export const PROVIDER_TYPES_FOR_BILLING = ['doctor', 'care_center'] as const;
 
 /** Paso 2 — Atención del paciente. */
@@ -39,7 +38,7 @@ export class ReportOrderDto {
   otherStudies?: string | null;
 }
 
-/** Pago a un proveedor específico de la orden. */
+/** Pago en USD a un proveedor específico de la orden. */
 export class BillingProviderDto {
   @IsIn(PROVIDER_TYPES_FOR_BILLING)
   providerType: 'doctor' | 'care_center';
@@ -55,20 +54,16 @@ export class BillingProviderDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   amount: number;
-
-  @IsIn(DOCTOR_AMOUNT_CURRENCIES)
-  currency: 'USD' | 'EUR' | 'BS';
 }
 
 /**
  * Paso 4 — Facturación y liquidación.
  *
- * Acepta una lista `providers[]` con un pago por proveedor distinto que
- * participa en la orden. La tasa de cambio (`billingExchangeRateId`) es única
- * por orden — todos los provider amounts se convierten con ella si están en BS.
+ * Acepta una lista `providers[]` con un pago USD por proveedor distinto que
+ * participa en la orden. `billingExchangeRateId` es la tasa **USD/Bs** vigente
+ * al facturar — snapshot para convertir pagos BS/EUR a USD a posteriori.
  *
- * El antiguo `doctorAmount/doctorAmountCurrency` queda como total agregado
- * (no enviado por el cliente, derivado en service).
+ * `doctorAmount` queda como total agregado USD (derivado en service).
  */
 export class BillingOrderDto {
   @IsArray()

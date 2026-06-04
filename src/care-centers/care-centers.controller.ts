@@ -34,7 +34,7 @@ export class CareCentersController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.CARE_CENTERS.VIEW)
+  @RequirePermissions(PERMISSIONS.CARE_CENTERS.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

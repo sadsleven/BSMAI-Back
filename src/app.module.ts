@@ -25,13 +25,14 @@ import { ServiceTypesModule } from './service-types/service-types.module';
 import { ContractorsModule } from './contractors/contractors.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { BranchesModule } from './branches/branches.module';
+import { TaxUnitsModule } from './tax-units/tax-units.module';
 import { OrdersModule } from './orders/orders.module';
 import { AccountsPayableModule } from './accounts-payable/accounts-payable.module';
 import { AccountsReceivableModule } from './accounts-receivable/accounts-receivable.module';
-import { CreditsReceivableModule } from './credits-receivable/credits-receivable.module';
 import { TaxesPayableModule } from './taxes-payable/taxes-payable.module';
-import { AppConfigModule } from './config/app-config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AppConfigModule } from './app-config/app-config.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -56,13 +57,14 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ContractorsModule,
     ExchangeRatesModule,
     BranchesModule,
+    TaxUnitsModule,
     OrdersModule,
     AccountsPayableModule,
     AccountsReceivableModule,
-    CreditsReceivableModule,
     TaxesPayableModule,
-    AppConfigModule,
     DashboardModule,
+    AppConfigModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

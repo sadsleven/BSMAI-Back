@@ -13,7 +13,8 @@ import {
 export const PAYMENT_TYPES = [
   'mobile_payment',
   'bank_transfer',
-  'cash_foreign',
+  'cash_usd',
+  'cash_eur',
   'cash_bs',
   'other',
 ] as const;

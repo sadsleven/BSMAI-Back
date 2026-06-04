@@ -34,7 +34,7 @@ export class PathologiesController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.PATHOLOGIES.VIEW)
+  @RequirePermissions(PERMISSIONS.PATHOLOGIES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

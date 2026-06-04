@@ -35,4 +35,22 @@ export class DashboardController {
   billedMonthUsd(@CurrentUser() user: AuthenticatedUser) {
     return this.service.billedMonthUsd(user);
   }
+
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.LIST)
+  @Get('collected-month-usd')
+  collectedMonthUsd(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.collectedMonthUsd(user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.LIST)
+  @Get('receivable-total-usd')
+  receivableTotalUsd(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.receivableTotalUsd(user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.LIST)
+  @Get('payable-total-usd')
+  payableTotalUsd(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.payableTotalUsd(user);
+  }
 }

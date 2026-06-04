@@ -111,7 +111,6 @@ export class InsurancesService {
           insuranceId: saved.id,
           serviceTypeId: sp.serviceTypeId,
           priceUsd: sp.priceUsd.toFixed(2),
-          priceEur: sp.priceEur.toFixed(2),
         })),
       );
     }
@@ -170,7 +169,6 @@ export class InsurancesService {
             insuranceId: saved.id,
             serviceTypeId: sp.serviceTypeId,
             priceUsd: sp.priceUsd.toFixed(2),
-            priceEur: sp.priceEur.toFixed(2),
           })),
         );
       }

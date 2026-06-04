@@ -34,7 +34,7 @@ export class ServiceTypesController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.SERVICE_TYPES.VIEW)
+  @RequirePermissions(PERMISSIONS.SERVICE_TYPES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

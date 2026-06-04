@@ -15,7 +15,8 @@ import { AccountsReceivable } from './accounts-receivable.entity';
 export type AccountsReceivablePaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
-  | 'cash_foreign'
+  | 'cash_usd'
+  | 'cash_eur'
   | 'cash_bs'
   | 'other';
 
@@ -54,7 +55,16 @@ export class AccountsReceivablePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amountValue: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  amountInUsd: string;
+
+  /**
+   * Snapshot del pago en bolívares según la tasa del propio pago. Usado para
+   * comparar contra el target Bs de cuentas con `useFixedRate=true`. Sirve
+   * para el caso típico: cada cobro registrado a un seguro con tasa fija
+   * descuenta el target en Bs según la tasa aplicada al pago de ese día.
+   */
+  @Column({ type: 'numeric', precision: 18, scale: 2, default: 0 })
   amountInBs: string;
 
   @ManyToMany(() => AccountsReceivable, (a) => a.payments)

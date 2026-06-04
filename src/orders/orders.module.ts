@@ -19,10 +19,12 @@ import { InsuranceServicePrice } from '../insurances/entities/insurance-service-
 import { DoctorServicePrice } from '../doctors/entities/doctor-service-price.entity';
 import { CareCenterServicePrice } from '../care-centers/entities/care-center-service-price.entity';
 import { AuthModule } from '../auth/auth.module';
+import { AppConfigModule } from '../app-config/app-config.module';
 
 @Module({
   imports: [
     AuthModule,
+    AppConfigModule,
     TypeOrmModule.forFeature([
       Order,
       OrderPayment,

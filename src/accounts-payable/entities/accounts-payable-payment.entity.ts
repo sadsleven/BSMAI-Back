@@ -15,7 +15,8 @@ import { AccountsPayable } from './accounts-payable.entity';
 export type AccountsPayablePaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
-  | 'cash_foreign'
+  | 'cash_usd'
+  | 'cash_eur'
   | 'cash_bs'
   | 'other';
 
@@ -54,8 +55,8 @@ export class AccountsPayablePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amountValue: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  amountInBs: string;
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  amountInUsd: string;
 
   @ManyToMany(() => AccountsPayable, (a) => a.payments)
   accounts: AccountsPayable[];

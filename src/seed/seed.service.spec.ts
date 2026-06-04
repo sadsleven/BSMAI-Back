@@ -5,6 +5,7 @@ import { SeedService } from './seed.service';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Role } from '../roles/entities/role.entity';
 import { User } from '../users/entities/user.entity';
+import { Bank } from '../banks/entities/bank.entity';
 
 describe('SeedService', () => {
   let service: SeedService;
@@ -24,6 +25,7 @@ describe('SeedService', () => {
         { provide: getRepositoryToken(Permission), useFactory: repoMock },
         { provide: getRepositoryToken(Role), useFactory: repoMock },
         { provide: getRepositoryToken(User), useFactory: repoMock },
+        { provide: getRepositoryToken(Bank), useFactory: repoMock },
       ],
     }).compile();
 

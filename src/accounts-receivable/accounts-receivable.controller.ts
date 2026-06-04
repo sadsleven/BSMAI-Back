@@ -30,7 +30,7 @@ export class AccountsReceivableController {
     return this.service.findAll(query, user);
   }
 
-  @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.VIEW)
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.LIST)
   @Get(':id')
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,

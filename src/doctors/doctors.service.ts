@@ -165,7 +165,6 @@ export class DoctorsService {
           doctorId: saved.id,
           serviceTypeId: sp.serviceTypeId,
           priceUsd: sp.priceUsd.toFixed(2),
-          priceEur: sp.priceEur.toFixed(2),
         })),
       );
     }
@@ -242,7 +241,6 @@ export class DoctorsService {
             doctorId: saved.id,
             serviceTypeId: sp.serviceTypeId,
             priceUsd: sp.priceUsd.toFixed(2),
-            priceEur: sp.priceEur.toFixed(2),
           })),
         );
       }

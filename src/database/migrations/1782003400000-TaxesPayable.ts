@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Módulo Impuestos por pagar (retención fiscal). Espejo de accounts_payable
+ * Módulo Retenciones por pagar (retención fiscal). Espejo de accounts_payable
  * filtrado a las cuentas que generan retención al pagar al proveedor.
  *
  * Reglas de tasa (consistentes con AccountsPayableService.taxRateFor):
