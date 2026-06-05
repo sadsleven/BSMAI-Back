@@ -106,7 +106,7 @@ export class TaxPayable {
   })
   accountsPayables: AccountsPayable[];
 
-  /** Pagos al fisco aplicados sobre esta retención. */
+  /** Pagos al SENIAT aplicados sobre esta retención. */
   @ManyToMany(() => TaxPayablePayment, (p) => p.taxes, { cascade: false })
   @JoinTable({
     name: 'taxes_payable_payment_links',

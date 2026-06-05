@@ -241,7 +241,7 @@ export class TaxesPayableService {
       );
     }
 
-    // Target en Bs (la retención se entrega al fisco en Bs).
+    // Target en Bs (la retención se entrega al SENIAT en Bs).
     let totalTargetBs = 0;
     for (const t of taxes) totalTargetBs += Number(t.taxAmountBs);
 
@@ -257,7 +257,7 @@ export class TaxesPayableService {
 
     if (newTotalBs > totalTargetBs + TOLERANCE_BS) {
       throw new BadRequestException(
-        `El total de pagos (Bs ${newTotalBs.toFixed(2)}) excede el monto a pagar al fisco (Bs ${totalTargetBs.toFixed(2)})`,
+        `El total de pagos (Bs ${newTotalBs.toFixed(2)}) excede el monto a pagar al SENIAT (Bs ${totalTargetBs.toFixed(2)})`,
       );
     }
 

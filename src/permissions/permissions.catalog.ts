@@ -27,6 +27,7 @@ const ACCOUNTS_RECEIVABLE_GROUP = 'Cuentas por cobrar';
 const TAXES_PAYABLE_GROUP = 'Retenciones por pagar';
 const REPORTS_GROUP = 'Reportes';
 const APP_CONFIG_GROUP = 'Configuración';
+const FILES_GROUP = 'Archivos';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -421,7 +422,7 @@ const taxesPayablePermissions: PermissionDefinition[] = [
     resource: 'taxes-payable',
     action: 'update',
     label: 'Registrar pagos a retenciones por pagar',
-    description: 'Permite registrar pagos de la retención al fisco',
+    description: 'Permite registrar pagos de la retención al SENIAT',
     group: TAXES_PAYABLE_GROUP,
   },
 ];
@@ -465,7 +466,7 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
   {
     key: 'disbursements',
     label: 'Ver reporte de pagos emitidos',
-    description: 'Permite acceder al listado de pagos a proveedores y al fisco',
+    description: 'Permite acceder al listado de pagos a proveedores y al SENIAT',
   },
   {
     key: 'orders-tracking',
@@ -496,6 +497,33 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
     key: 'insurer-collections',
     label: 'Ver cobranzas por aseguradora',
     description: 'Permite acceder al reporte gráfico de cobranzas por compañía de seguros',
+  },
+];
+
+const filesPermissions: PermissionDefinition[] = [
+  {
+    name: 'files.list',
+    resource: 'files',
+    action: 'list',
+    label: 'Listar y ver archivos',
+    description: 'Permite listar y ver archivos adjuntos asociados a entidades del sistema',
+    group: FILES_GROUP,
+  },
+  {
+    name: 'files.create',
+    resource: 'files',
+    action: 'create',
+    label: 'Subir archivos',
+    description: 'Permite subir archivos al storage y asociarlos a entidades del sistema',
+    group: FILES_GROUP,
+  },
+  {
+    name: 'files.soft-delete',
+    resource: 'files',
+    action: 'soft-delete',
+    label: 'Eliminar archivos',
+    description: 'Permite eliminar archivos adjuntos (borrado lógico + remoción del storage)',
+    group: FILES_GROUP,
   },
 ];
 
@@ -548,6 +576,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...accountsReceivablePermissions,
   ...taxesPayablePermissions,
   ...appConfigPermissions,
+  ...filesPermissions,
   ...reportsPermissions,
 ];
 
@@ -626,6 +655,11 @@ export const PERMISSIONS = {
   APP_CONFIG: {
     VIEW: 'app-config.view',
     UPDATE: 'app-config.update',
+  },
+  FILES: {
+    LIST: 'files.list',
+    CREATE: 'files.create',
+    SOFT_DELETE: 'files.soft-delete',
   },
   REPORTS: {
     RECEIVABLES_LIST: 'reports.receivables.list',

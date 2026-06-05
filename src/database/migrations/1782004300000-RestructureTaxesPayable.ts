@@ -88,7 +88,7 @@ export class RestructureTaxesPayable1782004300000 implements MigrationInterface 
       `CREATE INDEX "idx_tp_payables_payable" ON "taxes_payable_payables"("payableId")`,
     );
 
-    // Pagos al fisco (mismo shape que accounts_payable_payments).
+    // Pagos al SENIAT (mismo shape que accounts_payable_payments).
     await queryRunner.query(`
       CREATE TABLE "taxes_payable_payments" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -107,7 +107,7 @@ export class RestructureTaxesPayable1782004300000 implements MigrationInterface 
       )
     `);
 
-    // Pivot tax_payable ↔ pagos al fisco (N:N).
+    // Pivot tax_payable ↔ pagos al SENIAT (N:N).
     await queryRunner.query(`
       CREATE TABLE "taxes_payable_payment_links" (
         "taxPayableId" uuid NOT NULL REFERENCES "taxes_payable"("id") ON DELETE CASCADE,

@@ -33,6 +33,7 @@ import { TaxesPayableModule } from './taxes-payable/taxes-payable.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SearchModule } from './search/search.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { SearchModule } from './search/search.module';
     DashboardModule,
     AppConfigModule,
     SearchModule,
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

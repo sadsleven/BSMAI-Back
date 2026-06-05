@@ -260,7 +260,7 @@ export class AccountsPayableService {
    * UNA `taxes_payable` que agrupa todas las órdenes y AP cubiertas.
    *
    * El proveedor recibe el monto NETO (= bruto − retención).
-   * El monto retenido queda como obligación al fisco en `taxes_payable`.
+   * El monto retenido queda como obligación al SENIAT en `taxes_payable`.
    */
   async registerPayment(
     dto: RegisterPaymentDto,

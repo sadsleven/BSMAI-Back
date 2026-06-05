@@ -787,7 +787,10 @@ export class OrdersService implements OnModuleInit {
 
   async report(id: string, dto: ReportOrderDto, user: AuthenticatedUser): Promise<Order> {
     const order = await this.findOne(id, user);
-    if (!['attended', 'report_issued'].includes(order.status)) {
+    // `otherStudies` + adjuntos del informe son editables retroactivamente.
+    // Permitimos cualquier estado salvo `draft`/`in_progress` (orden aún sin
+    // atender — no tiene sentido emitir informe).
+    if (order.status === 'draft' || order.status === 'in_progress') {
       throw new BadRequestException('La orden debe estar atendida para emitir informe');
     }
     if (dto.otherStudies !== undefined) {
