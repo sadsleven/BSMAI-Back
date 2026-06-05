@@ -10,6 +10,8 @@ import { AccountsPayable } from '../accounts-payable/entities/accounts-payable.e
 import { AccountsReceivable } from '../accounts-receivable/entities/accounts-receivable.entity';
 import { AccountsPayablePayment } from '../accounts-payable/entities/accounts-payable-payment.entity';
 import { AccountsReceivablePayment } from '../accounts-receivable/entities/accounts-receivable-payment.entity';
+import { TaxPayable } from '../taxes-payable/entities/tax-payable.entity';
+import { TaxPayablePayment } from '../taxes-payable/entities/tax-payable-payment.entity';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AccountsReceivablePayment } from '../accounts-receivable/entities/accou
       AccountsReceivable,
       AccountsPayablePayment,
       AccountsReceivablePayment,
+      TaxPayable,
+      TaxPayablePayment,
     ]),
   ],
   controllers: [DashboardController],

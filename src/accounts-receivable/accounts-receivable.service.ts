@@ -141,7 +141,7 @@ export class AccountsReceivableService {
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(
-        `(LOWER(order."orderNumber") LIKE :s
+        `(LOWER("order"."orderNumber") LIKE :s
           OR LOWER(ar."receivableNumber") LIKE :s
           OR LOWER(COALESCE(insurance."name", '')) LIKE :s
           OR LOWER(COALESCE(holder."firstName", '')) LIKE :s

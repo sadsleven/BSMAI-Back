@@ -117,7 +117,7 @@ export class AccountsPayableService {
 
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
-      qb.andWhere(`LOWER(order."orderNumber") LIKE :s`, { s });
+      qb.andWhere(`LOWER("order"."orderNumber") LIKE :s`, { s });
     }
 
     return paginateBuilder<AccountsPayable>(qb, page, limit);

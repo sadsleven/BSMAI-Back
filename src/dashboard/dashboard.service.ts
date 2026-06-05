@@ -9,6 +9,8 @@ import { AccountsPayable } from '../accounts-payable/entities/accounts-payable.e
 import { AccountsReceivable } from '../accounts-receivable/entities/accounts-receivable.entity';
 import { AccountsPayablePayment } from '../accounts-payable/entities/accounts-payable-payment.entity';
 import { AccountsReceivablePayment } from '../accounts-receivable/entities/accounts-receivable-payment.entity';
+import { TaxPayable } from '../taxes-payable/entities/tax-payable.entity';
+import { TaxPayablePayment } from '../taxes-payable/entities/tax-payable-payment.entity';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 
 @Injectable()
@@ -26,9 +28,14 @@ export class DashboardService {
     private readonly apPaymentsRepo: Repository<AccountsPayablePayment>,
     @InjectRepository(AccountsReceivablePayment)
     private readonly arPaymentsRepo: Repository<AccountsReceivablePayment>,
+    @InjectRepository(TaxPayable)
+    private readonly tpRepo: Repository<TaxPayable>,
+    @InjectRepository(TaxPayablePayment)
+    private readonly tpPaymentsRepo: Repository<TaxPayablePayment>,
     private readonly dataSource: DataSource,
   ) {
     void this.ratesRepo;
+    void this.tpPaymentsRepo;
   }
 
   async patientsActiveCount(): Promise<{ count: number }> {
@@ -179,6 +186,36 @@ export class DashboardService {
       return s + Math.max(0, provider - paid);
     }, 0);
     return { amount: +total.toFixed(2), currency: 'USD' };
+  }
+
+  /** Total USD por pagar de retenciones SENIAT (Σ taxAmountBs − Σ amountInBs pagado) / tasa USD actual. */
+  async taxesPayableTotalUsd(): Promise<{ amount: number; currency: 'USD' }> {
+    const rows = await this.tpRepo
+      .createQueryBuilder('tp')
+      .leftJoin('tp.payments', 'p')
+      .where('tp.status IN (:...statuses)', {
+        statuses: ['unpaid', 'partially_paid'],
+      })
+      .andWhere('tp."deletedAt" IS NULL')
+      .select('tp.id', 'id')
+      .addSelect('tp."taxAmountBs"', 'taxAmountBs')
+      .addSelect('COALESCE(SUM(p."amountInBs"), 0)', 'paidBs')
+      .groupBy('tp.id')
+      .addGroupBy('tp."taxAmountBs"')
+      .getRawMany<{ id: string; taxAmountBs: string; paidBs: string }>();
+    const totalBs = rows.reduce(
+      (s, r) => s + Math.max(0, Number(r.taxAmountBs) - Number(r.paidBs)),
+      0,
+    );
+    const currentUsd = await this.ratesRepo.findOne({
+      where: { currency: 'USD', isActive: true, deletedAt: IsNull() },
+      order: { effectiveDate: 'DESC', createdAt: 'DESC' },
+    });
+    const rate = Number(currentUsd?.amountBs ?? 0);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      return { amount: 0, currency: 'USD' };
+    }
+    return { amount: +(totalBs / rate).toFixed(2), currency: 'USD' };
   }
 
   private async applyBranchScope(

@@ -53,4 +53,10 @@ export class DashboardController {
   payableTotalUsd(@CurrentUser() user: AuthenticatedUser) {
     return this.service.payableTotalUsd(user);
   }
+
+  @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.LIST)
+  @Get('taxes-payable-total-usd')
+  taxesPayableTotalUsd() {
+    return this.service.taxesPayableTotalUsd();
+  }
 }
