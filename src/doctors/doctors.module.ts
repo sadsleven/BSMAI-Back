@@ -9,9 +9,11 @@ import { Bank } from '../banks/entities/bank.entity';
 import { ServiceType } from '../service-types/entities/service-type.entity';
 import { DoctorsService } from './doctors.service';
 import { DoctorsController } from './doctors.controller';
+import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.module';
 
 @Module({
   imports: [
+    ProviderAccountsModule,
     TypeOrmModule.forFeature([
       Doctor,
       DoctorPhone,

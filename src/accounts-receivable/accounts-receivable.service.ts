@@ -19,8 +19,69 @@ import {
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
+import {
+  computeAmountInBs,
+  computeAmountInUsd,
+} from '../shared/utils/payment-conversion';
+import { Order } from '../orders/entities/order.entity';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service';
 
+const TOLERANCE_USD = 0.01;
 const TOLERANCE_BS = 0.01;
+
+/**
+ * Comisión Cashea (USD) snapshot de una orden = primeraCuota × firstRate +
+ * total × totalRate. 0 si la orden no es Cashea o le faltan snapshots.
+ *
+ * Cálculo exacto en centavos enteros (redondeo mitad-arriba) para evitar el
+ * drift de punto flotante de `Number.toFixed`, que trunca el medio-centavo
+ * hacia abajo (ej. 0.25 × 6% = 0.015 → toFixed daría 0.01 en vez de 0.02).
+ * Montos en centavos, tasas en diezmilésimos:
+ *   comisiónCents = round((primeraCuotaCents·r1 + precioCents·r2) / 10000).
+ */
+export function casheaCommissionForOrder(order: Order): number {
+  if (order.type !== 'cashea') return 0;
+  const price = Number(order.priceAmount);
+  if (!Number.isFinite(price)) return 0;
+  const firstAmount = Number(order.casheaFirstInstallmentAmount) || 0;
+  const firstRate = Number(order.casheaFirstInstallmentRate) || 0;
+  const totalRate = Number(order.casheaTotalRate) || 0;
+  const firstCents = Math.round(firstAmount * 100);
+  const priceCents = Math.round(price * 100);
+  const r1 = Math.round(firstRate * 10000);
+  const r2 = Math.round(totalRate * 10000);
+  const commissionCents = Math.round((firstCents * r1 + priceCents * r2) / 10000);
+  return commissionCents / 100;
+}
+
+/**
+ * Target USD que el comercio espera cobrar por una orden. Para órdenes Cashea
+ * descuenta la comisión snapshot en dos tramos (primera cuota + total): el
+ * comercio recibe priceAmount − comisión. Resto de tipos esperan priceAmount.
+ *
+ * No aplica a órdenes con `useFixedRate=true` (esas tienen target en Bs,
+ * usar `targetBsForOrder`).
+ */
+export function targetUsdForOrder(order: Order): number {
+  const price = Number(order.priceAmount);
+  if (!Number.isFinite(price)) return 0;
+  if (order.type === 'cashea') {
+    return +(price - casheaCommissionForOrder(order)).toFixed(2);
+  }
+  return price;
+}
+
+/**
+ * Target Bs para órdenes seguro con tasa fija. Devuelve null si la orden no
+ * está en modo tasa fija. Se calcula `priceAmount × fixedExchangeRate.amountBs`.
+ */
+export function targetBsForOrder(order: Order): number | null {
+  if (!order.useFixedRate || !order.fixedExchangeRate) return null;
+  const price = Number(order.priceAmount);
+  const rateBs = Number(order.fixedExchangeRate.amountBs);
+  if (!Number.isFinite(price) || !Number.isFinite(rateBs)) return null;
+  return +(price * rateBs).toFixed(2);
+}
 
 @Injectable()
 export class AccountsReceivableService {
@@ -33,7 +94,11 @@ export class AccountsReceivableService {
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
     private readonly dataSource: DataSource,
-  ) {}
+    private readonly paymentAccounts: PaymentAccountsService,
+  ) {
+    void this.paymentsRepo;
+    void this.banksRepo;
+  }
 
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
     if (user.isSuperAdmin) {
@@ -65,6 +130,8 @@ export class AccountsReceivableService {
       search,
       status,
       insuranceId,
+      holderId,
+      debtorType,
       branchId,
       orderId,
       sortBy = 'createdAt',
@@ -76,7 +143,9 @@ export class AccountsReceivableService {
       .leftJoinAndSelect('ar.order', 'order')
       .leftJoinAndSelect('order.branch', 'branch')
       .leftJoinAndSelect('order.billingExchangeRate', 'billingRate')
+      .leftJoinAndSelect('order.fixedExchangeRate', 'fixedRate')
       .leftJoinAndSelect('ar.insurance', 'insurance')
+      .leftJoinAndSelect('ar.holder', 'holder')
       .leftJoinAndSelect('ar.payments', 'payments')
       .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
 
@@ -90,12 +159,25 @@ export class AccountsReceivableService {
     }
     if (status) qb.andWhere('ar.status = :status', { status });
     if (insuranceId) qb.andWhere('ar.insuranceId = :insuranceId', { insuranceId });
+    if (holderId) qb.andWhere('ar.holderId = :holderId', { holderId });
+    if (debtorType === 'insurance') qb.andWhere('ar.insuranceId IS NOT NULL');
+    if (debtorType === 'holder') qb.andWhere('ar.holderId IS NOT NULL');
     if (branchId) qb.andWhere('order.branchId = :branchId', { branchId });
     if (orderId) qb.andWhere('ar.orderId = :orderId', { orderId });
 
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
-      qb.andWhere(`LOWER(order."orderNumber") LIKE :s`, { s });
+      qb.andWhere(
+        `(LOWER("order"."orderNumber") LIKE :s
+          OR LOWER(ar."receivableNumber") LIKE :s
+          OR LOWER(COALESCE(insurance."name", '')) LIKE :s
+          OR LOWER(COALESCE(holder."firstName", '')) LIKE :s
+          OR LOWER(COALESCE(holder."lastName", '')) LIKE :s
+          OR LOWER(COALESCE(holder."businessName", '')) LIKE :s
+          OR LOWER(COALESCE(holder."cedula", '')) LIKE :s
+          OR LOWER(COALESCE(holder."rif", '')) LIKE :s)`,
+        { s },
+      );
     }
 
     return paginateBuilder<AccountsReceivable>(qb, page, limit);
@@ -105,8 +187,13 @@ export class AccountsReceivableService {
     const account = await this.repo.findOne({
       where: { id },
       relations: {
-        order: { branch: true, billingExchangeRate: true },
+        order: {
+          branch: true,
+          billingExchangeRate: true,
+          fixedExchangeRate: true,
+        },
         insurance: true,
+        holder: { phones: true },
         payments: { exchangeRate: true },
       },
     });
@@ -128,6 +215,7 @@ export class AccountsReceivableService {
 
   private async resolvePaymentForSave(
     p: AccountsReceivablePaymentDto,
+    usdExchangeRateId?: string | null,
   ): Promise<Partial<AccountsReceivablePayment>> {
     const out: Partial<AccountsReceivablePayment> = {
       type: p.type,
@@ -136,45 +224,94 @@ export class AccountsReceivableService {
       bankCode: null,
       accountNumber: null,
       exchangeRateId: null,
+      paymentAccountId: null,
       amountCurrency: p.amountCurrency,
       amountValue: p.amountValue.toFixed(2),
-      amountInBs: '0',
+      amountInUsd: '0',
     };
 
-    let amountInBs = 0;
-    if (p.amountCurrency === 'BS') {
-      amountInBs = p.amountValue;
-    } else {
-      if (!p.exchangeRateId) {
+    const needsPaymentAccount =
+      p.type === 'mobile_payment' || p.type === 'bank_transfer' || p.type === 'other';
+
+    if (needsPaymentAccount) {
+      if (!p.paymentAccountId)
         throw new BadRequestException(
-          `Cobro en ${p.amountCurrency}: exchangeRateId requerido`,
+          `paymentAccountId requerido para cobros de tipo ${p.type}`,
         );
-      }
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
-      if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
-      amountInBs = p.amountValue * Number(rate.amountBs);
+      const account = await this.paymentAccounts.assertUsableForPaymentType(
+        p.paymentAccountId,
+        p.type as 'mobile_payment' | 'bank_transfer' | 'other',
+      );
+      out.paymentAccountId = account.id;
+      out.bankCode = account.bankCode ?? null;
+      out.accountNumber = account.accountNumber ?? null;
+    } else if (p.paymentAccountId) {
+      throw new BadRequestException(
+        `Cobros de tipo ${p.type} no pueden referenciar una cuenta de pago`,
+      );
     }
-    out.amountInBs = amountInBs.toFixed(2);
 
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
-      if (!p.bankCode) throw new BadRequestException('bankCode requerido');
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      const bank = await this.banksRepo.findOne({ where: { code: p.bankCode } });
-      if (!bank) throw new BadRequestException('Banco no encontrado');
-      out.bankCode = p.bankCode;
-      out.exchangeRateId = p.exchangeRateId ?? null;
+      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
+      if (p.amountCurrency !== 'BS')
+        throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
+      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!rate || rate.currency !== 'USD')
+        throw new BadRequestException('Cobro en BS requiere tasa USD/Bs');
+      out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
+      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
+      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!rate || rate.currency !== 'USD')
+        throw new BadRequestException('cash_bs requiere tasa USD/Bs');
+      out.exchangeRateId = p.exchangeRateId;
+    } else if (p.type === 'cash_usd') {
+      if (p.amountCurrency !== 'USD')
+        throw new BadRequestException('cash_usd debe ser en USD');
       out.exchangeRateId = p.exchangeRateId ?? null;
-    } else if (p.type === 'cash_foreign') {
-      if (p.amountCurrency === 'BS')
-        throw new BadRequestException('cash_foreign no puede ser BS');
-      out.exchangeRateId = p.exchangeRateId ?? null;
+    } else if (p.type === 'cash_eur') {
+      if (p.amountCurrency !== 'EUR')
+        throw new BadRequestException('cash_eur debe ser en EUR');
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido (EUR)');
+      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!rate || rate.currency !== 'EUR')
+        throw new BadRequestException('cash_eur requiere una tasa de cambio en EUR');
+      out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      out.accountNumber = p.accountNumber ?? null;
-      out.exchangeRateId = p.exchangeRateId ?? null;
+      if (p.amountCurrency === 'BS' || p.amountCurrency === 'EUR') {
+        if (!p.exchangeRateId)
+          throw new BadRequestException(
+            `exchangeRateId requerido para cobro other en ${p.amountCurrency}`,
+          );
+        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+        if (p.amountCurrency === 'BS' && rate.currency !== 'USD')
+          throw new BadRequestException('other en BS requiere tasa USD/Bs');
+        if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
+          throw new BadRequestException('other en EUR requiere tasa EUR/Bs');
+        out.exchangeRateId = p.exchangeRateId;
+      }
     }
+
+    const conversionInput = {
+      amountValue: p.amountValue,
+      amountCurrency: p.amountCurrency,
+      exchangeRateId: p.exchangeRateId ?? null,
+    };
+    const usdAmount = await computeAmountInUsd(conversionInput, this.ratesRepo, {
+      usdExchangeRateId: usdExchangeRateId ?? null,
+    });
+    out.amountInUsd = usdAmount.toFixed(2);
+    // Bs snapshot — usado para AR de seguro con tasa fija. Tomamos la tasa del
+    // propio pago: BS=valor crudo, USD/EUR=valor × rate.amountBs del rate snapshot.
+    const bsAmount = await computeAmountInBs(conversionInput, this.ratesRepo, {
+      usdExchangeRateId: usdExchangeRateId ?? null,
+    });
+    out.amountInBs = bsAmount.toFixed(2);
     return out;
   }
 
@@ -185,8 +322,13 @@ export class AccountsReceivableService {
     const accounts = await this.repo.find({
       where: { id: In(dto.receivableIds) },
       relations: {
-        order: { branch: true, billingExchangeRate: true },
+        order: {
+          branch: true,
+          billingExchangeRate: true,
+          fixedExchangeRate: true,
+        },
         insurance: true,
+        holder: true,
         payments: true,
       },
     });
@@ -198,43 +340,94 @@ export class AccountsReceivableService {
     // Receivable permite cualquier estado: incluso ya 'collected' u 'overcollected'
     // sigue admitiendo más cobros (se acumula como 'overcollected').
 
-    // Agrupación: mismo seguro
-    const insuranceIds = new Set(accounts.map((a) => a.insuranceId));
-    if (insuranceIds.size > 1) {
+    // Agrupación: todas las cuentas deben compartir deudor — mismo seguro o mismo titular.
+    // No se permite mezclar tipos de deudor en un mismo cobro.
+    const insuranceIds = new Set(
+      accounts.filter((a) => a.insuranceId).map((a) => a.insuranceId!),
+    );
+    const holderIds = new Set(
+      accounts.filter((a) => a.holderId).map((a) => a.holderId!),
+    );
+    if (insuranceIds.size > 0 && holderIds.size > 0) {
       throw new BadRequestException(
-        'Solo se pueden agrupar cuentas del mismo seguro',
+        'No se pueden mezclar cuentas de seguro con cuentas de titular',
       );
     }
-
-    // Targets en Bs (priceAmount de cada orden convertido).
-    let totalTargetBs = 0;
-    for (const acc of accounts) {
-      totalTargetBs += await this.priceAmountInBs(acc);
+    if (insuranceIds.size > 1) {
+      throw new BadRequestException('Solo se pueden agrupar cuentas del mismo seguro');
+    }
+    if (holderIds.size > 1) {
+      throw new BadRequestException('Solo se pueden agrupar cuentas del mismo titular');
     }
 
-    const existingCollectedBs = accounts.reduce(
-      (sum, acc) =>
-        sum +
-        (acc.payments ?? []).reduce(
-          (s, p) => s + (Number(p.amountInBs) || 0),
-          0,
-        ),
-      0,
-    );
-    const totalNewBs = await this.computePaymentsTotalBs(dto.payments);
-    const newTotalBs = existingCollectedBs + totalNewBs;
+    // Tasa fija: todas las cuentas del cobro deben compartir modo (todo Bs ó
+    // todo USD). Mezclar implica monedas distintas — no se puede sumar.
+    const fixedRateAccounts = accounts.filter((a) => a.order.useFixedRate);
+    const usdRateAccounts = accounts.filter((a) => !a.order.useFixedRate);
+    if (fixedRateAccounts.length > 0 && usdRateAccounts.length > 0) {
+      throw new BadRequestException(
+        'No se pueden mezclar cuentas con tasa fija (Bs) y cuentas en USD en un mismo cobro',
+      );
+    }
+    const useFixedRateMode = fixedRateAccounts.length > 0;
 
-    // Determinar status (sin cap superior).
+    const usdRateId = accounts[0]?.order?.billingExchangeRateId ?? null;
+
     let newStatus: 'collected' | 'partially_collected' | 'overcollected';
-    if (newTotalBs > totalTargetBs + TOLERANCE_BS) newStatus = 'overcollected';
-    else if (Math.abs(totalTargetBs - newTotalBs) <= TOLERANCE_BS)
-      newStatus = 'collected';
-    else newStatus = 'partially_collected';
+
+    if (useFixedRateMode) {
+      // Modo Bs: target y cobros se comparan en bolívares.
+      let totalTargetBs = 0;
+      for (const acc of accounts) {
+        const t = targetBsForOrder(acc.order);
+        if (t === null)
+          throw new BadRequestException(
+            'Cuenta con tasa fija sin tasa snapshot — recargá la orden',
+          );
+        totalTargetBs += t;
+      }
+      const existingCollectedBs = accounts.reduce(
+        (sum, acc) =>
+          sum +
+          (acc.payments ?? []).reduce(
+            (s, p) => s + (Number(p.amountInBs) || 0),
+            0,
+          ),
+        0,
+      );
+      const totalNewBs = await this.computePaymentsTotalBs(dto.payments, usdRateId);
+      const newTotalBs = existingCollectedBs + totalNewBs;
+      if (newTotalBs > totalTargetBs + TOLERANCE_BS) newStatus = 'overcollected';
+      else if (Math.abs(totalTargetBs - newTotalBs) <= TOLERANCE_BS)
+        newStatus = 'collected';
+      else newStatus = 'partially_collected';
+    } else {
+      // Modo USD: comportamiento histórico, con ajuste Cashea via targetUsdForOrder.
+      let totalTargetUsd = 0;
+      for (const acc of accounts) {
+        totalTargetUsd += targetUsdForOrder(acc.order);
+      }
+      const existingCollectedUsd = accounts.reduce(
+        (sum, acc) =>
+          sum +
+          (acc.payments ?? []).reduce(
+            (s, p) => s + (Number(p.amountInUsd) || 0),
+            0,
+          ),
+        0,
+      );
+      const totalNewUsd = await this.computePaymentsTotalUsd(dto.payments, usdRateId);
+      const newTotalUsd = existingCollectedUsd + totalNewUsd;
+      if (newTotalUsd > totalTargetUsd + TOLERANCE_USD) newStatus = 'overcollected';
+      else if (Math.abs(totalTargetUsd - newTotalUsd) <= TOLERANCE_USD)
+        newStatus = 'collected';
+      else newStatus = 'partially_collected';
+    }
 
     const ids = await this.dataSource.transaction(async (mgr) => {
       const savedPaymentIds: string[] = [];
       for (const p of dto.payments) {
-        const payload = await this.resolvePaymentForSave(p);
+        const payload = await this.resolvePaymentForSave(p, usdRateId);
         const entity = mgr.create(AccountsReceivablePayment, payload);
         const saved = await mgr.save(entity);
         savedPaymentIds.push(saved.id);
@@ -264,40 +457,42 @@ export class AccountsReceivableService {
     return Promise.all(ids.map((id) => this.findOne(id, user)));
   }
 
-  /** priceAmount de la orden convertido a Bs vía billingExchangeRate (o tasa actual fallback). */
-  private async priceAmountInBs(account: AccountsReceivable): Promise<number> {
-    const order = account.order;
-    const amount = Number(order.priceAmount);
-    if (!order.billingExchangeRateId) {
-      // Sin tasa registrada en la orden: usar valor numérico tal cual (interpretado como Bs).
-      // En la práctica las cuentas de receivable existen tras facturación → siempre hay billing rate.
-      return amount;
-    }
-    const rate =
-      order.billingExchangeRate ??
-      (await this.ratesRepo.findOne({ where: { id: order.billingExchangeRateId } }));
-    if (!rate) return amount;
-    return amount * Number(rate.amountBs);
-  }
-
-  /** Suma los pagos del DTO en Bs (BS directo, USD/EUR convertidos vía exchangeRateId). */
+  /** Suma los pagos del DTO en Bs via helper. */
   private async computePaymentsTotalBs(
     payments: AccountsReceivablePaymentDto[],
+    usdExchangeRateId: string | null,
   ): Promise<number> {
     let total = 0;
     for (const p of payments) {
-      if (p.amountCurrency === 'BS') {
-        total += p.amountValue;
-      } else {
-        if (!p.exchangeRateId) {
-          throw new BadRequestException(
-            `Cobro en ${p.amountCurrency}: exchangeRateId requerido`,
-          );
-        }
-        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
-        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
-        total += p.amountValue * Number(rate.amountBs);
-      }
+      total += await computeAmountInBs(
+        {
+          amountValue: p.amountValue,
+          amountCurrency: p.amountCurrency,
+          exchangeRateId: p.exchangeRateId ?? null,
+        },
+        this.ratesRepo,
+        { usdExchangeRateId },
+      );
+    }
+    return total;
+  }
+
+  /** Suma los pagos del DTO en USD via helper. */
+  private async computePaymentsTotalUsd(
+    payments: AccountsReceivablePaymentDto[],
+    usdExchangeRateId: string | null,
+  ): Promise<number> {
+    let total = 0;
+    for (const p of payments) {
+      total += await computeAmountInUsd(
+        {
+          amountValue: p.amountValue,
+          amountCurrency: p.amountCurrency,
+          exchangeRateId: p.exchangeRateId ?? null,
+        },
+        this.ratesRepo,
+        { usdExchangeRateId },
+      );
     }
     return total;
   }

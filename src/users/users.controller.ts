@@ -31,7 +31,7 @@ export class UsersController {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions(PERMISSIONS.USERS.VIEW)
+  @RequirePermissions(PERMISSIONS.USERS.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

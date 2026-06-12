@@ -15,7 +15,8 @@ import { AccountsPayable } from './accounts-payable.entity';
 export type AccountsPayablePaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
-  | 'cash_foreign'
+  | 'cash_usd'
+  | 'cash_eur'
   | 'cash_bs'
   | 'other';
 
@@ -54,7 +55,12 @@ export class AccountsPayablePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amountValue: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  amountInUsd: string;
+
+  /** Monto del pago en bolívares (snapshot a la tasa usada). Para acumular
+   * pagos parciales al proveedor de forma exacta. */
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   amountInBs: string;
 
   @ManyToMany(() => AccountsPayable, (a) => a.payments)

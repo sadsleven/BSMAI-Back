@@ -19,9 +19,14 @@ import { UpdateCareCenterDto } from './dto/update-care-center.dto';
 import { QueryCareCentersDto } from './dto/query-care-centers.dto';
 import { PhoneDto } from './dto/phone.dto';
 import { PaymentMethodDto } from './dto/payment-method.dto';
+import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { normalizeRif } from '../shared/validators/ve-formats';
+import { ProviderAccountsService } from '../provider-accounts/provider-accounts.service';
+
+/** Apellido placeholder para la cuenta de usuario de un centro (User exige lastName). */
+const CARE_CENTER_USER_LAST_NAME = 'Centro de atención';
 
 @Injectable()
 export class CareCentersService {
@@ -38,6 +43,7 @@ export class CareCentersService {
     private readonly pricesRepo: Repository<CareCenterServicePrice>,
     @InjectRepository(ServiceType)
     private readonly serviceTypesRepo: Repository<ServiceType>,
+    private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
   async findAll(query: QueryCareCentersDto): Promise<PaginatedResponse<CareCenter>> {
@@ -143,21 +149,39 @@ export class CareCentersService {
           careCenterId: saved.id,
           serviceTypeId: sp.serviceTypeId,
           priceUsd: sp.priceUsd.toFixed(2),
-          priceEur: sp.priceEur.toFixed(2),
         })),
       );
     }
+
+    // Aprovisionar cuenta de acceso si se definió contraseña.
+    if (dto.password) {
+      if (!saved.email) {
+        throw new BadRequestException(
+          'El email es requerido para habilitar el acceso del centro',
+        );
+      }
+      const userId = await this.providerAccounts.provisionOrUpdateAccount({
+        email: saved.email,
+        firstName: saved.businessName,
+        lastName: CARE_CENTER_USER_LAST_NAME,
+        password: dto.password,
+      });
+      await this.repo.update(saved.id, { userId });
+    }
+
     return this.findOne(saved.id);
   }
 
   async update(id: string, dto: UpdateCareCenterDto): Promise<CareCenter> {
     const center = await this.findOne(id);
+    let accountFieldsChanged = false;
 
     if (dto.businessName) {
       const businessName = dto.businessName.trim();
       if (businessName !== center.businessName) {
         await this.assertUniqueBusinessName(businessName);
         center.businessName = businessName;
+        accountFieldsChanged = true;
       }
     }
     if (dto.email !== undefined) {
@@ -165,6 +189,7 @@ export class CareCentersService {
       if (trimmed !== center.email) {
         if (trimmed) await this.assertUniqueEmail(trimmed);
         center.email = trimmed;
+        accountFieldsChanged = true;
       }
     }
     if (dto.rif !== undefined) {
@@ -206,13 +231,47 @@ export class CareCentersService {
             careCenterId: saved.id,
             serviceTypeId: sp.serviceTypeId,
             priceUsd: sp.priceUsd.toFixed(2),
-            priceEur: sp.priceEur.toFixed(2),
           })),
         );
       }
     }
 
+    // Aprovisionar / sincronizar cuenta de acceso.
+    if (dto.password) {
+      if (!saved.email) {
+        throw new BadRequestException(
+          'El email es requerido para habilitar el acceso del centro',
+        );
+      }
+      const userId = await this.providerAccounts.provisionOrUpdateAccount({
+        existingUserId: saved.userId ?? null,
+        email: saved.email,
+        firstName: saved.businessName,
+        lastName: CARE_CENTER_USER_LAST_NAME,
+        password: dto.password,
+      });
+      if (userId !== saved.userId) await this.repo.update(saved.id, { userId });
+    } else if (saved.userId && accountFieldsChanged && saved.email) {
+      await this.providerAccounts.provisionOrUpdateAccount({
+        existingUserId: saved.userId,
+        email: saved.email,
+        firstName: saved.businessName,
+        lastName: CARE_CENTER_USER_LAST_NAME,
+      });
+    }
+
     return this.findOne(saved.id);
+  }
+
+  /** Establece/cambia la contraseña de acceso del centro (vía cuenta vinculada). */
+  async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
+    const center = await this.findOne(id);
+    if (!center.userId) {
+      throw new BadRequestException(
+        'El centro no tiene acceso habilitado. Asigná una contraseña desde la edición.',
+      );
+    }
+    await this.providerAccounts.setPassword(center.userId, dto.newPassword);
   }
 
   private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
@@ -237,16 +296,20 @@ export class CareCentersService {
   async toggleActive(id: string): Promise<CareCenter> {
     const center = await this.findOne(id);
     center.isActive = !center.isActive;
-    return this.repo.save(center);
+    const saved = await this.repo.save(center);
+    await this.providerAccounts.setAccountActive(saved.userId, saved.isActive);
+    return saved;
   }
 
   async softDelete(id: string): Promise<void> {
-    await this.findOne(id);
+    const center = await this.findOne(id);
     await this.repo.softDelete(id);
+    await this.providerAccounts.setAccountActive(center.userId, false);
   }
 
   async hardDelete(id: string): Promise<void> {
-    await this.findOne(id, true);
+    const center = await this.findOne(id, true);
+    await this.providerAccounts.setAccountActive(center.userId, false);
     await this.repo.delete(id);
   }
 
@@ -255,6 +318,7 @@ export class CareCentersService {
     if (!center) throw new NotFoundException('Centro de atención no encontrado');
     if (!center.deletedAt) return center;
     await this.repo.restore(id);
+    await this.providerAccounts.setAccountActive(center.userId, true);
     return this.findOne(id);
   }
 

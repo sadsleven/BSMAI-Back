@@ -28,13 +28,13 @@ export class PatientsController {
     return this.service.findAll(query);
   }
 
-  @RequirePermissions(PERMISSIONS.PATIENTS.VIEW)
+  @RequirePermissions(PERMISSIONS.PATIENTS.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);
   }
 
-  @RequirePermissions(PERMISSIONS.PATIENTS.VIEW)
+  @RequirePermissions(PERMISSIONS.PATIENTS.LIST)
   @Get(':id/available-insurances')
   availableInsurances(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getAvailableInsurances(id);

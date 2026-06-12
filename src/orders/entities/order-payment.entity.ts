@@ -11,11 +11,13 @@ import {
 } from 'typeorm';
 import { Order } from './order.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
+import { PaymentAccount } from '../../payment-accounts/entities/payment-account.entity';
 
 export type OrderPaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
-  | 'cash_foreign'
+  | 'cash_usd'
+  | 'cash_eur'
   | 'cash_bs'
   | 'other';
 
@@ -56,14 +58,21 @@ export class OrderPayment {
   @JoinColumn({ name: 'exchangeRateId' })
   exchangeRate?: ExchangeRate | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  paymentAccountId?: string | null;
+
+  @ManyToOne(() => PaymentAccount, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'paymentAccountId' })
+  paymentAccount?: PaymentAccount | null;
+
   @Column({ type: 'varchar', length: 3 })
   amountCurrency: PaymentCurrency;
 
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amountValue: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  amountInBs: string;
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  amountInUsd: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

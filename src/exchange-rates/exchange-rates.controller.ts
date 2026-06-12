@@ -45,7 +45,7 @@ export class ExchangeRatesController {
     return this.service.findCurrentSummary();
   }
 
-  @RequirePermissions(PERMISSIONS.EXCHANGE_RATES.VIEW)
+  @RequirePermissions(PERMISSIONS.EXCHANGE_RATES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

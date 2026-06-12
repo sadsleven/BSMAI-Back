@@ -24,14 +24,15 @@ export class CreateServiceTypeDto {
   @IsBoolean()
   isActive?: boolean;
 
-  /** Precio Particular obligatorio en USD y EUR. */
+  /** Precio Particular en USD. Opcional. */
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive({ message: 'El precio Particular USD debe ser mayor a 0' })
   @Max(99999999.99)
-  particularPriceUsd: number;
+  particularPriceUsd?: number;
 
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive({ message: 'El precio Particular EUR debe ser mayor a 0' })
-  @Max(99999999.99)
-  particularPriceEur: number;
+  /** Permite asignar cantidad de este ST en una orden (ej. sesiones). */
+  @IsOptional()
+  @IsBoolean()
+  allowsQuantity?: boolean;
 }

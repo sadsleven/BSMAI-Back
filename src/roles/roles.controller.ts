@@ -35,7 +35,7 @@ export class RolesController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.ROLES.VIEW)
+  @RequirePermissions(PERMISSIONS.ROLES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

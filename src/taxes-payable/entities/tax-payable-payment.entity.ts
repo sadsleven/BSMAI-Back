@@ -15,7 +15,8 @@ import { TaxPayable } from './tax-payable.entity';
 export type TaxPayablePaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
-  | 'cash_foreign'
+  | 'cash_usd'
+  | 'cash_eur'
   | 'cash_bs'
   | 'other';
 
@@ -54,7 +55,8 @@ export class TaxPayablePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   amountValue: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
+  /** Monto convertido a bolívares (moneda nativa del impuesto). */
+  @Column({ type: 'numeric', precision: 18, scale: 2, default: 0 })
   amountInBs: string;
 
   @ManyToMany(() => TaxPayable, (t) => t.payments)

@@ -20,28 +20,23 @@ const SERVICE_TYPES_GROUP = 'Tipos de servicio';
 const CONTRACTORS_GROUP = 'Contratistas';
 const EXCHANGE_RATES_GROUP = 'Tasa de cambio';
 const BRANCHES_GROUP = 'Sucursales';
+const TAX_UNITS_GROUP = 'Unidades tributarias';
 const ORDERS_GROUP = 'Órdenes';
 const ACCOUNTS_PAYABLE_GROUP = 'Cuentas por pagar';
 const ACCOUNTS_RECEIVABLE_GROUP = 'Cuentas por cobrar';
-const CREDITS_RECEIVABLE_GROUP = 'Créditos por cobrar';
-const TAXES_PAYABLE_GROUP = 'Impuestos por pagar';
+const TAXES_PAYABLE_GROUP = 'Retenciones por pagar';
 const REPORTS_GROUP = 'Reportes';
+const APP_CONFIG_GROUP = 'Configuración';
+const FILES_GROUP = 'Archivos';
+const PAYMENT_ACCOUNTS_GROUP = 'Cuentas de pago';
 
 const usersPermissions: PermissionDefinition[] = [
   {
     name: 'users.list',
     resource: 'users',
     action: 'list',
-    label: 'Listar usuarios',
-    description: 'Permite ver el listado de usuarios del sistema',
-    group: USERS_GROUP,
-  },
-  {
-    name: 'users.view',
-    resource: 'users',
-    action: 'view',
-    label: 'Ver detalle de usuario',
-    description: 'Permite ver el detalle de un usuario específico',
+    label: 'Listar y ver usuarios',
+    description: 'Permite listar y ver el detalle de los usuarios del sistema',
     group: USERS_GROUP,
   },
   {
@@ -107,16 +102,8 @@ const rolesPermissions: PermissionDefinition[] = [
     name: 'roles.list',
     resource: 'roles',
     action: 'list',
-    label: 'Listar roles',
-    description: 'Permite ver el listado de roles del sistema',
-    group: ROLES_GROUP,
-  },
-  {
-    name: 'roles.view',
-    resource: 'roles',
-    action: 'view',
-    label: 'Ver detalle de rol',
-    description: 'Permite ver el detalle de un rol específico',
+    label: 'Listar y ver roles',
+    description: 'Permite listar y ver el detalle de los roles del sistema',
     group: ROLES_GROUP,
   },
   {
@@ -204,8 +191,10 @@ function buildResourcePermissions(
 }
 
 const standardActionLabels = (entity: string, plural: string) => ({
-  list: { label: `Listar ${plural}`, description: `Permite ver el listado de ${plural} del sistema` },
-  view: { label: `Ver detalle de ${entity}`, description: `Permite ver el detalle de un ${entity} específico` },
+  list: {
+    label: `Listar y ver ${plural}`,
+    description: `Permite listar y ver el detalle de los ${plural} del sistema`,
+  },
   create: { label: `Crear ${plural}`, description: `Permite crear nuevos ${plural}` },
   update: { label: `Editar ${plural}`, description: `Permite modificar los datos de un ${entity}` },
   'toggle-active': {
@@ -235,17 +224,38 @@ const patientsPermissions = buildResourcePermissions(
   standardActionLabels('paciente', 'pacientes'),
 );
 
-const doctorsPermissions = buildResourcePermissions(
-  'doctors',
-  DOCTORS_GROUP,
-  standardActionLabels('doctor', 'doctores'),
-);
+const doctorsPermissions: PermissionDefinition[] = [
+  ...buildResourcePermissions(
+    'doctors',
+    DOCTORS_GROUP,
+    standardActionLabels('doctor', 'doctores'),
+  ),
+  {
+    name: 'doctors.change-password',
+    resource: 'doctors',
+    action: 'change-password',
+    label: 'Cambiar contraseña de doctores',
+    description: 'Permite establecer o cambiar la contraseña de acceso de un doctor',
+    group: DOCTORS_GROUP,
+  },
+];
 
-const careCentersPermissions = buildResourcePermissions(
-  'care-centers',
-  CARE_CENTERS_GROUP,
-  standardActionLabels('centro de atención', 'centros de atención'),
-);
+const careCentersPermissions: PermissionDefinition[] = [
+  ...buildResourcePermissions(
+    'care-centers',
+    CARE_CENTERS_GROUP,
+    standardActionLabels('centro de atención', 'centros de atención'),
+  ),
+  {
+    name: 'care-centers.change-password',
+    resource: 'care-centers',
+    action: 'change-password',
+    label: 'Cambiar contraseña de centros de atención',
+    description:
+      'Permite establecer o cambiar la contraseña de acceso de un centro de atención',
+    group: CARE_CENTERS_GROUP,
+  },
+];
 
 const insurancesPermissions = buildResourcePermissions(
   'insurances',
@@ -283,21 +293,25 @@ const branchesPermissions = buildResourcePermissions(
   standardActionLabels('sucursal', 'sucursales'),
 );
 
+const taxUnitsPermissions = buildResourcePermissions(
+  'tax-units',
+  TAX_UNITS_GROUP,
+  standardActionLabels('unidad tributaria', 'unidades tributarias'),
+);
+
+const paymentAccountsPermissions = buildResourcePermissions(
+  'payment-accounts',
+  PAYMENT_ACCOUNTS_GROUP,
+  standardActionLabels('cuenta de pago', 'cuentas de pago'),
+);
+
 const ordersPermissions: PermissionDefinition[] = [
   {
     name: 'orders.list',
     resource: 'orders',
     action: 'list',
-    label: 'Listar órdenes',
-    description: 'Permite ver el listado de órdenes del sistema',
-    group: ORDERS_GROUP,
-  },
-  {
-    name: 'orders.view',
-    resource: 'orders',
-    action: 'view',
-    label: 'Ver detalle de orden',
-    description: 'Permite ver el detalle de una orden específica',
+    label: 'Listar y ver órdenes',
+    description: 'Permite listar y ver el detalle de las órdenes del sistema',
     group: ORDERS_GROUP,
   },
   {
@@ -389,16 +403,8 @@ const accountsPayablePermissions: PermissionDefinition[] = [
     name: 'accounts-payable.list',
     resource: 'accounts-payable',
     action: 'list',
-    label: 'Listar cuentas por pagar',
-    description: 'Permite ver el listado de cuentas por pagar',
-    group: ACCOUNTS_PAYABLE_GROUP,
-  },
-  {
-    name: 'accounts-payable.view',
-    resource: 'accounts-payable',
-    action: 'view',
-    label: 'Ver detalle de cuenta por pagar',
-    description: 'Permite ver el detalle de una cuenta por pagar',
+    label: 'Listar y ver cuentas por pagar',
+    description: 'Permite listar y ver el detalle de las cuentas por pagar',
     group: ACCOUNTS_PAYABLE_GROUP,
   },
   {
@@ -416,16 +422,8 @@ const accountsReceivablePermissions: PermissionDefinition[] = [
     name: 'accounts-receivable.list',
     resource: 'accounts-receivable',
     action: 'list',
-    label: 'Listar cuentas por cobrar',
-    description: 'Permite ver el listado de cuentas por cobrar',
-    group: ACCOUNTS_RECEIVABLE_GROUP,
-  },
-  {
-    name: 'accounts-receivable.view',
-    resource: 'accounts-receivable',
-    action: 'view',
-    label: 'Ver detalle de cuenta por cobrar',
-    description: 'Permite ver el detalle de una cuenta por cobrar',
+    label: 'Listar y ver cuentas por cobrar',
+    description: 'Permite listar y ver el detalle de las cuentas por cobrar',
     group: ACCOUNTS_RECEIVABLE_GROUP,
   },
   {
@@ -433,35 +431,8 @@ const accountsReceivablePermissions: PermissionDefinition[] = [
     resource: 'accounts-receivable',
     action: 'update',
     label: 'Registrar cobros a cuentas por cobrar',
-    description: 'Permite registrar cobros del seguro',
+    description: 'Permite registrar cobros del seguro o del titular (crédito)',
     group: ACCOUNTS_RECEIVABLE_GROUP,
-  },
-];
-
-const creditsReceivablePermissions: PermissionDefinition[] = [
-  {
-    name: 'credits-receivable.list',
-    resource: 'credits-receivable',
-    action: 'list',
-    label: 'Listar créditos por cobrar',
-    description: 'Permite ver el listado de créditos por cobrar',
-    group: CREDITS_RECEIVABLE_GROUP,
-  },
-  {
-    name: 'credits-receivable.view',
-    resource: 'credits-receivable',
-    action: 'view',
-    label: 'Ver detalle de crédito por cobrar',
-    description: 'Permite ver el detalle de un crédito por cobrar',
-    group: CREDITS_RECEIVABLE_GROUP,
-  },
-  {
-    name: 'credits-receivable.update',
-    resource: 'credits-receivable',
-    action: 'update',
-    label: 'Registrar cobros a créditos por cobrar',
-    description: 'Permite registrar cobros del titular del crédito',
-    group: CREDITS_RECEIVABLE_GROUP,
   },
 ];
 
@@ -470,24 +441,16 @@ const taxesPayablePermissions: PermissionDefinition[] = [
     name: 'taxes-payable.list',
     resource: 'taxes-payable',
     action: 'list',
-    label: 'Listar impuestos por pagar',
-    description: 'Permite ver el listado de impuestos por pagar',
-    group: TAXES_PAYABLE_GROUP,
-  },
-  {
-    name: 'taxes-payable.view',
-    resource: 'taxes-payable',
-    action: 'view',
-    label: 'Ver detalle de impuesto por pagar',
-    description: 'Permite ver el detalle de un impuesto por pagar',
+    label: 'Listar y ver retenciones por pagar',
+    description: 'Permite listar y ver el detalle de las retenciones por pagar',
     group: TAXES_PAYABLE_GROUP,
   },
   {
     name: 'taxes-payable.update',
     resource: 'taxes-payable',
     action: 'update',
-    label: 'Registrar pagos a impuestos por pagar',
-    description: 'Permite registrar pagos del impuesto retenido al fisco',
+    label: 'Registrar pagos a retenciones por pagar',
+    description: 'Permite registrar pagos de la retención al SENIAT',
     group: TAXES_PAYABLE_GROUP,
   },
 ];
@@ -531,7 +494,7 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
   {
     key: 'disbursements',
     label: 'Ver reporte de pagos emitidos',
-    description: 'Permite acceder al listado de pagos a proveedores y al fisco',
+    description: 'Permite acceder al listado de pagos a proveedores y al SENIAT',
   },
   {
     key: 'orders-tracking',
@@ -563,6 +526,59 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
     label: 'Ver cobranzas por aseguradora',
     description: 'Permite acceder al reporte gráfico de cobranzas por compañía de seguros',
   },
+  {
+    key: 'payment-account-inflows',
+    label: 'Ver dinero recibido por cuenta de pago',
+    description:
+      'Permite acceder al reporte de dinero recibido en las cuentas propias (órdenes y cuentas por cobrar)',
+  },
+];
+
+const filesPermissions: PermissionDefinition[] = [
+  {
+    name: 'files.list',
+    resource: 'files',
+    action: 'list',
+    label: 'Listar y ver archivos',
+    description: 'Permite listar y ver archivos adjuntos asociados a entidades del sistema',
+    group: FILES_GROUP,
+  },
+  {
+    name: 'files.create',
+    resource: 'files',
+    action: 'create',
+    label: 'Subir archivos',
+    description: 'Permite subir archivos al storage y asociarlos a entidades del sistema',
+    group: FILES_GROUP,
+  },
+  {
+    name: 'files.soft-delete',
+    resource: 'files',
+    action: 'soft-delete',
+    label: 'Eliminar archivos',
+    description: 'Permite eliminar archivos adjuntos (borrado lógico + remoción del storage)',
+    group: FILES_GROUP,
+  },
+];
+
+const appConfigPermissions: PermissionDefinition[] = [
+  {
+    name: 'app-config.view',
+    resource: 'app-config',
+    action: 'view',
+    label: 'Ver configuración',
+    description: 'Permite ver los parámetros de configuración del sistema',
+    group: APP_CONFIG_GROUP,
+  },
+  {
+    name: 'app-config.update',
+    resource: 'app-config',
+    action: 'update',
+    label: 'Editar configuración',
+    description:
+      'Permite modificar los parámetros de configuración del sistema (ej. comisión Cashea)',
+    group: APP_CONFIG_GROUP,
+  },
 ];
 
 const reportsPermissions: PermissionDefinition[] = reportsDefs.map((d) => ({
@@ -588,28 +604,19 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...contractorsPermissions,
   ...exchangeRatesPermissions,
   ...branchesPermissions,
+  ...taxUnitsPermissions,
+  ...paymentAccountsPermissions,
   ...ordersPermissions,
   ...accountsPayablePermissions,
   ...accountsReceivablePermissions,
-  ...creditsReceivablePermissions,
   ...taxesPayablePermissions,
+  ...appConfigPermissions,
+  ...filesPermissions,
   ...reportsPermissions,
 ];
 
-const standardActions = {
-  VIEW: 'view',
-  LIST: 'list',
-  CREATE: 'create',
-  UPDATE: 'update',
-  TOGGLE_ACTIVE: 'toggle-active',
-  SOFT_DELETE: 'soft-delete',
-  HARD_DELETE: 'hard-delete',
-  RESTORE: 'restore',
-} as const;
-
 function buildResourceConst<T extends string>(resource: T) {
   return {
-    VIEW: `${resource}.view`,
     LIST: `${resource}.list`,
     CREATE: `${resource}.create`,
     UPDATE: `${resource}.update`,
@@ -620,11 +627,8 @@ function buildResourceConst<T extends string>(resource: T) {
   } as const;
 }
 
-void standardActions;
-
 export const PERMISSIONS = {
   USERS: {
-    VIEW: 'users.view',
     LIST: 'users.list',
     CREATE: 'users.create',
     UPDATE: 'users.update',
@@ -635,7 +639,6 @@ export const PERMISSIONS = {
     RESTORE: 'users.restore',
   },
   ROLES: {
-    VIEW: 'roles.view',
     LIST: 'roles.list',
     CREATE: 'roles.create',
     UPDATE: 'roles.update',
@@ -650,17 +653,24 @@ export const PERMISSIONS = {
   },
   SPECIALTIES: buildResourceConst('specialties'),
   PATIENTS: buildResourceConst('patients'),
-  DOCTORS: buildResourceConst('doctors'),
-  CARE_CENTERS: buildResourceConst('care-centers'),
+  DOCTORS: {
+    ...buildResourceConst('doctors'),
+    CHANGE_PASSWORD: 'doctors.change-password',
+  },
+  CARE_CENTERS: {
+    ...buildResourceConst('care-centers'),
+    CHANGE_PASSWORD: 'care-centers.change-password',
+  },
   INSURANCES: buildResourceConst('insurances'),
   PATHOLOGIES: buildResourceConst('pathologies'),
   SERVICE_TYPES: buildResourceConst('service-types'),
   CONTRACTORS: buildResourceConst('contractors'),
   EXCHANGE_RATES: buildResourceConst('exchange-rates'),
   BRANCHES: buildResourceConst('branches'),
+  TAX_UNITS: buildResourceConst('tax-units'),
+  PAYMENT_ACCOUNTS: buildResourceConst('payment-accounts'),
   ORDERS: {
     LIST: 'orders.list',
-    VIEW: 'orders.view',
     CREATE: 'orders.create',
     UPDATE: 'orders.update',
     SOFT_DELETE: 'orders.soft-delete',
@@ -674,23 +684,24 @@ export const PERMISSIONS = {
   },
   ACCOUNTS_PAYABLE: {
     LIST: 'accounts-payable.list',
-    VIEW: 'accounts-payable.view',
     UPDATE: 'accounts-payable.update',
   },
   ACCOUNTS_RECEIVABLE: {
     LIST: 'accounts-receivable.list',
-    VIEW: 'accounts-receivable.view',
     UPDATE: 'accounts-receivable.update',
-  },
-  CREDITS_RECEIVABLE: {
-    LIST: 'credits-receivable.list',
-    VIEW: 'credits-receivable.view',
-    UPDATE: 'credits-receivable.update',
   },
   TAXES_PAYABLE: {
     LIST: 'taxes-payable.list',
-    VIEW: 'taxes-payable.view',
     UPDATE: 'taxes-payable.update',
+  },
+  APP_CONFIG: {
+    VIEW: 'app-config.view',
+    UPDATE: 'app-config.update',
+  },
+  FILES: {
+    LIST: 'files.list',
+    CREATE: 'files.create',
+    SOFT_DELETE: 'files.soft-delete',
   },
   REPORTS: {
     RECEIVABLES_LIST: 'reports.receivables.list',
@@ -704,5 +715,6 @@ export const PERMISSIONS = {
     ORDERS_TRACKING_LIST: 'reports.orders-tracking.list',
     SERVICES_BILLED_LIST: 'reports.services-billed.list',
     TAXES_RETAINED_LIST: 'reports.taxes-retained.list',
+    PAYMENT_ACCOUNT_INFLOWS_LIST: 'reports.payment-account-inflows.list',
   },
 } as const;

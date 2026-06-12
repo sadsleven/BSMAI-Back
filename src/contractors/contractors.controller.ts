@@ -34,7 +34,7 @@ export class ContractorsController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.CONTRACTORS.VIEW)
+  @RequirePermissions(PERMISSIONS.CONTRACTORS.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

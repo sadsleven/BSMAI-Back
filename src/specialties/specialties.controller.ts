@@ -34,7 +34,7 @@ export class SpecialtiesController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.SPECIALTIES.VIEW)
+  @RequirePermissions(PERMISSIONS.SPECIALTIES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

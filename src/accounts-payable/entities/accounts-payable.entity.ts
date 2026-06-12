@@ -55,15 +55,12 @@ export class AccountsPayable {
   careCenter?: CareCenter | null;
 
   /**
-   * Monto a pagar a este proveedor específico, en la moneda original. Se
-   * popula durante el Paso 4 (`OrdersService.billing`) con el valor de
-   * `BillingProviderDto.amount`. `null` mientras la orden aún no se factura.
+   * Monto a pagar a este proveedor específico, en USD. Se popula durante el
+   * Paso 4 (`OrdersService.billing`) con el valor de `BillingProviderDto.amount`.
+   * `null` mientras la orden aún no se factura.
    */
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   providerAmount?: string | null;
-
-  @Column({ type: 'varchar', length: 3, nullable: true })
-  providerAmountCurrency?: 'USD' | 'EUR' | 'BS' | null;
 
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
   status: AccountsPayableStatus;

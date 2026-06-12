@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { AccountsPayable } from './entities/accounts-payable.entity';
@@ -14,6 +13,7 @@ import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
+import { TaxUnitsService } from '../tax-units/tax-units.service';
 import {
   AccountsPayablePaymentDto,
   QueryAccountsPayableDto,
@@ -22,6 +22,15 @@ import {
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
+import {
+  computeAmountInBs,
+  computeAmountInUsd,
+  resolveUsdRate,
+} from '../shared/utils/payment-conversion';
+import {
+  calcRetention,
+  SeniatPersonType,
+} from '../shared/utils/seniat-retention';
 
 const TOLERANCE_BS = 0.01;
 
@@ -38,23 +47,8 @@ export class AccountsPayableService {
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
     @InjectRepository(Doctor) private readonly doctorsRepo: Repository<Doctor>,
     private readonly dataSource: DataSource,
-    private readonly config: ConfigService,
+    private readonly taxUnits: TaxUnitsService,
   ) {}
-
-  private taxRateFor(isLegalEntity: boolean): number {
-    const key = isLegalEntity ? 'DOCTOR_LEGAL_TAX_RATE' : 'DOCTOR_NATURAL_TAX_RATE';
-    const fallback = isLegalEntity ? 0.05 : 0.03;
-    const raw = this.config.get<string>(key);
-    if (!raw) return fallback;
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0 || n > 1) return fallback;
-    return n;
-  }
-
-  /** Tasa aplicada al centro de atención. Asumido jurídico → DOCTOR_LEGAL_TAX_RATE. */
-  private careCenterTaxRate(): number {
-    return this.taxRateFor(true);
-  }
 
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
     if (user.isSuperAdmin) {
@@ -123,7 +117,7 @@ export class AccountsPayableService {
 
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
-      qb.andWhere(`LOWER(order."orderNumber") LIKE :s`, { s });
+      qb.andWhere(`LOWER("order"."orderNumber") LIKE :s`, { s });
     }
 
     return paginateBuilder<AccountsPayable>(qb, page, limit);
@@ -156,51 +150,43 @@ export class AccountsPayableService {
   }
 
   /**
-   * Computa el monto a recibir (en Bs) para una cuenta usando `providerAmount`
-   * y `providerAmountCurrency` propios de la cuenta. Cada cuenta corresponde a
-   * un proveedor distinto, así que su monto es independiente del total de la
-   * orden y de las demás cuentas.
+   * Determina el régimen fiscal del proveedor para el cálculo SENIAT.
+   *  - care_center → siempre 'legal_entity' (PJD).
+   *  - doctor      → 'legal_entity' si isLegalEntity=true, sino 'natural'.
    */
-  private async amountToReceiveBs(
-    account: AccountsPayable,
-    order: Order,
-  ): Promise<number> {
-    if (!account.providerAmount || !account.providerAmountCurrency) {
+  private async resolvePersonType(
+    recipientType: 'doctor' | 'care_center',
+    doctorId: string | null | undefined,
+  ): Promise<SeniatPersonType> {
+    if (recipientType === 'care_center') return 'legal_entity';
+    if (!doctorId) throw new BadRequestException('Doctor faltante en la cuenta por pagar');
+    const doctor = await this.doctorsRepo.findOne({ where: { id: doctorId } });
+    if (!doctor) throw new BadRequestException('Doctor no encontrado');
+    return doctor.isLegalEntity ? 'legal_entity' : 'natural';
+  }
+
+  /**
+   * Convierte providerAmount (USD nativo) a Bs vía la tasa de facturación
+   * de la orden, o la tasa USD activa más reciente como fallback.
+   */
+  private async providerGrossBs(account: AccountsPayable, order: Order): Promise<number> {
+    if (!account.providerAmount) {
       throw new BadRequestException(
         `Orden ${order.orderNumber}: aún no tiene monto definido para este proveedor (Paso 4)`,
       );
     }
-    const amount = Number(account.providerAmount);
-    let amountBs: number;
-    if (account.providerAmountCurrency === 'BS') {
-      amountBs = amount;
-    } else {
-      if (!order.billingExchangeRateId) {
-        throw new BadRequestException(
-          `Orden ${order.orderNumber}: tasa de facturación no encontrada`,
-        );
-      }
-      const rate =
-        order.billingExchangeRate ??
-        (await this.ratesRepo.findOne({ where: { id: order.billingExchangeRateId } }));
-      if (!rate) throw new BadRequestException('Tasa de facturación no encontrada');
-      amountBs = amount * Number(rate.amountBs);
+    const amountUsd = Number(account.providerAmount);
+    const usdRate = await resolveUsdRate(this.ratesRepo, order.billingExchangeRateId ?? null);
+    const usdRateBs = Number(usdRate.amountBs);
+    if (!Number.isFinite(usdRateBs) || usdRateBs <= 0) {
+      throw new BadRequestException('Tasa USD inválida (amountBs ≤ 0)');
     }
-
-    if (account.recipientType === 'doctor') {
-      const doctorId = account.doctorId;
-      if (!doctorId) throw new BadRequestException('Doctor no encontrado en cuenta');
-      const doctor = await this.doctorsRepo.findOne({ where: { id: doctorId } });
-      if (!doctor) throw new BadRequestException('Doctor no encontrado');
-      const taxRate = this.taxRateFor(doctor.isLegalEntity);
-      return amountBs * (1 - taxRate);
-    }
-    // care_center: asumido jurídico, retención fija.
-    return amountBs * (1 - this.careCenterTaxRate());
+    return Math.round(amountUsd * usdRateBs * 100) / 100;
   }
 
   private async resolvePaymentForSave(
     p: AccountsPayablePaymentDto,
+    usdExchangeRateId?: string | null,
   ): Promise<Partial<AccountsPayablePayment>> {
     const out: Partial<AccountsPayablePayment> = {
       type: p.type,
@@ -211,46 +197,81 @@ export class AccountsPayableService {
       exchangeRateId: null,
       amountCurrency: p.amountCurrency,
       amountValue: p.amountValue.toFixed(2),
-      amountInBs: '0',
+      amountInUsd: '0',
     };
-
-    let amountInBs = 0;
-    if (p.amountCurrency === 'BS') {
-      amountInBs = p.amountValue;
-    } else {
-      if (!p.exchangeRateId) {
-        throw new BadRequestException(
-          `Pago en ${p.amountCurrency}: exchangeRateId requerido para conversión a Bs`,
-        );
-      }
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
-      if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
-      amountInBs = p.amountValue * Number(rate.amountBs);
-    }
-    out.amountInBs = amountInBs.toFixed(2);
 
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
       if (!p.bankCode) throw new BadRequestException('bankCode requerido');
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
+      if (p.amountCurrency !== 'BS')
+        throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
       const bank = await this.banksRepo.findOne({ where: { code: p.bankCode } });
       if (!bank) throw new BadRequestException('Banco no encontrado');
+      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!rate || rate.currency !== 'USD')
+        throw new BadRequestException('Pago en BS requiere tasa USD/Bs');
       out.bankCode = p.bankCode;
-      out.exchangeRateId = p.exchangeRateId ?? null;
+      out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
+      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
+      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!rate || rate.currency !== 'USD')
+        throw new BadRequestException('cash_bs requiere tasa USD/Bs');
+      out.exchangeRateId = p.exchangeRateId;
+    } else if (p.type === 'cash_usd') {
+      if (p.amountCurrency !== 'USD')
+        throw new BadRequestException('cash_usd debe ser en USD');
       out.exchangeRateId = p.exchangeRateId ?? null;
-    } else if (p.type === 'cash_foreign') {
-      if (p.amountCurrency === 'BS')
-        throw new BadRequestException('cash_foreign no puede ser BS');
-      out.exchangeRateId = p.exchangeRateId ?? null;
+    } else if (p.type === 'cash_eur') {
+      if (p.amountCurrency !== 'EUR')
+        throw new BadRequestException('cash_eur debe ser en EUR');
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido (EUR)');
+      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!rate || rate.currency !== 'EUR')
+        throw new BadRequestException('cash_eur requiere una tasa de cambio en EUR');
+      out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (p.amountCurrency !== 'USD')
+        throw new BadRequestException('other: amountCurrency debe ser USD');
       out.accountNumber = p.accountNumber ?? null;
-      out.exchangeRateId = p.exchangeRateId ?? null;
     }
+
+    const usdAmount = await computeAmountInUsd(
+      {
+        amountValue: p.amountValue,
+        amountCurrency: p.amountCurrency,
+        exchangeRateId: p.exchangeRateId ?? null,
+      },
+      this.ratesRepo,
+      { usdExchangeRateId: usdExchangeRateId ?? null },
+    );
+    out.amountInUsd = usdAmount.toFixed(2);
+    const bsAmount = await computeAmountInBs(
+      {
+        amountValue: p.amountValue,
+        amountCurrency: p.amountCurrency,
+        exchangeRateId: p.exchangeRateId ?? null,
+      },
+      this.ratesRepo,
+      { usdExchangeRateId: usdExchangeRateId ?? null },
+    );
+    out.amountInBs = bsAmount.toFixed(2);
     return out;
   }
 
+  /**
+   * Registra un pago al proveedor (doctor o centro). Calcula la retención
+   * SENIAT sobre el total bruto del lote (en Bs) usando la UT vigente,
+   * verifica que la suma de pagos cubra el neto, y genera atómicamente
+   * UNA `taxes_payable` que agrupa todas las órdenes y AP cubiertas.
+   *
+   * El proveedor recibe el monto NETO (= bruto − retención).
+   * El monto retenido queda como obligación al SENIAT en `taxes_payable`.
+   */
   async registerPayment(
     dto: RegisterPaymentDto,
     user: AuthenticatedUser,
@@ -267,62 +288,108 @@ export class AccountsPayableService {
     if (accounts.length !== dto.payableIds.length)
       throw new BadRequestException('Alguna cuenta no existe');
 
-    // Visibilidad
     for (const acc of accounts) await this.assertVisibility(acc, user);
 
-    // Estado: rechaza solo cuentas ya pagadas; permite unpaid + partially_paid.
     if (accounts.some((a) => a.status === 'paid')) {
-      throw new BadRequestException('Hay cuentas ya pagadas en la selección');
+      throw new BadRequestException(
+        'Alguna cuenta ya está pagada. Sólo se pueden pagar cuentas no pagadas o parcialmente pagadas.',
+      );
     }
 
-    // Agrupación: mismo doctor o mismo centro
+    // Agrupación obligatoria: mismo proveedor (doctor o centro).
     const doctorIds = new Set(accounts.map((a) => a.doctorId).filter(Boolean));
     const careCenterIds = new Set(accounts.map((a) => a.careCenterId).filter(Boolean));
-    if (doctorIds.size > 1 || careCenterIds.size > 1 || (doctorIds.size > 0 && careCenterIds.size > 0)) {
+    if (
+      doctorIds.size > 1 ||
+      careCenterIds.size > 1 ||
+      (doctorIds.size > 0 && careCenterIds.size > 0)
+    ) {
       throw new BadRequestException(
         'Solo se pueden agrupar cuentas del mismo doctor o centro de atención',
       );
     }
 
-    // Monto target en Bs
-    let totalToReceiveBs = 0;
-    for (const acc of accounts) {
-      totalToReceiveBs += await this.amountToReceiveBs(acc, acc.order);
-    }
-    // Pagos previos ya aplicados (suma en Bs de los linked payments).
-    const existingPaidBs = accounts.reduce(
-      (sum, acc) =>
-        sum +
-        (acc.payments ?? []).reduce(
-          (s, p) => s + (Number(p.amountInBs) || 0),
-          0,
-        ),
-      0,
-    );
-    const totalPaymentsBs = await this.computePaymentsTotalBs(dto.payments);
-    const newTotalBs = existingPaidBs + totalPaymentsBs;
+    const recipientType = accounts[0].recipientType;
+    const doctorId = accounts[0].doctorId ?? null;
+    const careCenterId = accounts[0].careCenterId ?? null;
 
-    // Cap: no permite sobrepagar (payable tiene techo).
-    if (newTotalBs > totalToReceiveBs + TOLERANCE_BS) {
+    // Pagos parciales previos ya ligados a estas cuentas (deduplicados).
+    const priorPaymentsById = new Map<string, AccountsPayablePayment>();
+    for (const acc of accounts) {
+      for (const pay of acc.payments ?? []) priorPaymentsById.set(pay.id, pay);
+    }
+    // Guard anti-reuso: ningún pago previo del grupo puede estar ligado a una
+    // cuenta fuera de la selección (evita reusar un parcial en otro lote).
+    if (priorPaymentsById.size > 0) {
+      const selectedIds = accounts.map((a) => a.id);
+      const leaked = await this.dataSource.query<{ paymentId: string }[]>(
+        `SELECT DISTINCT l."paymentId"
+           FROM "accounts_payable_payment_links" l
+          WHERE l."paymentId" = ANY($1)
+            AND l."payableId" <> ALL($2)
+          LIMIT 1`,
+        [[...priorPaymentsById.keys()], selectedIds],
+      );
+      if (leaked.length > 0) {
+        throw new BadRequestException(
+          'Un pago parcial previo de esta selección ya está asociado a otra cuenta fuera del grupo. Seleccioná el mismo grupo de cuentas para completar el pago.',
+        );
+      }
+    }
+    const priorPaidBs =
+      Math.round(
+        [...priorPaymentsById.values()].reduce(
+          (s, pay) => s + Number(pay.amountInBs || 0),
+          0,
+        ) * 100,
+      ) / 100;
+
+    // Régimen fiscal + UT vigente.
+    const personType = await this.resolvePersonType(recipientType, doctorId);
+    const taxUnit = await this.taxUnits.getCurrentOrThrow();
+    const taxUnitAmountBs = Number(taxUnit.amountBs);
+
+    // Bruto Bs (suma providerAmount × tasa USD).
+    let totalGrossBs = 0;
+    for (const acc of accounts) {
+      totalGrossBs += await this.providerGrossBs(acc, acc.order);
+    }
+    totalGrossBs = Math.round(totalGrossBs * 100) / 100;
+
+    // Retención SENIAT sobre el bruto del lote.
+    const retention = calcRetention({
+      grossBs: totalGrossBs,
+      personType,
+      taxUnitBs: taxUnitAmountBs,
+    });
+    const netToReceiveBs = Math.round((totalGrossBs - retention.taxAmountBs) * 100) / 100;
+
+    // Total de los NUEVOS pagos entregados al proveedor en este registro.
+    const usdRateId = accounts[0]?.order?.billingExchangeRateId ?? null;
+    const newPaymentsBs = await this.computePaymentsTotalBs(dto.payments, usdRateId);
+    if (newPaymentsBs <= 0) {
+      throw new BadRequestException('El monto de los pagos debe ser mayor a 0');
+    }
+
+    // Acumulado = parciales previos + nuevos. La retención se genera SÓLO al
+    // cuadrar con el neto; un pago parcial deja las cuentas en "partially_paid".
+    const cumulativeBs = Math.round((priorPaidBs + newPaymentsBs) * 100) / 100;
+    if (cumulativeBs - netToReceiveBs > TOLERANCE_BS) {
       throw new BadRequestException(
-        `El total de pagos (Bs. ${newTotalBs.toFixed(2)}) excede el monto a pagar (Bs. ${totalToReceiveBs.toFixed(2)})`,
+        `El pago excede el neto a entregar: acumulado Bs ${cumulativeBs.toFixed(2)} > neto Bs ${netToReceiveBs.toFixed(2)} (ya pagado Bs ${priorPaidBs.toFixed(2)} + nuevos Bs ${newPaymentsBs.toFixed(2)}).`,
       );
     }
+    const isComplete = Math.abs(cumulativeBs - netToReceiveBs) <= TOLERANCE_BS;
 
-    // Determinar estado nuevo del grupo: paid si cubre el target con tolerancia, sino partially_paid.
-    const isFullyPaid = Math.abs(totalToReceiveBs - newTotalBs) <= TOLERANCE_BS;
-    const newStatus: 'paid' | 'partially_paid' = isFullyPaid ? 'paid' : 'partially_paid';
-
-    // Persistir transaccionalmente
     const ids = await this.dataSource.transaction(async (mgr) => {
+      // 1) Persistir pagos al proveedor + linkear a las AP cubiertas.
       const savedPaymentIds: string[] = [];
       for (const p of dto.payments) {
-        const payload = await this.resolvePaymentForSave(p);
+        const payload = await this.resolvePaymentForSave(p, usdRateId);
         const entity = mgr.create(AccountsPayablePayment, payload);
         const saved = await mgr.save(entity);
         savedPaymentIds.push(saved.id);
       }
-
       for (const acc of accounts) {
         for (const paymentId of savedPaymentIds) {
           await mgr.query(
@@ -332,13 +399,59 @@ export class AccountsPayableService {
             [acc.id, paymentId],
           );
         }
-        // Use update() instead of save() — save() reconciles M2M and would wipe
-        // the links we just inserted (acc.payments was loaded as the prior set).
         await mgr.update(AccountsPayable, acc.id, {
-          status: newStatus,
-          paidAt: isFullyPaid ? new Date() : null,
+          status: isComplete ? 'paid' : 'partially_paid',
+          paidAt: isComplete ? new Date() : null,
         });
       }
+
+      // 2) Retención SENIAT: SÓLO al cuadrar el neto. Un parcial no la genera.
+      if (isComplete) {
+        const seqRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('taxes_payable_seq') AS nextval`,
+        );
+        const taxPayableNumber = String(seqRows[0].nextval);
+        const insertedTax = await mgr.query<{ id: string }[]>(
+          `INSERT INTO "taxes_payable" (
+            "taxPayableNumber", "recipientType", "doctorId", "careCenterId",
+            "personType", "taxUnitId", "taxUnitAmountBs",
+            "grossAmountBs", "taxRate", "subtrahendBs", "taxAmountBs", "status"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unpaid')
+          RETURNING "id"`,
+          [
+            taxPayableNumber,
+            recipientType,
+            doctorId,
+            careCenterId,
+            personType,
+            taxUnit.id,
+            taxUnitAmountBs.toFixed(2),
+            totalGrossBs.toFixed(2),
+            retention.taxRate.toFixed(4),
+            retention.subtrahendBs.toFixed(2),
+            retention.taxAmountBs.toFixed(2),
+          ],
+        );
+        const taxId = insertedTax[0].id;
+
+        // 3) Pivots: órdenes contenidas + AP cubiertas.
+        const orderIds = Array.from(new Set(accounts.map((a) => a.orderId)));
+        for (const orderId of orderIds) {
+          await mgr.query(
+            `INSERT INTO "taxes_payable_orders" ("taxPayableId", "orderId")
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [taxId, orderId],
+          );
+        }
+        for (const acc of accounts) {
+          await mgr.query(
+            `INSERT INTO "taxes_payable_payables" ("taxPayableId", "payableId")
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [taxId, acc.id],
+          );
+        }
+      }
+
       return accounts.map((a) => a.id);
     });
 
@@ -347,22 +460,21 @@ export class AccountsPayableService {
 
   private async computePaymentsTotalBs(
     payments: AccountsPayablePaymentDto[],
+    usdExchangeRateId: string | null,
   ): Promise<number> {
     let total = 0;
     for (const p of payments) {
-      if (p.amountCurrency === 'BS') {
-        total += p.amountValue;
-      } else {
-        if (!p.exchangeRateId) {
-          throw new BadRequestException(
-            `Pago en ${p.amountCurrency}: exchangeRateId requerido`,
-          );
-        }
-        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
-        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
-        total += p.amountValue * Number(rate.amountBs);
-      }
+      total += await computeAmountInBs(
+        {
+          amountValue: p.amountValue,
+          amountCurrency: p.amountCurrency,
+          exchangeRateId: p.exchangeRateId ?? null,
+        },
+        this.ratesRepo,
+        { usdExchangeRateId },
+      );
     }
-    return total;
+    return Math.round(total * 100) / 100;
   }
 }
+

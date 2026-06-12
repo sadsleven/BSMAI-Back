@@ -34,7 +34,7 @@ export class BranchesController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.BRANCHES.VIEW)
+  @RequirePermissions(PERMISSIONS.BRANCHES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);

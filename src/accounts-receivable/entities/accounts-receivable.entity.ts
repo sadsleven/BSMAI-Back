@@ -13,6 +13,7 @@ import {
 } from 'typeorm';
 import { Order } from '../../orders/entities/order.entity';
 import { Insurance } from '../../insurances/entities/insurance.entity';
+import { Patient } from '../../patients/entities/patient.entity';
 import { AccountsReceivablePayment } from './accounts-receivable-payment.entity';
 
 export type AccountsReceivableStatus =
@@ -21,9 +22,13 @@ export type AccountsReceivableStatus =
   | 'partially_collected'
   | 'overcollected';
 
+/** Tipo de deudor: seguro (orden type='insurance') o titular (orden type='credit'). */
+export type AccountsReceivableDebtorType = 'insurance' | 'holder';
+
 @Entity({ name: 'accounts_receivable' })
 @Index('idx_ar_status', ['status'])
 @Index('idx_ar_insurance', ['insuranceId'])
+@Index('idx_ar_holder', ['holderId'])
 export class AccountsReceivable {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,12 +43,21 @@ export class AccountsReceivable {
   @JoinColumn({ name: 'orderId' })
   order: Order;
 
-  @Column({ type: 'uuid' })
-  insuranceId: string;
+  /** Seguro deudor. Excluyente con `holderId` (CHECK ck_ar_debtor_xor). */
+  @Column({ type: 'uuid', nullable: true })
+  insuranceId?: string | null;
 
-  @ManyToOne(() => Insurance, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => Insurance, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'insuranceId' })
-  insurance: Insurance;
+  insurance?: Insurance | null;
+
+  /** Titular deudor (paciente). Excluyente con `insuranceId`. */
+  @Column({ type: 'uuid', nullable: true })
+  holderId?: string | null;
+
+  @ManyToOne(() => Patient, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'holderId' })
+  holder?: Patient | null;
 
   @Column({ type: 'varchar', length: 16, default: 'uncollected' })
   status: AccountsReceivableStatus;

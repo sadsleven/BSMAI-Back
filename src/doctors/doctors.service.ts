@@ -19,12 +19,14 @@ import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { QueryDoctorsDto } from './dto/query-doctors.dto';
 import { PhoneDto } from './dto/phone.dto';
 import { PaymentMethodDto } from './dto/payment-method.dto';
+import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import {
   normalizeCedula,
   normalizeRif,
 } from '../shared/validators/ve-formats';
+import { ProviderAccountsService } from '../provider-accounts/provider-accounts.service';
 
 @Injectable()
 export class DoctorsService {
@@ -41,6 +43,7 @@ export class DoctorsService {
     private readonly pricesRepo: Repository<DoctorServicePrice>,
     @InjectRepository(ServiceType)
     private readonly serviceTypesRepo: Repository<ServiceType>,
+    private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
   async findAll(query: QueryDoctorsDto): Promise<PaginatedResponse<Doctor>> {
@@ -165,15 +168,32 @@ export class DoctorsService {
           doctorId: saved.id,
           serviceTypeId: sp.serviceTypeId,
           priceUsd: sp.priceUsd.toFixed(2),
-          priceEur: sp.priceEur.toFixed(2),
         })),
       );
     }
+
+    // Aprovisionar cuenta de acceso si se definió contraseña.
+    if (dto.password) {
+      if (!saved.email) {
+        throw new BadRequestException(
+          'El email es requerido para habilitar el acceso del doctor',
+        );
+      }
+      const userId = await this.providerAccounts.provisionOrUpdateAccount({
+        email: saved.email,
+        firstName: saved.firstName,
+        lastName: saved.lastName,
+        password: dto.password,
+      });
+      await this.repo.update(saved.id, { userId });
+    }
+
     return this.findOne(saved.id);
   }
 
   async update(id: string, dto: UpdateDoctorDto): Promise<Doctor> {
     const doctor = await this.findOne(id);
+    let accountFieldsChanged = false;
 
     if (dto.cedula) {
       const cedula = normalizeCedula(dto.cedula);
@@ -187,10 +207,17 @@ export class DoctorsService {
       if (trimmed !== doctor.email) {
         if (trimmed) await this.assertUniqueEmail(trimmed);
         doctor.email = trimmed;
+        accountFieldsChanged = true;
       }
     }
-    if (dto.firstName !== undefined) doctor.firstName = dto.firstName.trim();
-    if (dto.lastName !== undefined) doctor.lastName = dto.lastName.trim();
+    if (dto.firstName !== undefined && dto.firstName.trim() !== doctor.firstName) {
+      doctor.firstName = dto.firstName.trim();
+      accountFieldsChanged = true;
+    }
+    if (dto.lastName !== undefined && dto.lastName.trim() !== doctor.lastName) {
+      doctor.lastName = dto.lastName.trim();
+      accountFieldsChanged = true;
+    }
     if (dto.isActive !== undefined) doctor.isActive = dto.isActive;
 
     // isLegalEntity / rif coupled rules
@@ -242,13 +269,47 @@ export class DoctorsService {
             doctorId: saved.id,
             serviceTypeId: sp.serviceTypeId,
             priceUsd: sp.priceUsd.toFixed(2),
-            priceEur: sp.priceEur.toFixed(2),
           })),
         );
       }
     }
 
+    // Aprovisionar / sincronizar cuenta de acceso.
+    if (dto.password) {
+      if (!saved.email) {
+        throw new BadRequestException(
+          'El email es requerido para habilitar el acceso del doctor',
+        );
+      }
+      const userId = await this.providerAccounts.provisionOrUpdateAccount({
+        existingUserId: saved.userId ?? null,
+        email: saved.email,
+        firstName: saved.firstName,
+        lastName: saved.lastName,
+        password: dto.password,
+      });
+      if (userId !== saved.userId) await this.repo.update(saved.id, { userId });
+    } else if (saved.userId && accountFieldsChanged && saved.email) {
+      await this.providerAccounts.provisionOrUpdateAccount({
+        existingUserId: saved.userId,
+        email: saved.email,
+        firstName: saved.firstName,
+        lastName: saved.lastName,
+      });
+    }
+
     return this.findOne(saved.id);
+  }
+
+  /** Establece/cambia la contraseña de acceso del doctor (vía cuenta vinculada). */
+  async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
+    const doctor = await this.findOne(id);
+    if (!doctor.userId) {
+      throw new BadRequestException(
+        'El doctor no tiene acceso habilitado. Asigná una contraseña desde la edición.',
+      );
+    }
+    await this.providerAccounts.setPassword(doctor.userId, dto.newPassword);
   }
 
   private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
@@ -273,16 +334,20 @@ export class DoctorsService {
   async toggleActive(id: string): Promise<Doctor> {
     const doctor = await this.findOne(id);
     doctor.isActive = !doctor.isActive;
-    return this.repo.save(doctor);
+    const saved = await this.repo.save(doctor);
+    await this.providerAccounts.setAccountActive(saved.userId, saved.isActive);
+    return saved;
   }
 
   async softDelete(id: string): Promise<void> {
-    await this.findOne(id);
+    const doctor = await this.findOne(id);
     await this.repo.softDelete(id);
+    await this.providerAccounts.setAccountActive(doctor.userId, false);
   }
 
   async hardDelete(id: string): Promise<void> {
-    await this.findOne(id, true);
+    const doctor = await this.findOne(id, true);
+    await this.providerAccounts.setAccountActive(doctor.userId, false);
     await this.repo.delete(id);
   }
 
@@ -291,6 +356,7 @@ export class DoctorsService {
     if (!doctor) throw new NotFoundException('Doctor no encontrado');
     if (!doctor.deletedAt) return doctor;
     await this.repo.restore(id);
+    await this.providerAccounts.setAccountActive(doctor.userId, true);
     return this.findOne(id);
   }
 

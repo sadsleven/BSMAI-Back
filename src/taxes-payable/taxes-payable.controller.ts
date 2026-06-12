@@ -27,7 +27,7 @@ export class TaxesPayableController {
     return this.service.findAll(query, user);
   }
 
-  @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.VIEW)
+  @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.LIST)
   @Get(':id')
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,

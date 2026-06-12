@@ -15,6 +15,7 @@ import { CareCentersService } from './care-centers.service';
 import { CreateCareCenterDto } from './dto/create-care-center.dto';
 import { UpdateCareCenterDto } from './dto/update-care-center.dto';
 import { QueryCareCentersDto } from './dto/query-care-centers.dto';
+import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
 
@@ -34,7 +35,7 @@ export class CareCentersController {
     return this.service.findAssignable();
   }
 
-  @RequirePermissions(PERMISSIONS.CARE_CENTERS.VIEW)
+  @RequirePermissions(PERMISSIONS.CARE_CENTERS.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id, true);
@@ -50,6 +51,16 @@ export class CareCentersController {
   @Patch(':id')
   update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateCareCenterDto) {
     return this.service.update(id, dto);
+  }
+
+  @RequirePermissions(PERMISSIONS.CARE_CENTERS.CHANGE_PASSWORD)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Patch(':id/change-password')
+  changePassword(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.service.changePassword(id, dto);
   }
 
   @RequirePermissions(PERMISSIONS.CARE_CENTERS.TOGGLE_ACTIVE)

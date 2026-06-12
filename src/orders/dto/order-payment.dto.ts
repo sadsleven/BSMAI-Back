@@ -13,7 +13,8 @@ import {
 export const PAYMENT_TYPES = [
   'mobile_payment',
   'bank_transfer',
-  'cash_foreign',
+  'cash_usd',
+  'cash_eur',
   'cash_bs',
   'other',
 ] as const;
@@ -46,6 +47,10 @@ export class CreateOrderPaymentDto {
   @IsOptional()
   @IsUUID()
   exchangeRateId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  paymentAccountId?: string;
 
   @IsIn(PAYMENT_CURRENCIES)
   amountCurrency: 'USD' | 'EUR' | 'BS';
@@ -82,6 +87,10 @@ export class UpdateOrderPaymentDto {
   @IsOptional()
   @IsUUID()
   exchangeRateId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  paymentAccountId?: string;
 
   @IsOptional()
   @IsIn(PAYMENT_CURRENCIES)

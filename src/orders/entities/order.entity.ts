@@ -22,6 +22,7 @@ import { User } from '../../users/entities/user.entity';
 import { OrderPayment } from './order-payment.entity';
 import { OrderServiceType } from './order-service-type.entity';
 import { OrderServicePricing } from './order-service-pricing.entity';
+import { OrderProviderReport } from './order-provider-report.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
@@ -37,10 +38,6 @@ export type OrderType = 'cash' | 'credit' | 'insurance' | 'cashea';
 export type ProviderType = 'doctor' | 'care_center';
 
 export type InsuranceSource = 'direct' | 'via_contractor';
-
-export type OrderCurrency = 'USD' | 'EUR';
-
-export type DoctorAmountCurrency = 'USD' | 'EUR' | 'BS';
 
 @Entity({ name: 'orders' })
 @Index('idx_orders_branch', ['branchId'])
@@ -142,11 +139,45 @@ export class Order {
   @Column({ type: 'timestamptz' })
   appointmentDate: Date;
 
-  @Column({ type: 'varchar', length: 3 })
-  priceCurrency: OrderCurrency;
-
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   priceAmount: string;
+
+  /**
+   * Comisión Cashea en dos tramos (snapshot al crear la orden). Sólo se setean
+   * cuando `type='cashea'` (CHECK chk_orders_cashea_fields). Preservan los
+   * valores aunque el admin cambie la config global en `app_config` después.
+   *
+   * Comisión = casheaFirstInstallmentAmount × casheaFirstInstallmentRate
+   *          + priceAmount × casheaTotalRate.
+   * Neto a cobrar = priceAmount − comisión.
+   */
+  /** Monto de la primera cuota (inicial), en USD. Ingresado por orden. */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  casheaFirstInstallmentAmount?: string | null;
+
+  /** % sobre la primera cuota (fracción 0..1). Ej. 0.04 = 4%. */
+  @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
+  casheaFirstInstallmentRate?: string | null;
+
+  /** % sobre el total de la orden (fracción 0..1). Ej. 0.06 = 6%. */
+  @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
+  casheaTotalRate?: string | null;
+
+  /**
+   * Modo tasa fija para órdenes tipo seguro. Cuando true, la cuenta por cobrar
+   * del seguro se calcula y compara en Bs usando `fixedExchangeRate` (no en USD).
+   * Ej.: orden 100 USD a tasa fija 500 → seguro adeuda 50.000 Bs sin importar
+   * tasa al cobrar. CHECK chk_orders_fixed_rate_xor exige type='insurance'.
+   */
+  @Column({ type: 'boolean', default: false })
+  useFixedRate: boolean;
+
+  @Column({ type: 'uuid', nullable: true })
+  fixedExchangeRateId?: string | null;
+
+  @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'fixedExchangeRateId' })
+  fixedExchangeRate?: ExchangeRate | null;
 
   @Column({ type: 'uuid' })
   createdById: string;
@@ -188,15 +219,28 @@ export class Order {
   attendedAt?: Date | null;
 
   // ---- Paso 3: Informe médico y estudios ----
+  /** Nota general de la orden (nivel orden, editable por staff). */
   @Column({ type: 'text', nullable: true })
   otherStudies?: string | null;
 
+  /** Observaciones del informe segmentadas por proveedor (doctor/centro). */
+  @OneToMany(() => OrderProviderReport, (r) => r.order, { cascade: false })
+  providerReports: OrderProviderReport[];
+
+  /**
+   * Transient (NO es columna). Sólo se completa en la lista cuando el solicitante
+   * es un usuario proveedor: indica si SU propia observación del Paso 3 ya está
+   * llena (campo libre no vacío). El FE lo usa para mostrar el estado por
+   * proveedor ("Observación completada/pendiente") en vez del estado global.
+   */
+  providerObservationComplete?: boolean;
+
   // ---- Paso 4: Facturación y liquidación ----
   /**
-   * Monto sugerido calculado al entrar al Paso 4 = sum de precios del Doctor o
-   * Centro de Atención para los STs de la orden en `priceCurrency`. Snapshot al
-   * momento de facturar. Si el admin ajusta `doctorAmount`, este campo conserva
-   * el sugerido para auditoría.
+   * Monto sugerido (USD) calculado al entrar al Paso 4 = sum de precios del
+   * Doctor o Centro de Atención para los STs de la orden. Snapshot al momento
+   * de facturar. Si el admin ajusta `doctorAmount`, este campo conserva el
+   * sugerido para auditoría.
    */
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   doctorAmountSuggested?: string | null;
@@ -204,9 +248,10 @@ export class Order {
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   doctorAmount?: string | null;
 
-  @Column({ type: 'varchar', length: 3, nullable: true })
-  doctorAmountCurrency?: DoctorAmountCurrency | null;
-
+  /**
+   * Snapshot de la tasa USD/Bs vigente al facturar. Sirve para convertir pagos
+   * BS/EUR a USD a posteriori sin depender de tasas posteriores.
+   */
   @Column({ type: 'uuid', nullable: true })
   billingExchangeRateId?: string | null;
 

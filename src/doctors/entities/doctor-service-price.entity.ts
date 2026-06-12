@@ -38,9 +38,6 @@ export class DoctorServicePrice {
   @Column({ type: 'numeric', precision: 14, scale: 2 })
   priceUsd: string;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2 })
-  priceEur: string;
-
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

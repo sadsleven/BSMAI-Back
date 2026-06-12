@@ -19,7 +19,8 @@ import {
 export const PAYMENT_TYPES = [
   'mobile_payment',
   'bank_transfer',
-  'cash_foreign',
+  'cash_usd',
+  'cash_eur',
   'cash_bs',
   'other',
 ] as const;
@@ -27,7 +28,7 @@ export const PAYMENT_CURRENCIES = ['USD', 'EUR', 'BS'] as const;
 
 export class AccountsPayablePaymentDto {
   @IsIn(PAYMENT_TYPES)
-  type: 'mobile_payment' | 'bank_transfer' | 'cash_foreign' | 'cash_bs' | 'other';
+  type: 'mobile_payment' | 'bank_transfer' | 'cash_usd' | 'cash_eur' | 'cash_bs' | 'other';
 
   @IsISO8601()
   paymentDate: string;

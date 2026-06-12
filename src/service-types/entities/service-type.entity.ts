@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 
 /**
- * Tipo de servicio. Sólo guarda el precio "Particular" (USD y EUR) que se cobra
+ * Tipo de servicio. Guarda el precio "Particular" en USD (opcional) que se cobra
  * al paciente en órdenes Contado / Crédito / Cashea. Los precios por Seguro,
  * Doctor o Centro viven en sus respectivas sub-tablas (`insurance_service_prices`,
  * `doctor_service_prices`, `care_center_service_prices`).
@@ -27,11 +27,15 @@ export class ServiceType {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
-  particularPriceUsd: string;
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  particularPriceUsd: string | null;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
-  particularPriceEur: string;
+  /**
+   * Si true, este ST puede facturarse por cantidad dentro de una orden
+   * (ej. sesiones de fisioterapia). Habilita el campo `quantity` por fila.
+   */
+  @Column({ type: 'boolean', default: false })
+  allowsQuantity: boolean;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

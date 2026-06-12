@@ -19,19 +19,23 @@ import { BanksModule } from './banks/banks.module';
 import { PatientsModule } from './patients/patients.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { CareCentersModule } from './care-centers/care-centers.module';
+import { ProviderAccountsModule } from './provider-accounts/provider-accounts.module';
 import { InsurancesModule } from './insurances/insurances.module';
 import { PathologiesModule } from './pathologies/pathologies.module';
 import { ServiceTypesModule } from './service-types/service-types.module';
 import { ContractorsModule } from './contractors/contractors.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { BranchesModule } from './branches/branches.module';
+import { TaxUnitsModule } from './tax-units/tax-units.module';
 import { OrdersModule } from './orders/orders.module';
 import { AccountsPayableModule } from './accounts-payable/accounts-payable.module';
 import { AccountsReceivableModule } from './accounts-receivable/accounts-receivable.module';
-import { CreditsReceivableModule } from './credits-receivable/credits-receivable.module';
 import { TaxesPayableModule } from './taxes-payable/taxes-payable.module';
-import { AppConfigModule } from './config/app-config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AppConfigModule } from './app-config/app-config.module';
+import { SearchModule } from './search/search.module';
+import { FilesModule } from './files/files.module';
+import { PaymentAccountsModule } from './payment-accounts/payment-accounts.module';
 
 @Module({
   imports: [
@@ -50,19 +54,23 @@ import { DashboardModule } from './dashboard/dashboard.module';
     PatientsModule,
     DoctorsModule,
     CareCentersModule,
+    ProviderAccountsModule,
     InsurancesModule,
     PathologiesModule,
     ServiceTypesModule,
     ContractorsModule,
     ExchangeRatesModule,
     BranchesModule,
+    TaxUnitsModule,
     OrdersModule,
     AccountsPayableModule,
     AccountsReceivableModule,
-    CreditsReceivableModule,
     TaxesPayableModule,
-    AppConfigModule,
     DashboardModule,
+    AppConfigModule,
+    SearchModule,
+    FilesModule,
+    PaymentAccountsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

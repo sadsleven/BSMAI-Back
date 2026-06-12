@@ -1,17 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Role } from '../roles/entities/role.entity';
 import { User } from '../users/entities/user.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { BANKS_SEED } from '../banks/banks.data';
-import { PERMISSION_CATALOG } from '../permissions/permissions.catalog';
+import { PERMISSION_CATALOG, PERMISSIONS } from '../permissions/permissions.catalog';
+import { PROVIDER_ROLE_NAME } from '../provider-accounts/provider-accounts.service';
 
 const SUPER_ADMIN_ROLE = 'Super Admin';
 const BCRYPT_ROUNDS = 10;
+
+/** Permisos mínimos del rol Proveedor: listar órdenes + emitir su informe (Paso 3). */
+const PROVIDER_ROLE_PERMISSIONS = [
+  PERMISSIONS.ORDERS.LIST,
+  PERMISSIONS.ORDERS.STAGE_REPORT,
+  PERMISSIONS.FILES.LIST,
+  PERMISSIONS.FILES.CREATE,
+  PERMISSIONS.FILES.SOFT_DELETE,
+];
 
 @Injectable()
 export class SeedService {
@@ -29,8 +39,51 @@ export class SeedService {
     await this.seedPermissions();
     const role = await this.seedSuperAdminRole();
     await this.seedSuperAdminUser(role);
+    await this.seedProviderRole();
     await this.seedBanks();
     this.logger.log('Seed completado');
+  }
+
+  /**
+   * Rol del sistema para usuarios proveedores (doctores / centros). Solo puede
+   * listar órdenes y emitir el informe (Paso 3) de las órdenes donde participa
+   * (alcance por proveedor resuelto en OrdersService/FilesService). Idempotente.
+   */
+  private async seedProviderRole(): Promise<Role> {
+    const perms = await this.permsRepo.find({
+      where: { name: In(PROVIDER_ROLE_PERMISSIONS) },
+    });
+    let role = await this.rolesRepo.findOne({
+      where: { name: PROVIDER_ROLE_NAME },
+      relations: { permissions: true },
+      withDeleted: true,
+    });
+    if (!role) {
+      role = this.rolesRepo.create({
+        name: PROVIDER_ROLE_NAME,
+        description:
+          'Acceso de proveedor: lista sus órdenes y emite el informe médico (Paso 3)',
+        isSystem: true,
+        isActive: true,
+        permissions: perms,
+      });
+    } else {
+      if (role.deletedAt) {
+        await this.rolesRepo.restore(role.id);
+        role.deletedAt = null;
+      }
+      role.description =
+        role.description ??
+        'Acceso de proveedor: lista sus órdenes y emite el informe médico (Paso 3)';
+      role.isSystem = true;
+      role.isActive = true;
+      role.permissions = perms;
+    }
+    const saved = await this.rolesRepo.save(role);
+    this.logger.log(
+      `Rol Proveedor asegurado con ${perms.length}/${PROVIDER_ROLE_PERMISSIONS.length} permisos`,
+    );
+    return saved;
   }
 
   private async seedBanks(): Promise<void> {

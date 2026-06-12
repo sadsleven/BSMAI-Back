@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsISO8601,
   IsNumber,
@@ -10,14 +11,15 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Min,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { CreateOrderPaymentDto } from './order-payment.dto';
 import { OrderServiceTypeRowDto } from './order-service-type.dto';
 
 export const ORDER_TYPES = ['cash', 'credit', 'insurance', 'cashea'] as const;
-export const ORDER_CURRENCIES = ['USD', 'EUR'] as const;
 export const INSURANCE_SOURCES = ['direct', 'via_contractor'] as const;
 
 export class CreateOrderDto {
@@ -85,12 +87,32 @@ export class CreateOrderDto {
   @IsISO8601()
   appointmentDate: string;
 
-  @IsIn(ORDER_CURRENCIES)
-  priceCurrency: 'USD' | 'EUR';
-
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   priceAmount: number;
+
+  /**
+   * Monto de la primera cuota (inicial) Cashea, en USD. Requerido sólo cuando
+   * `type='cashea'`. Debe ser ≥ 0 y ≤ priceAmount (validado en service). Se usa
+   * para la comisión: primeraCuota × firstInstallmentRate + total × totalRate.
+   */
+  @ValidateIf((o: CreateOrderDto) => o.type === 'cashea')
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  casheaFirstInstallmentAmount?: number;
+
+  /**
+   * Sólo válido para `type='insurance'`. Cuando true, la cuenta por cobrar del
+   * seguro se fija en Bs usando `fixedExchangeRateId`. Requiere también que
+   * `fixedExchangeRateId` esté presente y apunte a una tasa USD/Bs.
+   */
+  @IsOptional()
+  @IsBoolean()
+  useFixedRate?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  fixedExchangeRateId?: string;
 
   @IsOptional()
   @IsArray()
