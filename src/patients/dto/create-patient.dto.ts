@@ -74,8 +74,11 @@ export class CreatePatientDto {
   @MaxLength(200)
   email?: string;
 
+  // Fecha de nacimiento opcional. Si se informa, debe ser fecha válida.
+  @IsOptional()
+  @ValidateIf((o) => o.birthDate !== undefined && o.birthDate !== null && o.birthDate !== '')
   @IsDateString({}, { message: 'Fecha de nacimiento inválida' })
-  birthDate: string;
+  birthDate?: string;
 
   @IsString()
   @MinLength(3)

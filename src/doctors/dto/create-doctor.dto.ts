@@ -32,11 +32,9 @@ export class CreateDoctorDto {
   @Matches(CEDULA_PATTERN, { message: CEDULA_MESSAGE })
   cedula: string;
 
-  @IsOptional()
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email?: string;
+  email: string;
 
   @IsString()
   @MinLength(1)
@@ -93,4 +91,15 @@ export class CreateDoctorDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /**
+   * Contraseña de acceso (opcional). Si se define, habilita el acceso del
+   * doctor como usuario proveedor. En edición, cambia/establece la contraseña.
+   */
+  @IsOptional()
+  @ValidateIf((o) => o.password !== undefined && o.password !== null && o.password !== '')
+  @IsString()
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @MaxLength(100)
+  password?: string;
 }

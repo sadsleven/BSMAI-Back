@@ -49,8 +49,8 @@ export class Patient {
   @Column({ type: 'varchar', length: 24, nullable: true })
   rif?: string | null;
 
-  @Column({ type: 'date' })
-  birthDate: string;
+  @Column({ type: 'date', nullable: true })
+  birthDate?: string | null;
 
   @Column({ type: 'varchar', length: 500 })
   address: string;

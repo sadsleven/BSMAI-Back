@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { Order } from './order.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
+import { PaymentAccount } from '../../payment-accounts/entities/payment-account.entity';
 
 export type OrderPaymentType =
   | 'mobile_payment'
@@ -56,6 +57,13 @@ export class OrderPayment {
   @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'exchangeRateId' })
   exchangeRate?: ExchangeRate | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  paymentAccountId?: string | null;
+
+  @ManyToOne(() => PaymentAccount, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'paymentAccountId' })
+  paymentAccount?: PaymentAccount | null;
 
   @Column({ type: 'varchar', length: 3 })
   amountCurrency: PaymentCurrency;

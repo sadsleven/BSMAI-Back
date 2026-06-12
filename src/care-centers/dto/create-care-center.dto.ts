@@ -29,11 +29,9 @@ export class CreateCareCenterDto {
   @MaxLength(200)
   businessName: string;
 
-  @IsOptional()
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email?: string;
+  email: string;
 
   @IsOptional()
   @ValidateIf((o) => o.rif !== undefined && o.rif !== null && o.rif !== '')
@@ -74,4 +72,15 @@ export class CreateCareCenterDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /**
+   * Contraseña de acceso (opcional). Si se define, habilita el acceso del centro
+   * como usuario proveedor. En edición, cambia/establece la contraseña.
+   */
+  @IsOptional()
+  @ValidateIf((o) => o.password !== undefined && o.password !== null && o.password !== '')
+  @IsString()
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @MaxLength(100)
+  password?: string;
 }

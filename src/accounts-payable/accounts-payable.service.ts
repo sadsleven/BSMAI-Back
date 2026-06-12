@@ -250,6 +250,16 @@ export class AccountsPayableService {
       { usdExchangeRateId: usdExchangeRateId ?? null },
     );
     out.amountInUsd = usdAmount.toFixed(2);
+    const bsAmount = await computeAmountInBs(
+      {
+        amountValue: p.amountValue,
+        amountCurrency: p.amountCurrency,
+        exchangeRateId: p.exchangeRateId ?? null,
+      },
+      this.ratesRepo,
+      { usdExchangeRateId: usdExchangeRateId ?? null },
+    );
+    out.amountInBs = bsAmount.toFixed(2);
     return out;
   }
 
@@ -280,9 +290,9 @@ export class AccountsPayableService {
 
     for (const acc of accounts) await this.assertVisibility(acc, user);
 
-    if (accounts.some((a) => a.status !== 'unpaid')) {
+    if (accounts.some((a) => a.status === 'paid')) {
       throw new BadRequestException(
-        'Sólo se pueden registrar pagos sobre cuentas con estado "no pagada"',
+        'Alguna cuenta ya está pagada. Sólo se pueden pagar cuentas no pagadas o parcialmente pagadas.',
       );
     }
 
@@ -302,6 +312,37 @@ export class AccountsPayableService {
     const recipientType = accounts[0].recipientType;
     const doctorId = accounts[0].doctorId ?? null;
     const careCenterId = accounts[0].careCenterId ?? null;
+
+    // Pagos parciales previos ya ligados a estas cuentas (deduplicados).
+    const priorPaymentsById = new Map<string, AccountsPayablePayment>();
+    for (const acc of accounts) {
+      for (const pay of acc.payments ?? []) priorPaymentsById.set(pay.id, pay);
+    }
+    // Guard anti-reuso: ningún pago previo del grupo puede estar ligado a una
+    // cuenta fuera de la selección (evita reusar un parcial en otro lote).
+    if (priorPaymentsById.size > 0) {
+      const selectedIds = accounts.map((a) => a.id);
+      const leaked = await this.dataSource.query<{ paymentId: string }[]>(
+        `SELECT DISTINCT l."paymentId"
+           FROM "accounts_payable_payment_links" l
+          WHERE l."paymentId" = ANY($1)
+            AND l."payableId" <> ALL($2)
+          LIMIT 1`,
+        [[...priorPaymentsById.keys()], selectedIds],
+      );
+      if (leaked.length > 0) {
+        throw new BadRequestException(
+          'Un pago parcial previo de esta selección ya está asociado a otra cuenta fuera del grupo. Seleccioná el mismo grupo de cuentas para completar el pago.',
+        );
+      }
+    }
+    const priorPaidBs =
+      Math.round(
+        [...priorPaymentsById.values()].reduce(
+          (s, pay) => s + Number(pay.amountInBs || 0),
+          0,
+        ) * 100,
+      ) / 100;
 
     // Régimen fiscal + UT vigente.
     const personType = await this.resolvePersonType(recipientType, doctorId);
@@ -323,15 +364,22 @@ export class AccountsPayableService {
     });
     const netToReceiveBs = Math.round((totalGrossBs - retention.taxAmountBs) * 100) / 100;
 
-    // Total pagos Bs entregados al proveedor.
+    // Total de los NUEVOS pagos entregados al proveedor en este registro.
     const usdRateId = accounts[0]?.order?.billingExchangeRateId ?? null;
-    const totalPaymentsBs = await this.computePaymentsTotalBs(dto.payments, usdRateId);
+    const newPaymentsBs = await this.computePaymentsTotalBs(dto.payments, usdRateId);
+    if (newPaymentsBs <= 0) {
+      throw new BadRequestException('El monto de los pagos debe ser mayor a 0');
+    }
 
-    if (Math.abs(totalPaymentsBs - netToReceiveBs) > TOLERANCE_BS) {
+    // Acumulado = parciales previos + nuevos. La retención se genera SÓLO al
+    // cuadrar con el neto; un pago parcial deja las cuentas en "partially_paid".
+    const cumulativeBs = Math.round((priorPaidBs + newPaymentsBs) * 100) / 100;
+    if (cumulativeBs - netToReceiveBs > TOLERANCE_BS) {
       throw new BadRequestException(
-        `El total de pagos al proveedor (Bs ${totalPaymentsBs.toFixed(2)}) no coincide con el monto neto a entregar (Bs ${netToReceiveBs.toFixed(2)} = bruto ${totalGrossBs.toFixed(2)} − retención ${retention.taxAmountBs.toFixed(2)})`,
+        `El pago excede el neto a entregar: acumulado Bs ${cumulativeBs.toFixed(2)} > neto Bs ${netToReceiveBs.toFixed(2)} (ya pagado Bs ${priorPaidBs.toFixed(2)} + nuevos Bs ${newPaymentsBs.toFixed(2)}).`,
       );
     }
+    const isComplete = Math.abs(cumulativeBs - netToReceiveBs) <= TOLERANCE_BS;
 
     const ids = await this.dataSource.transaction(async (mgr) => {
       // 1) Persistir pagos al proveedor + linkear a las AP cubiertas.
@@ -352,54 +400,56 @@ export class AccountsPayableService {
           );
         }
         await mgr.update(AccountsPayable, acc.id, {
-          status: 'paid',
-          paidAt: new Date(),
+          status: isComplete ? 'paid' : 'partially_paid',
+          paidAt: isComplete ? new Date() : null,
         });
       }
 
-      // 2) Crear taxes_payable agrupada.
-      const seqRows = await mgr.query<{ nextval: string }[]>(
-        `SELECT nextval('taxes_payable_seq') AS nextval`,
-      );
-      const taxPayableNumber = String(seqRows[0].nextval);
-      const insertedTax = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "taxes_payable" (
-          "taxPayableNumber", "recipientType", "doctorId", "careCenterId",
-          "personType", "taxUnitId", "taxUnitAmountBs",
-          "grossAmountBs", "taxRate", "subtrahendBs", "taxAmountBs", "status"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unpaid')
-        RETURNING "id"`,
-        [
-          taxPayableNumber,
-          recipientType,
-          doctorId,
-          careCenterId,
-          personType,
-          taxUnit.id,
-          taxUnitAmountBs.toFixed(2),
-          totalGrossBs.toFixed(2),
-          retention.taxRate.toFixed(4),
-          retention.subtrahendBs.toFixed(2),
-          retention.taxAmountBs.toFixed(2),
-        ],
-      );
-      const taxId = insertedTax[0].id;
+      // 2) Retención SENIAT: SÓLO al cuadrar el neto. Un parcial no la genera.
+      if (isComplete) {
+        const seqRows = await mgr.query<{ nextval: string }[]>(
+          `SELECT nextval('taxes_payable_seq') AS nextval`,
+        );
+        const taxPayableNumber = String(seqRows[0].nextval);
+        const insertedTax = await mgr.query<{ id: string }[]>(
+          `INSERT INTO "taxes_payable" (
+            "taxPayableNumber", "recipientType", "doctorId", "careCenterId",
+            "personType", "taxUnitId", "taxUnitAmountBs",
+            "grossAmountBs", "taxRate", "subtrahendBs", "taxAmountBs", "status"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unpaid')
+          RETURNING "id"`,
+          [
+            taxPayableNumber,
+            recipientType,
+            doctorId,
+            careCenterId,
+            personType,
+            taxUnit.id,
+            taxUnitAmountBs.toFixed(2),
+            totalGrossBs.toFixed(2),
+            retention.taxRate.toFixed(4),
+            retention.subtrahendBs.toFixed(2),
+            retention.taxAmountBs.toFixed(2),
+          ],
+        );
+        const taxId = insertedTax[0].id;
 
-      // 3) Pivots: órdenes contenidas + AP cubiertas.
-      const orderIds = Array.from(new Set(accounts.map((a) => a.orderId)));
-      for (const orderId of orderIds) {
-        await mgr.query(
-          `INSERT INTO "taxes_payable_orders" ("taxPayableId", "orderId")
-           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [taxId, orderId],
-        );
-      }
-      for (const acc of accounts) {
-        await mgr.query(
-          `INSERT INTO "taxes_payable_payables" ("taxPayableId", "payableId")
-           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [taxId, acc.id],
-        );
+        // 3) Pivots: órdenes contenidas + AP cubiertas.
+        const orderIds = Array.from(new Set(accounts.map((a) => a.orderId)));
+        for (const orderId of orderIds) {
+          await mgr.query(
+            `INSERT INTO "taxes_payable_orders" ("taxPayableId", "orderId")
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [taxId, orderId],
+          );
+        }
+        for (const acc of accounts) {
+          await mgr.query(
+            `INSERT INTO "taxes_payable_payables" ("taxPayableId", "payableId")
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [taxId, acc.id],
+          );
+        }
       }
 
       return accounts.map((a) => a.id);

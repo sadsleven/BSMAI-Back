@@ -15,6 +15,7 @@ import { DoctorsService } from './doctors.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { QueryDoctorsDto } from './dto/query-doctors.dto';
+import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
 
@@ -50,6 +51,16 @@ export class DoctorsController {
   @Patch(':id')
   update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateDoctorDto) {
     return this.service.update(id, dto);
+  }
+
+  @RequirePermissions(PERMISSIONS.DOCTORS.CHANGE_PASSWORD)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Patch(':id/change-password')
+  changePassword(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.service.changePassword(id, dto);
   }
 
   @RequirePermissions(PERMISSIONS.DOCTORS.TOGGLE_ACTIVE)

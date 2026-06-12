@@ -24,14 +24,40 @@ import {
   computeAmountInUsd,
 } from '../shared/utils/payment-conversion';
 import { Order } from '../orders/entities/order.entity';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service';
 
 const TOLERANCE_USD = 0.01;
 const TOLERANCE_BS = 0.01;
 
 /**
- * Target USD que el comercio espera cobrar por una orden. Para órdenes
- * Cashea descuenta la comisión snapshot (el comercio recibe priceAmount
- * × (1 - casheaCommissionRate)). Resto de tipos esperan priceAmount.
+ * Comisión Cashea (USD) snapshot de una orden = primeraCuota × firstRate +
+ * total × totalRate. 0 si la orden no es Cashea o le faltan snapshots.
+ *
+ * Cálculo exacto en centavos enteros (redondeo mitad-arriba) para evitar el
+ * drift de punto flotante de `Number.toFixed`, que trunca el medio-centavo
+ * hacia abajo (ej. 0.25 × 6% = 0.015 → toFixed daría 0.01 en vez de 0.02).
+ * Montos en centavos, tasas en diezmilésimos:
+ *   comisiónCents = round((primeraCuotaCents·r1 + precioCents·r2) / 10000).
+ */
+export function casheaCommissionForOrder(order: Order): number {
+  if (order.type !== 'cashea') return 0;
+  const price = Number(order.priceAmount);
+  if (!Number.isFinite(price)) return 0;
+  const firstAmount = Number(order.casheaFirstInstallmentAmount) || 0;
+  const firstRate = Number(order.casheaFirstInstallmentRate) || 0;
+  const totalRate = Number(order.casheaTotalRate) || 0;
+  const firstCents = Math.round(firstAmount * 100);
+  const priceCents = Math.round(price * 100);
+  const r1 = Math.round(firstRate * 10000);
+  const r2 = Math.round(totalRate * 10000);
+  const commissionCents = Math.round((firstCents * r1 + priceCents * r2) / 10000);
+  return commissionCents / 100;
+}
+
+/**
+ * Target USD que el comercio espera cobrar por una orden. Para órdenes Cashea
+ * descuenta la comisión snapshot en dos tramos (primera cuota + total): el
+ * comercio recibe priceAmount − comisión. Resto de tipos esperan priceAmount.
  *
  * No aplica a órdenes con `useFixedRate=true` (esas tienen target en Bs,
  * usar `targetBsForOrder`).
@@ -39,9 +65,8 @@ const TOLERANCE_BS = 0.01;
 export function targetUsdForOrder(order: Order): number {
   const price = Number(order.priceAmount);
   if (!Number.isFinite(price)) return 0;
-  if (order.type === 'cashea' && order.casheaCommissionRate != null) {
-    const rate = Number(order.casheaCommissionRate);
-    if (Number.isFinite(rate)) return +(price * (1 - rate)).toFixed(2);
+  if (order.type === 'cashea') {
+    return +(price - casheaCommissionForOrder(order)).toFixed(2);
   }
   return price;
 }
@@ -69,8 +94,10 @@ export class AccountsReceivableService {
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
     private readonly dataSource: DataSource,
+    private readonly paymentAccounts: PaymentAccountsService,
   ) {
     void this.paymentsRepo;
+    void this.banksRepo;
   }
 
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
@@ -197,23 +224,41 @@ export class AccountsReceivableService {
       bankCode: null,
       accountNumber: null,
       exchangeRateId: null,
+      paymentAccountId: null,
       amountCurrency: p.amountCurrency,
       amountValue: p.amountValue.toFixed(2),
       amountInUsd: '0',
     };
 
+    const needsPaymentAccount =
+      p.type === 'mobile_payment' || p.type === 'bank_transfer' || p.type === 'other';
+
+    if (needsPaymentAccount) {
+      if (!p.paymentAccountId)
+        throw new BadRequestException(
+          `paymentAccountId requerido para cobros de tipo ${p.type}`,
+        );
+      const account = await this.paymentAccounts.assertUsableForPaymentType(
+        p.paymentAccountId,
+        p.type as 'mobile_payment' | 'bank_transfer' | 'other',
+      );
+      out.paymentAccountId = account.id;
+      out.bankCode = account.bankCode ?? null;
+      out.accountNumber = account.accountNumber ?? null;
+    } else if (p.paymentAccountId) {
+      throw new BadRequestException(
+        `Cobros de tipo ${p.type} no pueden referenciar una cuenta de pago`,
+      );
+    }
+
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
-      if (!p.bankCode) throw new BadRequestException('bankCode requerido');
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
         throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
-      const bank = await this.banksRepo.findOne({ where: { code: p.bankCode } });
-      if (!bank) throw new BadRequestException('Banco no encontrado');
       const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('Cobro en BS requiere tasa USD/Bs');
-      out.bankCode = p.bankCode;
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
@@ -237,9 +282,19 @@ export class AccountsReceivableService {
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      if (p.amountCurrency !== 'USD')
-        throw new BadRequestException('other: amountCurrency debe ser USD');
-      out.accountNumber = p.accountNumber ?? null;
+      if (p.amountCurrency === 'BS' || p.amountCurrency === 'EUR') {
+        if (!p.exchangeRateId)
+          throw new BadRequestException(
+            `exchangeRateId requerido para cobro other en ${p.amountCurrency}`,
+          );
+        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+        if (p.amountCurrency === 'BS' && rate.currency !== 'USD')
+          throw new BadRequestException('other en BS requiere tasa USD/Bs');
+        if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
+          throw new BadRequestException('other en EUR requiere tasa EUR/Bs');
+        out.exchangeRateId = p.exchangeRateId;
+      }
     }
 
     const conversionInput = {

@@ -7,6 +7,7 @@ import { Order } from '../orders/entities/order.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { User } from '../users/entities/user.entity';
 import { AuthModule } from '../auth/auth.module';
+import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.module';
 import { STORAGE_PROVIDER } from './storage/storage.provider';
 import { VercelBlobProvider } from './storage/vercel-blob.provider';
 
@@ -23,6 +24,7 @@ import { VercelBlobProvider } from './storage/vercel-blob.provider';
 @Module({
   imports: [
     AuthModule,
+    ProviderAccountsModule,
     TypeOrmModule.forFeature([FileEntity, Order, Branch, User]),
   ],
   providers: [

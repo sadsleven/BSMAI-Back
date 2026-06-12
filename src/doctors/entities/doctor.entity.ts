@@ -3,8 +3,10 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  JoinColumn,
   JoinTable,
   ManyToMany,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -13,6 +15,7 @@ import { Specialty } from '../../specialties/entities/specialty.entity';
 import { DoctorPhone } from './doctor-phone.entity';
 import { DoctorPaymentMethod } from './doctor-payment-method.entity';
 import { DoctorServicePrice } from './doctor-service-price.entity';
+import { User } from '../../users/entities/user.entity';
 
 @Entity({ name: 'doctors' })
 export class Doctor {
@@ -67,6 +70,17 @@ export class Doctor {
    */
   @OneToMany(() => DoctorServicePrice, (sp) => sp.doctor, { eager: true })
   servicePrices: DoctorServicePrice[];
+
+  /**
+   * Cuenta de usuario vinculada (acceso al sistema como proveedor). Nullable:
+   * un doctor sin acceso no tiene user. FK ON DELETE SET NULL.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  userId?: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'userId' })
+  user?: User | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

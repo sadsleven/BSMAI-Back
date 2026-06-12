@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { bootstrapApp, closeApp } from './helpers/setup';
 import { authHeader, loginAsSuperAdmin } from './helpers/auth';
 import { uniqueEmail, uniqueName } from './helpers/unique';

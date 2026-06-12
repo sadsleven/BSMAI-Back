@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 
 /**
  * Token cacheado por proceso para no re-loguear en cada spec. Cada suite

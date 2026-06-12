@@ -16,12 +16,15 @@ import {
   MAX_UPLOAD_SIZE_BYTES,
   ORDER_REPORT_ALLOWED_MIME,
   ORDER_REPORT_KIND,
+  ORDER_REPORT_KIND_PREFIX,
+  orderReportProviderKind,
 } from './files.constants';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
 import { Order } from '../orders/entities/order.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { User } from '../users/entities/user.entity';
+import { ProviderAccountsService } from '../provider-accounts/provider-accounts.service';
 
 type OwnerAction = 'upload' | 'view' | 'delete';
 
@@ -42,6 +45,7 @@ export class FilesService {
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
   // ---- Upload (server-side) ---------------------------------------------
@@ -60,12 +64,13 @@ export class FilesService {
       );
     }
 
-    await this.assertOwnerAccess(dto.ownerType, dto.ownerId, user, 'upload');
-
     const { allowedContentTypes, kind } = this.policyForOwner(
       dto.ownerType,
       dto.kind ?? null,
     );
+
+    await this.assertOwnerAccess(dto.ownerType, dto.ownerId, user, 'upload', kind);
+
     if (!this.matchesAnyMime(file.mimetype, allowedContentTypes)) {
       throw new BadRequestException(`Tipo MIME no permitido: ${file.mimetype}`);
     }
@@ -97,10 +102,13 @@ export class FilesService {
     requestedKind: string | null,
   ): { allowedContentTypes: string[]; kind: string } {
     if (ownerType === 'order') {
-      return {
-        allowedContentTypes: ORDER_REPORT_ALLOWED_MIME,
-        kind: requestedKind ?? ORDER_REPORT_KIND,
-      };
+      const kind = requestedKind ?? ORDER_REPORT_KIND;
+      if (!kind.startsWith(ORDER_REPORT_KIND_PREFIX)) {
+        throw new BadRequestException(
+          `kind no soportado para órdenes: ${kind}`,
+        );
+      }
+      return { allowedContentTypes: ORDER_REPORT_ALLOWED_MIME, kind };
     }
     throw new BadRequestException(`ownerType no soportado: ${ownerType}`);
   }
@@ -125,7 +133,7 @@ export class FilesService {
   // ---- Listado / Get ----------------------------------------------------
 
   async list(q: QueryFilesDto, user: AuthenticatedUser): Promise<FileEntity[]> {
-    await this.assertOwnerAccess(q.ownerType, q.ownerId, user, 'view');
+    await this.assertOwnerAccess(q.ownerType, q.ownerId, user, 'view', q.kind ?? null);
     return this.repo.find({
       where: {
         ownerType: q.ownerType,
@@ -144,7 +152,7 @@ export class FilesService {
       relations: { uploadedBy: true },
     });
     if (!file) throw new NotFoundException('Archivo no encontrado');
-    await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'view');
+    await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'view', file.kind);
     return file;
   }
 
@@ -168,7 +176,7 @@ export class FilesService {
   async remove(id: string, user: AuthenticatedUser): Promise<void> {
     const file = await this.repo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!file) throw new NotFoundException('Archivo no encontrado');
-    await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'delete');
+    await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'delete', file.kind);
     await this.storage.delete(file.url);
     await this.repo.softDelete(file.id);
   }
@@ -180,12 +188,39 @@ export class FilesService {
     ownerId: string,
     user: AuthenticatedUser,
     action: OwnerAction,
+    kind?: string | null,
   ): Promise<void> {
     if (ownerType === 'order') {
       const order = await this.ordersRepo.findOne({
         where: { id: ownerId, deletedAt: IsNull() },
+        relations: { orderServiceTypes: true },
       });
       if (!order) throw new NotFoundException('Orden no encontrada');
+
+      // Usuario proveedor: solo órdenes donde participa; gestiona (upload/delete)
+      // únicamente los archivos de SU propio segmento (kind por proveedor).
+      const provider = user.isSuperAdmin
+        ? null
+        : await this.providerAccounts.findProviderByUserId(user.id);
+      if (provider) {
+        const onOrder = (order.orderServiceTypes ?? []).some((ost) =>
+          provider.type === 'doctor'
+            ? ost.doctorId === provider.id
+            : ost.careCenterId === provider.id,
+        );
+        if (!onOrder) {
+          throw new ForbiddenException('Sin acceso a esta orden');
+        }
+        if (action !== 'view') {
+          const ownKind = orderReportProviderKind(provider.type, provider.id);
+          if (kind !== ownKind) {
+            throw new ForbiddenException(
+              'Solo podés gestionar los archivos de tu propio informe',
+            );
+          }
+        }
+        return;
+      }
 
       if (!user.isSuperAdmin) {
         const allowed = await this.resolveUserBranchIds(user);

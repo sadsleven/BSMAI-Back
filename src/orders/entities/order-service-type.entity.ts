@@ -42,6 +42,13 @@ export class OrderServiceType {
   @Column({ type: 'varchar', length: 16 })
   providerType: ProviderType;
 
+  /**
+   * Cantidad de este ST en la orden (ej. sesiones). Siempre ≥ 1; sólo > 1 si el
+   * ST tiene `allowsQuantity`. El precio de la orden multiplica unidad × cantidad.
+   */
+  @Column({ type: 'integer', default: 1 })
+  quantity: number;
+
   @Column({ type: 'uuid', nullable: true })
   doctorId?: string | null;
 

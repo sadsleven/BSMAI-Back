@@ -4,12 +4,22 @@ import { Repository } from 'typeorm';
 import { AppConfig } from './entities/app-config.entity';
 
 export const APP_CONFIG_KEYS = {
-  CASHEA_COMMISSION_RATE: 'cashea.commissionRate',
+  CASHEA_FIRST_INSTALLMENT_RATE: 'cashea.firstInstallmentRate',
+  CASHEA_TOTAL_RATE: 'cashea.totalRate',
 } as const;
 
 const DEFAULTS: Record<string, string> = {
-  [APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE]: '0.10',
+  [APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE]: '0.04',
+  [APP_CONFIG_KEYS.CASHEA_TOTAL_RATE]: '0.06',
 };
+
+/** Configuración de comisión Cashea expresada como fracciones (0..1). */
+export interface CasheaCommissionConfig {
+  /** Fracción sobre el monto de la primera cuota (inicial). Ej. 0.04 = 4%. */
+  firstInstallmentRate: number;
+  /** Fracción sobre el total de la orden. Ej. 0.06 = 6%. */
+  totalRate: number;
+}
 
 @Injectable()
 export class AppConfigService {
@@ -35,14 +45,33 @@ export class AppConfigService {
     return this.repo.save(row);
   }
 
-  async getCasheaCommissionRate(): Promise<number> {
-    const raw = await this.get(APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE);
+  private parseRate(raw: string, fallback: number): number {
     const n = Number(raw);
-    return Number.isFinite(n) ? n : 0.1;
+    return Number.isFinite(n) ? n : fallback;
   }
 
-  async setCasheaCommissionRate(rate: number): Promise<{ commissionRate: number }> {
-    await this.set(APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE, rate.toFixed(4));
-    return { commissionRate: rate };
+  async getCasheaCommissionConfig(): Promise<CasheaCommissionConfig> {
+    const [first, total] = await Promise.all([
+      this.get(APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE),
+      this.get(APP_CONFIG_KEYS.CASHEA_TOTAL_RATE),
+    ]);
+    return {
+      firstInstallmentRate: this.parseRate(first, 0.04),
+      totalRate: this.parseRate(total, 0.06),
+    };
+  }
+
+  async setCasheaCommissionConfig(
+    config: CasheaCommissionConfig,
+  ): Promise<CasheaCommissionConfig> {
+    await this.set(
+      APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE,
+      config.firstInstallmentRate.toFixed(4),
+    );
+    await this.set(
+      APP_CONFIG_KEYS.CASHEA_TOTAL_RATE,
+      config.totalRate.toFixed(4),
+    );
+    return config;
   }
 }

@@ -28,6 +28,7 @@ const TAXES_PAYABLE_GROUP = 'Retenciones por pagar';
 const REPORTS_GROUP = 'Reportes';
 const APP_CONFIG_GROUP = 'Configuración';
 const FILES_GROUP = 'Archivos';
+const PAYMENT_ACCOUNTS_GROUP = 'Cuentas de pago';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -223,17 +224,38 @@ const patientsPermissions = buildResourcePermissions(
   standardActionLabels('paciente', 'pacientes'),
 );
 
-const doctorsPermissions = buildResourcePermissions(
-  'doctors',
-  DOCTORS_GROUP,
-  standardActionLabels('doctor', 'doctores'),
-);
+const doctorsPermissions: PermissionDefinition[] = [
+  ...buildResourcePermissions(
+    'doctors',
+    DOCTORS_GROUP,
+    standardActionLabels('doctor', 'doctores'),
+  ),
+  {
+    name: 'doctors.change-password',
+    resource: 'doctors',
+    action: 'change-password',
+    label: 'Cambiar contraseña de doctores',
+    description: 'Permite establecer o cambiar la contraseña de acceso de un doctor',
+    group: DOCTORS_GROUP,
+  },
+];
 
-const careCentersPermissions = buildResourcePermissions(
-  'care-centers',
-  CARE_CENTERS_GROUP,
-  standardActionLabels('centro de atención', 'centros de atención'),
-);
+const careCentersPermissions: PermissionDefinition[] = [
+  ...buildResourcePermissions(
+    'care-centers',
+    CARE_CENTERS_GROUP,
+    standardActionLabels('centro de atención', 'centros de atención'),
+  ),
+  {
+    name: 'care-centers.change-password',
+    resource: 'care-centers',
+    action: 'change-password',
+    label: 'Cambiar contraseña de centros de atención',
+    description:
+      'Permite establecer o cambiar la contraseña de acceso de un centro de atención',
+    group: CARE_CENTERS_GROUP,
+  },
+];
 
 const insurancesPermissions = buildResourcePermissions(
   'insurances',
@@ -275,6 +297,12 @@ const taxUnitsPermissions = buildResourcePermissions(
   'tax-units',
   TAX_UNITS_GROUP,
   standardActionLabels('unidad tributaria', 'unidades tributarias'),
+);
+
+const paymentAccountsPermissions = buildResourcePermissions(
+  'payment-accounts',
+  PAYMENT_ACCOUNTS_GROUP,
+  standardActionLabels('cuenta de pago', 'cuentas de pago'),
 );
 
 const ordersPermissions: PermissionDefinition[] = [
@@ -498,6 +526,12 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
     label: 'Ver cobranzas por aseguradora',
     description: 'Permite acceder al reporte gráfico de cobranzas por compañía de seguros',
   },
+  {
+    key: 'payment-account-inflows',
+    label: 'Ver dinero recibido por cuenta de pago',
+    description:
+      'Permite acceder al reporte de dinero recibido en las cuentas propias (órdenes y cuentas por cobrar)',
+  },
 ];
 
 const filesPermissions: PermissionDefinition[] = [
@@ -571,6 +605,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...exchangeRatesPermissions,
   ...branchesPermissions,
   ...taxUnitsPermissions,
+  ...paymentAccountsPermissions,
   ...ordersPermissions,
   ...accountsPayablePermissions,
   ...accountsReceivablePermissions,
@@ -618,8 +653,14 @@ export const PERMISSIONS = {
   },
   SPECIALTIES: buildResourceConst('specialties'),
   PATIENTS: buildResourceConst('patients'),
-  DOCTORS: buildResourceConst('doctors'),
-  CARE_CENTERS: buildResourceConst('care-centers'),
+  DOCTORS: {
+    ...buildResourceConst('doctors'),
+    CHANGE_PASSWORD: 'doctors.change-password',
+  },
+  CARE_CENTERS: {
+    ...buildResourceConst('care-centers'),
+    CHANGE_PASSWORD: 'care-centers.change-password',
+  },
   INSURANCES: buildResourceConst('insurances'),
   PATHOLOGIES: buildResourceConst('pathologies'),
   SERVICE_TYPES: buildResourceConst('service-types'),
@@ -627,6 +668,7 @@ export const PERMISSIONS = {
   EXCHANGE_RATES: buildResourceConst('exchange-rates'),
   BRANCHES: buildResourceConst('branches'),
   TAX_UNITS: buildResourceConst('tax-units'),
+  PAYMENT_ACCOUNTS: buildResourceConst('payment-accounts'),
   ORDERS: {
     LIST: 'orders.list',
     CREATE: 'orders.create',
@@ -673,5 +715,6 @@ export const PERMISSIONS = {
     ORDERS_TRACKING_LIST: 'reports.orders-tracking.list',
     SERVICES_BILLED_LIST: 'reports.services-billed.list',
     TAXES_RETAINED_LIST: 'reports.taxes-retained.list',
+    PAYMENT_ACCOUNT_INFLOWS_LIST: 'reports.payment-account-inflows.list',
   },
 } as const;

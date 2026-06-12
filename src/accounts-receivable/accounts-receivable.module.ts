@@ -7,9 +7,11 @@ import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { AccountsReceivableService } from './accounts-receivable.service';
 import { AccountsReceivableController } from './accounts-receivable.controller';
+import { PaymentAccountsModule } from '../payment-accounts/payment-accounts.module';
 
 @Module({
   imports: [
+    PaymentAccountsModule,
     TypeOrmModule.forFeature([
       AccountsReceivable,
       AccountsReceivablePayment,

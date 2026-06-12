@@ -22,6 +22,7 @@ import { User } from '../../users/entities/user.entity';
 import { OrderPayment } from './order-payment.entity';
 import { OrderServiceType } from './order-service-type.entity';
 import { OrderServicePricing } from './order-service-pricing.entity';
+import { OrderProviderReport } from './order-provider-report.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
@@ -142,13 +143,25 @@ export class Order {
   priceAmount: string;
 
   /**
-   * Snapshot del % de comisión Cashea vigente al crear la orden. Sólo se
-   * setea cuando `type='cashea'` (CHECK chk_orders_cashea_commission_xor).
-   * Expresado como fracción: 0.10 = 10%. Preserva el % aunque el admin
-   * cambie el valor global en `app_config` después.
+   * Comisión Cashea en dos tramos (snapshot al crear la orden). Sólo se setean
+   * cuando `type='cashea'` (CHECK chk_orders_cashea_fields). Preservan los
+   * valores aunque el admin cambie la config global en `app_config` después.
+   *
+   * Comisión = casheaFirstInstallmentAmount × casheaFirstInstallmentRate
+   *          + priceAmount × casheaTotalRate.
+   * Neto a cobrar = priceAmount − comisión.
    */
+  /** Monto de la primera cuota (inicial), en USD. Ingresado por orden. */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  casheaFirstInstallmentAmount?: string | null;
+
+  /** % sobre la primera cuota (fracción 0..1). Ej. 0.04 = 4%. */
   @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
-  casheaCommissionRate?: string | null;
+  casheaFirstInstallmentRate?: string | null;
+
+  /** % sobre el total de la orden (fracción 0..1). Ej. 0.06 = 6%. */
+  @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
+  casheaTotalRate?: string | null;
 
   /**
    * Modo tasa fija para órdenes tipo seguro. Cuando true, la cuenta por cobrar
@@ -206,8 +219,13 @@ export class Order {
   attendedAt?: Date | null;
 
   // ---- Paso 3: Informe médico y estudios ----
+  /** Nota general de la orden (nivel orden, editable por staff). */
   @Column({ type: 'text', nullable: true })
   otherStudies?: string | null;
+
+  /** Observaciones del informe segmentadas por proveedor (doctor/centro). */
+  @OneToMany(() => OrderProviderReport, (r) => r.order, { cascade: false })
+  providerReports: OrderProviderReport[];
 
   // ---- Paso 4: Facturación y liquidación ----
   /**

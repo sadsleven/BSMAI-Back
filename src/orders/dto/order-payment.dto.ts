@@ -48,6 +48,10 @@ export class CreateOrderPaymentDto {
   @IsUUID()
   exchangeRateId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  paymentAccountId?: string;
+
   @IsIn(PAYMENT_CURRENCIES)
   amountCurrency: 'USD' | 'EUR' | 'BS';
 
@@ -83,6 +87,10 @@ export class UpdateOrderPaymentDto {
   @IsOptional()
   @IsUUID()
   exchangeRateId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  paymentAccountId?: string;
 
   @IsOptional()
   @IsIn(PAYMENT_CURRENCIES)

@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { authHeader } from './auth';
 import { uniqueName } from './unique';
 

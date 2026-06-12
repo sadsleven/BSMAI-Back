@@ -1,9 +1,9 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { bootstrapApp, closeApp } from './helpers/setup';
 import { authHeader, loginAsSuperAdmin } from './helpers/auth';
 import { ensureSpecialty } from './helpers/fixtures';
-import { uniqueCedula } from './helpers/unique';
+import { uniqueCedula, uniqueEmail } from './helpers/unique';
 
 describe('DoctorsController (e2e)', () => {
   let app: INestApplication;
@@ -47,6 +47,7 @@ describe('DoctorsController (e2e)', () => {
       .set(authHeader(token))
       .send({
         cedula: uniqueCedula(),
+        email: uniqueEmail('doctor'),
         firstName: 'Maria',
         lastName: 'Lopez',
         isLegalEntity: false,

@@ -212,7 +212,7 @@ export class PatientsService {
     const base: Partial<Patient> = {
       personType: dto.personType,
       email,
-      birthDate: dto.birthDate,
+      birthDate: dto.birthDate || null,
       address: dto.address.trim(),
       isActive: dto.isActive ?? true,
     };
@@ -304,7 +304,7 @@ export class PatientsService {
       patient.cedula = null;
     }
 
-    if (dto.birthDate !== undefined) patient.birthDate = dto.birthDate;
+    if (dto.birthDate !== undefined) patient.birthDate = dto.birthDate || null;
     if (dto.address !== undefined) patient.address = dto.address.trim();
     if (dto.isActive !== undefined) patient.isActive = dto.isActive;
 

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -17,6 +18,10 @@ import { TokenBlacklistService } from './services/token-blacklist.service';
 import type { AuthenticatedUser } from './types/authenticated-user';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
+import {
+  ProviderAccountsService,
+  ProviderLink,
+} from '../provider-accounts/provider-accounts.service';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -28,6 +33,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly blacklist: TokenBlacklistService,
+    private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
   async login(email: string, password: string): Promise<{ accessToken: string; user: PublicUser }> {
@@ -57,7 +63,8 @@ export class AuthService {
     );
 
     const branches = await this.resolveVisibleBranches(user);
-    return { accessToken, user: toPublicUser(user, branches) };
+    const providerLink = await this.providerAccounts.findProviderByUserId(user.id);
+    return { accessToken, user: toPublicUser(user, branches, providerLink) };
   }
 
   /**
@@ -109,12 +116,28 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException();
     const branches = await this.resolveVisibleBranches(user);
-    return toPublicUser(user, branches);
+    const providerLink = await this.providerAccounts.findProviderByUserId(user.id);
+    return toPublicUser(user, branches, providerLink);
   }
 
   async updateOwnProfile(userId: string, dto: UpdateProfileDto): Promise<PublicUser> {
     const user = await this.usersRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    // Teléfono, grado académico y cargo son campos internos AFMI — las
+    // cuentas proveedor (doctor/centro) no pueden modificarlos.
+    if (
+      dto.phoneNumber !== undefined ||
+      dto.academicDegree !== undefined ||
+      dto.jobTitle !== undefined
+    ) {
+      const providerLink = await this.providerAccounts.findProviderByUserId(userId);
+      if (providerLink) {
+        throw new ForbiddenException(
+          'Teléfono, grado académico y cargo están reservados para usuarios AFMI',
+        );
+      }
+    }
 
     if (dto.email && dto.email.toLowerCase() !== user.email) {
       const dupe = await this.usersRepo.findOne({
@@ -211,9 +234,18 @@ export interface PublicUser {
    * stripped here, so FE never has to filter them.
    */
   branches: PublicBranch[];
+  /**
+   * Vínculo con un proveedor (doctor/centro) si la cuenta pertenece a uno. El FE
+   * lo usa para la vista mínima de proveedor (solo su informe). null para staff.
+   */
+  providerLink: ProviderLink | null;
 }
 
-export function toPublicUser(user: User, branches: PublicBranch[]): PublicUser {
+export function toPublicUser(
+  user: User,
+  branches: PublicBranch[],
+  providerLink: ProviderLink | null = null,
+): PublicUser {
   const activeRoles = (user.roles ?? []).filter((r) => r.isActive && !r.deletedAt);
   const permissions = new Set<string>();
   for (const role of activeRoles) {
@@ -232,5 +264,6 @@ export function toPublicUser(user: User, branches: PublicBranch[]): PublicUser {
     roles: activeRoles.map((r) => ({ id: r.id, name: r.name })),
     permissions: Array.from(permissions),
     branches,
+    providerLink,
   };
 }

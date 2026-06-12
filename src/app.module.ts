@@ -19,6 +19,7 @@ import { BanksModule } from './banks/banks.module';
 import { PatientsModule } from './patients/patients.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { CareCentersModule } from './care-centers/care-centers.module';
+import { ProviderAccountsModule } from './provider-accounts/provider-accounts.module';
 import { InsurancesModule } from './insurances/insurances.module';
 import { PathologiesModule } from './pathologies/pathologies.module';
 import { ServiceTypesModule } from './service-types/service-types.module';
@@ -34,6 +35,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SearchModule } from './search/search.module';
 import { FilesModule } from './files/files.module';
+import { PaymentAccountsModule } from './payment-accounts/payment-accounts.module';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { FilesModule } from './files/files.module';
     PatientsModule,
     DoctorsModule,
     CareCentersModule,
+    ProviderAccountsModule,
     InsurancesModule,
     PathologiesModule,
     ServiceTypesModule,
@@ -67,6 +70,7 @@ import { FilesModule } from './files/files.module';
     AppConfigModule,
     SearchModule,
     FilesModule,
+    PaymentAccountsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

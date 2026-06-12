@@ -11,7 +11,9 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Min,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { CreateOrderPaymentDto } from './order-payment.dto';
@@ -88,6 +90,16 @@ export class CreateOrderDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   priceAmount: number;
+
+  /**
+   * Monto de la primera cuota (inicial) Cashea, en USD. Requerido sólo cuando
+   * `type='cashea'`. Debe ser ≥ 0 y ≤ priceAmount (validado en service). Se usa
+   * para la comisión: primeraCuota × firstInstallmentRate + total × totalRate.
+   */
+  @ValidateIf((o: CreateOrderDto) => o.type === 'cashea')
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  casheaFirstInstallmentAmount?: number;
 
   /**
    * Sólo válido para `type='insurance'`. Cuando true, la cuenta por cobrar del

@@ -12,6 +12,7 @@ import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderPayment } from './entities/order-payment.entity';
 import { OrderServiceType } from './entities/order-service-type.entity';
+import { OrderProviderReport } from './entities/order-provider-report.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrderServiceTypeRowDto } from './dto/order-service-type.dto';
@@ -42,6 +43,11 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
 import { AuthService } from '../auth/auth.service';
 import { AppConfigService } from '../app-config/app-config.service';
+import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service';
+import {
+  ProviderAccountsService,
+  ProviderLink,
+} from '../provider-accounts/provider-accounts.service';
 import {
   computeAmountInUsd,
   resolveUsdRate,
@@ -84,14 +90,19 @@ export class OrdersService implements OnModuleInit {
     private readonly careCenterPricesRepo: Repository<CareCenterServicePrice>,
     @InjectRepository(OrderServicePricing)
     private readonly orderPricingRepo: Repository<OrderServicePricing>,
+    @InjectRepository(OrderProviderReport)
+    private readonly providerReportsRepo: Repository<OrderProviderReport>,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
     private readonly authService: AuthService,
     private readonly appConfig: AppConfigService,
+    private readonly paymentAccounts: PaymentAccountsService,
+    private readonly providerAccounts: ProviderAccountsService,
   ) {
     void this.insurancePricesRepo;
     void this.orderPricingRepo;
     void this.ostRepo;
+    void this.banksRepo;
   }
 
   async onModuleInit(): Promise<void> {
@@ -107,19 +118,28 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Suma de precios Particular (USD) de los STs dados.
-   * Usado para forzar el monto cuando el usuario no tiene orders.edit-amount.
+   * Suma de precios Particular (USD) de las filas dadas, multiplicando por la
+   * cantidad cuando el ST permite cantidad. Usado para forzar el monto cuando el
+   * usuario no tiene orders.edit-amount.
    */
-  private async computeParticularSum(serviceTypeIds: string[]): Promise<number> {
-    if (!serviceTypeIds.length) return 0;
+  private async computeParticularSum(
+    rows: Array<{ serviceTypeId: string; quantity?: number }>,
+  ): Promise<number> {
+    if (!rows.length) return 0;
+    const ids = Array.from(new Set(rows.map((r) => r.serviceTypeId)));
     const sts = await this.serviceTypesRepo.find({
-      where: { id: In(serviceTypeIds) },
-      select: ['id', 'particularPriceUsd'],
+      where: { id: In(ids) },
+      select: ['id', 'particularPriceUsd', 'allowsQuantity'],
     });
+    const byId = new Map(sts.map((s) => [s.id, s]));
     let sum = 0;
-    for (const st of sts) {
+    for (const r of rows) {
+      const st = byId.get(r.serviceTypeId);
+      if (!st) continue;
       const n = Number(st.particularPriceUsd);
-      if (Number.isFinite(n)) sum += n;
+      if (!Number.isFinite(n)) continue;
+      const qty = st.allowsQuantity ? Math.max(1, Math.trunc(r.quantity ?? 1)) : 1;
+      sum += n * qty;
     }
     return +sum.toFixed(2);
   }
@@ -192,7 +212,25 @@ export class OrdersService implements OnModuleInit {
       billingExchangeRate: true,
       fixedExchangeRate: true,
       servicePricing: true,
+      providerReports: { doctor: true, careCenter: true },
     } as const;
+  }
+
+  /** Resuelve el proveedor vinculado al usuario (o null si es staff/super admin). */
+  private async resolveProvider(
+    user: AuthenticatedUser,
+  ): Promise<ProviderLink | null> {
+    if (user.isSuperAdmin) return null;
+    return this.providerAccounts.findProviderByUserId(user.id);
+  }
+
+  /** ¿La orden (cargada con orderServiceTypes) incluye al proveedor dado? */
+  private orderHasProvider(order: Order, provider: ProviderLink): boolean {
+    return (order.orderServiceTypes ?? []).some((ost) =>
+      provider.type === 'doctor'
+        ? ost.doctorId === provider.id
+        : ost.careCenterId === provider.id,
+    );
   }
 
   async findAll(
@@ -244,11 +282,23 @@ export class OrdersService implements OnModuleInit {
     }
 
     if (!user.isSuperAdmin) {
-      const allowed = await this.resolveUserBranchIds(user);
-      if (allowed.length === 0) {
-        qb.andWhere('1 = 0');
+      const provider = await this.resolveProvider(user);
+      if (provider) {
+        // Usuario proveedor: solo sus órdenes (vía OST) y solo accionables.
+        qb.andWhere(
+          provider.type === 'doctor'
+            ? 'EXISTS (SELECT 1 FROM order_service_types pst WHERE pst."orderId" = o.id AND pst."doctorId" = :pid)'
+            : 'EXISTS (SELECT 1 FROM order_service_types pst WHERE pst."orderId" = o.id AND pst."careCenterId" = :pid)',
+          { pid: provider.id },
+        );
+        qb.andWhere("o.status IN ('attended', 'report_issued', 'finalized')");
       } else {
-        qb.andWhere('o.branchId IN (:...allowed)', { allowed });
+        const allowed = await this.resolveUserBranchIds(user);
+        if (allowed.length === 0) {
+          qb.andWhere('1 = 0');
+        } else {
+          qb.andWhere('o.branchId IN (:...allowed)', { allowed });
+        }
       }
     }
 
@@ -301,8 +351,29 @@ export class OrdersService implements OnModuleInit {
       withDeleted,
     });
     if (!order) throw new NotFoundException('Orden no encontrada');
-    await this.assertBranchVisibility(order.branchId, user);
+    await this.assertOrderVisibility(order, user);
     return order;
+  }
+
+  /**
+   * Visibilidad de una orden ya cargada (con `orderServiceTypes`).
+   *  - Super Admin: siempre.
+   *  - Usuario proveedor: solo si participa en la orden (vía OST).
+   *  - Staff: por sucursal asignada.
+   */
+  private async assertOrderVisibility(
+    order: Order,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    if (user.isSuperAdmin) return;
+    const provider = await this.resolveProvider(user);
+    if (provider) {
+      if (!this.orderHasProvider(order, provider)) {
+        throw new ForbiddenException('No tenés acceso a esta orden');
+      }
+      return;
+    }
+    await this.assertBranchVisibility(order.branchId, user);
   }
 
   private async assertBranchVisibility(branchId: string, user: AuthenticatedUser): Promise<void> {
@@ -529,24 +600,43 @@ export class OrdersService implements OnModuleInit {
       bankCode: null,
       accountNumber: null,
       exchangeRateId: null,
+      paymentAccountId: null,
       amountCurrency: p.amountCurrency,
       amountValue: p.amountValue.toFixed(2),
       amountInUsd: '0',
     };
 
+    const needsPaymentAccount =
+      p.type === 'mobile_payment' || p.type === 'bank_transfer' || p.type === 'other';
+
+    if (needsPaymentAccount) {
+      if (!p.paymentAccountId)
+        throw new BadRequestException(
+          `paymentAccountId requerido para pagos de tipo ${p.type}`,
+        );
+      const account = await this.paymentAccounts.assertUsableForPaymentType(
+        p.paymentAccountId,
+        p.type as 'mobile_payment' | 'bank_transfer' | 'other',
+      );
+      out.paymentAccountId = account.id;
+      // Snapshot desde la cuenta para histórico — independiente de cambios futuros.
+      out.bankCode = account.bankCode ?? null;
+      out.accountNumber = account.accountNumber ?? null;
+    } else if (p.paymentAccountId) {
+      throw new BadRequestException(
+        `Pagos de tipo ${p.type} no pueden referenciar una cuenta de pago`,
+      );
+    }
+
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
-      if (!p.bankCode) throw new BadRequestException('bankCode requerido');
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
         throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
-      const bank = await this.banksRepo.findOne({ where: { code: p.bankCode } });
-      if (!bank) throw new BadRequestException('Banco no encontrado');
       const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
       if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
       if (rate.currency !== 'USD')
         throw new BadRequestException('Pago en BS requiere tasa USD/Bs');
-      out.bankCode = p.bankCode;
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
@@ -572,9 +662,19 @@ export class OrdersService implements OnModuleInit {
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      if (p.amountCurrency !== 'USD')
-        throw new BadRequestException('other: amountCurrency debe ser USD');
-      out.accountNumber = p.accountNumber ?? null;
+      if (p.amountCurrency === 'BS' || p.amountCurrency === 'EUR') {
+        if (!p.exchangeRateId)
+          throw new BadRequestException(
+            `exchangeRateId requerido para pago other en ${p.amountCurrency}`,
+          );
+        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+        if (p.amountCurrency === 'BS' && rate.currency !== 'USD')
+          throw new BadRequestException('other en BS requiere tasa USD/Bs');
+        if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
+          throw new BadRequestException('other en EUR requiere tasa EUR/Bs');
+        out.exchangeRateId = p.exchangeRateId;
+      }
     }
 
     const usdAmount = await computeAmountInUsd(
@@ -599,15 +699,31 @@ export class OrdersService implements OnModuleInit {
       dto.type !== 'insurance' &&
       !this.userHasPermission(user, PERMISSIONS.ORDERS.EDIT_AMOUNT)
     ) {
-      effectivePriceAmount = await this.computeParticularSum(
-        dto.serviceTypes.map((r) => r.serviceTypeId),
-      );
+      effectivePriceAmount = await this.computeParticularSum(dto.serviceTypes);
     }
 
-    const casheaCommissionRate =
-      dto.type === 'cashea'
-        ? (await this.appConfig.getCasheaCommissionRate()).toFixed(4)
-        : null;
+    // Snapshot Cashea: dos tramos (primera cuota + total). El monto de la
+    // primera cuota lo ingresa el usuario; las tasas se toman de la config
+    // global vigente. Comisión = primeraCuota × firstRate + total × totalRate.
+    let casheaFields: {
+      casheaFirstInstallmentAmount: string;
+      casheaFirstInstallmentRate: string;
+      casheaTotalRate: string;
+    } | null = null;
+    if (dto.type === 'cashea') {
+      const firstAmount = dto.casheaFirstInstallmentAmount ?? 0;
+      if (firstAmount > effectivePriceAmount) {
+        throw new BadRequestException(
+          'La primera cuota Cashea no puede superar el precio total de la orden',
+        );
+      }
+      const cfg = await this.appConfig.getCasheaCommissionConfig();
+      casheaFields = {
+        casheaFirstInstallmentAmount: firstAmount.toFixed(2),
+        casheaFirstInstallmentRate: cfg.firstInstallmentRate.toFixed(4),
+        casheaTotalRate: cfg.totalRate.toFixed(4),
+      };
+    }
 
     const savedId = await this.dataSource.transaction(async (mgr) => {
       const orderNumber = await this.generateOrderNumber();
@@ -629,7 +745,11 @@ export class OrdersService implements OnModuleInit {
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
         priceAmount: effectivePriceAmount.toFixed(2),
-        casheaCommissionRate,
+        casheaFirstInstallmentAmount:
+          casheaFields?.casheaFirstInstallmentAmount ?? null,
+        casheaFirstInstallmentRate:
+          casheaFields?.casheaFirstInstallmentRate ?? null,
+        casheaTotalRate: casheaFields?.casheaTotalRate ?? null,
         useFixedRate: dto.type === 'insurance' && !!dto.useFixedRate,
         fixedExchangeRateId:
           dto.type === 'insurance' && dto.useFixedRate
@@ -726,12 +846,22 @@ export class OrdersService implements OnModuleInit {
   ): Promise<void> {
     await mgr.delete(OrderServiceType, { orderId });
     if (!rows.length) return;
+    // Cantidad sólo para STs con allowsQuantity; el resto se fuerza a 1.
+    const ids = Array.from(new Set(rows.map((r) => r.serviceTypeId)));
+    const sts = await mgr.getRepository(ServiceType).find({
+      where: { id: In(ids) },
+      select: ['id', 'allowsQuantity'],
+    });
+    const allowsQtyById = new Map(sts.map((s) => [s.id, s.allowsQuantity]));
     const values = rows.map((r) => ({
       orderId,
       serviceTypeId: r.serviceTypeId,
       providerType: r.providerType,
       doctorId: r.providerType === 'doctor' ? r.doctorId ?? null : null,
       careCenterId: r.providerType === 'care_center' ? r.careCenterId ?? null : null,
+      quantity: allowsQtyById.get(r.serviceTypeId)
+        ? Math.max(1, Math.trunc(r.quantity ?? 1))
+        : 1,
     }));
     await mgr.insert(OrderServiceType, values);
   }
@@ -770,37 +900,141 @@ export class OrdersService implements OnModuleInit {
         'La orden no puede pasar a atendida desde su estado actual',
       );
     }
-    order.attended = dto.attended;
-    order.attendedAt = dto.attended
+    const attendedAt = dto.attended
       ? dto.attendedAt
         ? new Date(dto.attendedAt)
         : new Date()
       : null;
-    if (dto.attended) {
-      order.status = 'attended';
-    } else if (order.status === 'attended') {
-      order.status = 'in_progress';
-    }
-    await this.repo.save(order);
+    const status: OrderStatus = dto.attended
+      ? 'attended'
+      : order.status === 'attended'
+        ? 'in_progress'
+        : order.status;
+    // `update` por columnas — la orden trae `providerReports` cargada y
+    // `save(order)` intentaría sincronizar esa relación (nullear FKs).
+    await this.repo.update(
+      { id: order.id },
+      { attended: dto.attended, attendedAt, status },
+    );
     return this.findOne(id, user);
   }
 
   async report(id: string, dto: ReportOrderDto, user: AuthenticatedUser): Promise<Order> {
     const order = await this.findOne(id, user);
-    // `otherStudies` + adjuntos del informe son editables retroactivamente.
-    // Permitimos cualquier estado salvo `draft`/`in_progress` (orden aún sin
+    // `otherStudies`, observaciones por proveedor y adjuntos son editables
+    // retroactivamente. Solo se bloquea `draft`/`in_progress` (orden aún sin
     // atender — no tiene sentido emitir informe).
     if (order.status === 'draft' || order.status === 'in_progress') {
       throw new BadRequestException('La orden debe estar atendida para emitir informe');
     }
-    if (dto.otherStudies !== undefined) {
-      order.otherStudies = dto.otherStudies && dto.otherStudies.trim() !== ''
-        ? dto.otherStudies
-        : null;
-    }
-    if (order.status === 'attended') order.status = 'report_issued';
-    await this.repo.save(order);
+
+    const provider = await this.resolveProvider(user);
+
+    // Proveedores distintos presentes en la orden (vía OST).
+    const orderProviders = this.distinctProvidersFromRows(
+      (order.orderServiceTypes ?? []).map((ost) => ({
+        serviceTypeId: ost.serviceTypeId,
+        providerType: ost.providerType,
+        doctorId: ost.doctorId ?? undefined,
+        careCenterId: ost.careCenterId ?? undefined,
+      })),
+    );
+    const validKeys = new Set<string>(orderProviders.map((p) => p.key));
+
+    await this.dataSource.transaction(async (mgr) => {
+      // Patch de columnas escalares de la orden. Importante: NO usar
+      // `mgr.save(order)` — la orden viene con la relación `providerReports`
+      // cargada y `save` intentaría sincronizarla (nullear el FK de las filas
+      // recién upserteadas). Se actualizan sólo columnas vía `mgr.update`.
+      const patch: Partial<Order> = {};
+
+      if (provider) {
+        // Usuario proveedor: solo su propio segmento; no toca la nota general.
+        const ownKey = `${provider.type}:${provider.id}`;
+        if (!validKeys.has(ownKey)) {
+          throw new ForbiddenException('No participás en esta orden');
+        }
+        for (const r of dto.providerReports ?? []) {
+          const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
+          if (`${r.providerType}:${pid ?? ''}` !== ownKey) {
+            throw new ForbiddenException(
+              'Solo podés editar las observaciones de tu propio informe',
+            );
+          }
+          await this.upsertProviderReport(
+            mgr,
+            order.id,
+            provider.type,
+            provider.id,
+            r.observations ?? null,
+          );
+        }
+      } else {
+        // Staff: nota general + cualquier segmento de proveedor de la orden.
+        if (dto.otherStudies !== undefined) {
+          patch.otherStudies =
+            dto.otherStudies && dto.otherStudies.trim() !== ''
+              ? dto.otherStudies
+              : null;
+        }
+        for (const r of dto.providerReports ?? []) {
+          const pid = r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
+          const key = `${r.providerType}:${pid}`;
+          if (!validKeys.has(key)) {
+            throw new BadRequestException(
+              `El proveedor del informe no participa en la orden (${key})`,
+            );
+          }
+          await this.upsertProviderReport(
+            mgr,
+            order.id,
+            r.providerType,
+            pid,
+            r.observations ?? null,
+          );
+        }
+      }
+      if (order.status === 'attended') patch.status = 'report_issued';
+      if (Object.keys(patch).length) {
+        await mgr.update(Order, { id: order.id }, patch);
+      }
+    });
+
     return this.findOne(id, user);
+  }
+
+  /** Upsert (por proveedor) de las observaciones del informe. */
+  private async upsertProviderReport(
+    mgr: EntityManager,
+    orderId: string,
+    providerType: 'doctor' | 'care_center',
+    providerId: string,
+    observations: string | null,
+  ): Promise<void> {
+    const obs = observations && observations.trim() !== '' ? observations : null;
+    const doctorId = providerType === 'doctor' ? providerId : null;
+    const careCenterId = providerType === 'care_center' ? providerId : null;
+    // Raw SQL (igual que las cuentas auto-generadas): evita la ambigüedad de
+    // mapeo columna/relación del FK `orderId` en el insert del ORM.
+    const existing = await mgr.query<Array<{ id: string }>>(
+      providerType === 'doctor'
+        ? `SELECT id FROM "order_provider_reports" WHERE "orderId" = $1 AND "doctorId" = $2 LIMIT 1`
+        : `SELECT id FROM "order_provider_reports" WHERE "orderId" = $1 AND "careCenterId" = $2 LIMIT 1`,
+      [orderId, providerId],
+    );
+    if (existing[0]) {
+      await mgr.query(
+        `UPDATE "order_provider_reports" SET "observations" = $1, "updatedAt" = now() WHERE id = $2`,
+        [obs, existing[0].id],
+      );
+    } else {
+      await mgr.query(
+        `INSERT INTO "order_provider_reports"
+           ("orderId", "providerType", "doctorId", "careCenterId", "observations")
+         VALUES ($1, $2, $3, $4, $5)`,
+        [orderId, providerType, doctorId, careCenterId, obs],
+      );
+    }
   }
 
   /**
@@ -839,11 +1073,16 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    order.priceAmount = dto.priceAmount.toFixed(2);
-    order.amountAuthorizedById = validator.id;
-    order.amountAuthorizedAt = new Date();
-    order.amountAuthorizationNote = dto.observation.trim();
-    await this.repo.save(order);
+    // `update` por columnas (la orden trae `providerReports` cargada).
+    await this.repo.update(
+      { id: order.id },
+      {
+        priceAmount: dto.priceAmount.toFixed(2),
+        amountAuthorizedById: validator.id,
+        amountAuthorizedAt: new Date(),
+        amountAuthorizationNote: dto.observation.trim(),
+      },
+    );
     return this.findOne(id, user);
   }
 
@@ -875,6 +1114,12 @@ export class OrdersService implements OnModuleInit {
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
     }));
+    const qtyByST = new Map(
+      (order.orderServiceTypes ?? []).map((ost) => [
+        ost.serviceTypeId,
+        ost.quantity ?? 1,
+      ]),
+    );
     const expected = this.distinctProvidersFromRows(orderRows);
     const expectedSet = new Set(expected.map((p) => p.key));
 
@@ -941,19 +1186,26 @@ export class OrdersService implements OnModuleInit {
         prov.providerType,
         prov.providerId,
         stIds,
+        qtyByST,
       );
       suggestedSum += suggested;
       snapshotRows.push(...rows);
     }
 
-    order.doctorAmountSuggested = suggestedSum.toFixed(2);
-    order.doctorAmount = totalUsd.toFixed(2);
-    order.billingExchangeRateId = dto.billingExchangeRateId;
-    order.status = 'finalized';
-
     // Replace-all snapshots del lado pago + per-account providerAmount.
     await this.dataSource.transaction(async (mgr) => {
-      await mgr.save(order);
+      // `update` por columnas — la orden trae `providerReports` cargada y
+      // `save(order)` intentaría sincronizar esa relación (nullear FKs).
+      await mgr.update(
+        Order,
+        { id: order.id },
+        {
+          doctorAmountSuggested: suggestedSum.toFixed(2),
+          doctorAmount: totalUsd.toFixed(2),
+          billingExchangeRateId: dto.billingExchangeRateId,
+          status: 'finalized',
+        },
+      );
       await mgr.delete(OrderServicePricing, {
         orderId: order.id,
         kind: In(['doctor', 'care_center']),
@@ -1041,6 +1293,7 @@ export class OrdersService implements OnModuleInit {
     providerType: 'doctor' | 'care_center',
     providerId: string,
     serviceTypeIds: string[],
+    qtyByST?: Map<string, number>,
   ): Promise<{
     suggested: number;
     snapshotRows: Array<{
@@ -1070,7 +1323,8 @@ export class OrdersService implements OnModuleInit {
     }> = [];
     for (const r of rows) {
       const amount = Number(r.priceUsd);
-      if (Number.isFinite(amount)) suggested += amount;
+      const qty = Math.max(1, Math.trunc(qtyByST?.get(r.serviceTypeId) ?? 1));
+      if (Number.isFinite(amount)) suggested += amount * qty;
       snapshotRows.push({
         orderId: '',
         serviceTypeId: r.serviceTypeId,
@@ -1094,6 +1348,7 @@ export class OrdersService implements OnModuleInit {
       providerType: ost.providerType,
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
+      quantity: ost.quantity ?? 1,
     }));
 
     const merged: CreateOrderDto = {
@@ -1119,6 +1374,11 @@ export class OrdersService implements OnModuleInit {
       appointmentDate:
         dto.appointmentDate ?? existing.appointmentDate.toISOString(),
       priceAmount: dto.priceAmount ?? Number(existing.priceAmount),
+      casheaFirstInstallmentAmount:
+        dto.casheaFirstInstallmentAmount ??
+        (existing.casheaFirstInstallmentAmount != null
+          ? Number(existing.casheaFirstInstallmentAmount)
+          : undefined),
       useFixedRate: dto.useFixedRate ?? existing.useFixedRate,
       fixedExchangeRateId:
         dto.fixedExchangeRateId ?? existing.fixedExchangeRateId ?? undefined,
@@ -1130,18 +1390,49 @@ export class OrdersService implements OnModuleInit {
       merged.type !== 'insurance' &&
       !this.userHasPermission(user, PERMISSIONS.ORDERS.EDIT_AMOUNT)
     ) {
-      merged.priceAmount = await this.computeParticularSum(
-        merged.serviceTypes.map((r) => r.serviceTypeId),
-      );
+      merged.priceAmount = await this.computeParticularSum(merged.serviceTypes);
     }
 
-    // Snapshot Cashea: setear si la orden pasa a cashea desde otro tipo;
-    // limpiar si deja de ser cashea; preservar si ya era cashea.
-    let nextCasheaRate: string | null | undefined = undefined;
-    if (merged.type === 'cashea' && existing.type !== 'cashea') {
-      nextCasheaRate = (await this.appConfig.getCasheaCommissionRate()).toFixed(4);
-    } else if (merged.type !== 'cashea' && existing.type === 'cashea') {
-      nextCasheaRate = null;
+    // Snapshot Cashea (dos tramos): si pasa a cashea desde otro tipo, capturar
+    // tasas de la config global; si ya era cashea, preservar tasas snapshot y
+    // sólo actualizar el monto de la primera cuota; si deja de ser cashea,
+    // limpiar los tres campos. `undefined` = no tocar.
+    let nextCashea:
+      | {
+          casheaFirstInstallmentAmount: string;
+          casheaFirstInstallmentRate: string;
+          casheaTotalRate: string;
+        }
+      | null
+      | undefined = undefined;
+    if (merged.type === 'cashea') {
+      const firstAmount = merged.casheaFirstInstallmentAmount ?? 0;
+      if (firstAmount > merged.priceAmount) {
+        throw new BadRequestException(
+          'La primera cuota Cashea no puede superar el precio total de la orden',
+        );
+      }
+      let firstRate: string;
+      let totalRate: string;
+      if (existing.type === 'cashea') {
+        // Preservar snapshot de tasas; sólo cambia el monto de la primera cuota.
+        const cfg = await this.appConfig.getCasheaCommissionConfig();
+        firstRate =
+          existing.casheaFirstInstallmentRate ??
+          cfg.firstInstallmentRate.toFixed(4);
+        totalRate = existing.casheaTotalRate ?? cfg.totalRate.toFixed(4);
+      } else {
+        const cfg = await this.appConfig.getCasheaCommissionConfig();
+        firstRate = cfg.firstInstallmentRate.toFixed(4);
+        totalRate = cfg.totalRate.toFixed(4);
+      }
+      nextCashea = {
+        casheaFirstInstallmentAmount: firstAmount.toFixed(2),
+        casheaFirstInstallmentRate: firstRate,
+        casheaTotalRate: totalRate,
+      };
+    } else if (existing.type === 'cashea') {
+      nextCashea = null;
     }
 
     await this.dataSource.transaction(async (mgr) => {
@@ -1162,8 +1453,14 @@ export class OrdersService implements OnModuleInit {
         orderDate: merged.orderDate,
         appointmentDate: new Date(merged.appointmentDate),
         priceAmount: merged.priceAmount.toFixed(2),
-        ...(nextCasheaRate !== undefined
-          ? { casheaCommissionRate: nextCasheaRate }
+        ...(nextCashea !== undefined
+          ? nextCashea === null
+            ? {
+                casheaFirstInstallmentAmount: null,
+                casheaFirstInstallmentRate: null,
+                casheaTotalRate: null,
+              }
+            : nextCashea
           : {}),
         useFixedRate: merged.type === 'insurance' && !!merged.useFixedRate,
         fixedExchangeRateId:

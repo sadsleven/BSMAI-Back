@@ -1,9 +1,9 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { bootstrapApp, closeApp } from './helpers/setup';
 import { authHeader, loginAsSuperAdmin } from './helpers/auth';
 import { ensureBranch, ensureSpecialty } from './helpers/fixtures';
-import { uniqueCedula, uniqueName } from './helpers/unique';
+import { uniqueCedula, uniqueName, uniqueEmail } from './helpers/unique';
 
 /**
  * E2E de OrdersController. Construye toda la cadena de fixtures requerida
@@ -76,6 +76,7 @@ describe('OrdersController (e2e)', () => {
       .set(authHeader(token))
       .send({
         cedula: uniqueCedula(),
+        email: uniqueEmail('doctor'),
         firstName: 'Doc',
         lastName: 'E2E',
         isLegalEntity: false,

@@ -1,9 +1,9 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { bootstrapApp, closeApp } from './helpers/setup';
 import { authHeader, loginAsSuperAdmin } from './helpers/auth';
 import { ensureSpecialty } from './helpers/fixtures';
-import { uniqueName } from './helpers/unique';
+import { uniqueName, uniqueEmail } from './helpers/unique';
 
 describe('CareCentersController (e2e)', () => {
   let app: INestApplication;
@@ -47,6 +47,7 @@ describe('CareCentersController (e2e)', () => {
       .set(authHeader(token))
       .send({
         businessName: uniqueName('Centro E2E'),
+        email: uniqueEmail('centro'),
         phones: [],
         specialtyIds: [specialtyId],
       });

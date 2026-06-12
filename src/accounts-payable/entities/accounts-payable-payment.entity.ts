@@ -58,6 +58,11 @@ export class AccountsPayablePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   amountInUsd: string;
 
+  /** Monto del pago en bolívares (snapshot a la tasa usada). Para acumular
+   * pagos parciales al proveedor de forma exacta. */
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  amountInBs: string;
+
   @ManyToMany(() => AccountsPayable, (a) => a.payments)
   accounts: AccountsPayable[];
 

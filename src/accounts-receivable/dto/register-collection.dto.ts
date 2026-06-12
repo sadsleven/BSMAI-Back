@@ -52,6 +52,10 @@ export class AccountsReceivablePaymentDto {
   @IsUUID()
   exchangeRateId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  paymentAccountId?: string;
+
   @IsIn(PAYMENT_CURRENCIES)
   amountCurrency: 'USD' | 'EUR' | 'BS';
 
