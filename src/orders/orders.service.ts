@@ -43,6 +43,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
 import { AuthService } from '../auth/auth.service';
 import { AppConfigService } from '../app-config/app-config.service';
+import { orderReportProviderKind } from '../files/files.constants';
 import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service';
 import {
   ProviderAccountsService,
@@ -281,8 +282,8 @@ export class OrdersService implements OnModuleInit {
       qb.withDeleted();
     }
 
+    const provider = user.isSuperAdmin ? null : await this.resolveProvider(user);
     if (!user.isSuperAdmin) {
-      const provider = await this.resolveProvider(user);
       if (provider) {
         // Usuario proveedor: solo sus órdenes (vía OST) y solo accionables.
         qb.andWhere(
@@ -341,7 +342,35 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    return paginateBuilder<Order>(qb, page, limit);
+    const result = await paginateBuilder<Order>(qb, page, limit);
+
+    // Usuario proveedor: marca si SU propia observación (Paso 3) está completa.
+    // Completa = tiene un order_provider_report suyo con observations no vacío
+    // O al menos un archivo suyo (kind por proveedor) adjunto a la orden.
+    if (provider && result.data.length) {
+      const ids = result.data.map((o) => o.id);
+      const col = provider.type === 'doctor' ? 'doctorId' : 'careCenterId';
+      const kind = orderReportProviderKind(provider.type, provider.id);
+      const rows = await this.repo.manager.query<Array<{ orderId: string }>>(
+        `SELECT t.id AS "orderId"
+           FROM unnest($1::uuid[]) AS t(id)
+          WHERE EXISTS (
+                  SELECT 1 FROM "order_provider_reports" r
+                   WHERE r."orderId" = t.id AND r."${col}" = $2
+                     AND r."observations" IS NOT NULL AND btrim(r."observations") <> ''
+                )
+             OR EXISTS (
+                  SELECT 1 FROM "files" f
+                   WHERE f."ownerType" = 'order' AND f."ownerId" = t.id
+                     AND f."kind" = $3 AND f."deletedAt" IS NULL
+                )`,
+        [ids, provider.id, kind],
+      );
+      const done = new Set(rows.map((r) => r.orderId));
+      for (const o of result.data) o.providerObservationComplete = done.has(o.id);
+    }
+
+    return result;
   }
 
   async findOne(id: string, user: AuthenticatedUser, withDeleted = false): Promise<Order> {

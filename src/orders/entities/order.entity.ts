@@ -227,6 +227,14 @@ export class Order {
   @OneToMany(() => OrderProviderReport, (r) => r.order, { cascade: false })
   providerReports: OrderProviderReport[];
 
+  /**
+   * Transient (NO es columna). Sólo se completa en la lista cuando el solicitante
+   * es un usuario proveedor: indica si SU propia observación del Paso 3 ya está
+   * llena (campo libre no vacío). El FE lo usa para mostrar el estado por
+   * proveedor ("Observación completada/pendiente") en vez del estado global.
+   */
+  providerObservationComplete?: boolean;
+
   // ---- Paso 4: Facturación y liquidación ----
   /**
    * Monto sugerido (USD) calculado al entrar al Paso 4 = sum de precios del

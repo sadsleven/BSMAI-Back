@@ -55,8 +55,8 @@ export class DashboardController {
   }
 
   @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.LIST)
-  @Get('taxes-payable-total-usd')
-  taxesPayableTotalUsd() {
-    return this.service.taxesPayableTotalUsd();
+  @Get('taxes-payable-total-bs')
+  taxesPayableTotalBs() {
+    return this.service.taxesPayableTotalBs();
   }
 }

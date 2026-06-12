@@ -188,8 +188,12 @@ export class DashboardService {
     return { amount: +total.toFixed(2), currency: 'USD' };
   }
 
-  /** Total USD por pagar de retenciones SENIAT (Σ taxAmountBs − Σ amountInBs pagado) / tasa USD actual. */
-  async taxesPayableTotalUsd(): Promise<{ amount: number; currency: 'USD' }> {
+  /**
+   * Total Bs por pagar de retenciones SENIAT (Σ taxAmountBs − Σ amountInBs
+   * pagado). Las retenciones se declaran y pagan en Bs (SENIAT), por lo que el
+   * dashboard las muestra en su moneda nativa, sin convertir a USD.
+   */
+  async taxesPayableTotalBs(): Promise<{ amount: number; currency: 'BS' }> {
     const rows = await this.tpRepo
       .createQueryBuilder('tp')
       .leftJoin('tp.payments', 'p')
@@ -207,15 +211,7 @@ export class DashboardService {
       (s, r) => s + Math.max(0, Number(r.taxAmountBs) - Number(r.paidBs)),
       0,
     );
-    const currentUsd = await this.ratesRepo.findOne({
-      where: { currency: 'USD', isActive: true, deletedAt: IsNull() },
-      order: { effectiveDate: 'DESC', createdAt: 'DESC' },
-    });
-    const rate = Number(currentUsd?.amountBs ?? 0);
-    if (!Number.isFinite(rate) || rate <= 0) {
-      return { amount: 0, currency: 'USD' };
-    }
-    return { amount: +(totalBs / rate).toFixed(2), currency: 'USD' };
+    return { amount: +totalBs.toFixed(2), currency: 'BS' };
   }
 
   private async applyBranchScope(
