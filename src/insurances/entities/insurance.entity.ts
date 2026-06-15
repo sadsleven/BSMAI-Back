@@ -20,6 +20,10 @@ export class Insurance {
   @Column({ type: 'varchar', length: 200, unique: true })
   name: string;
 
+  /** Nombre corto / abreviatura del seguro. Opcional, no único. */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  shortName?: string | null;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   description?: string | null;
 

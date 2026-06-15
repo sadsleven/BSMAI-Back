@@ -231,7 +231,11 @@ export class AccountsReceivableService {
     };
 
     const needsPaymentAccount =
-      p.type === 'mobile_payment' || p.type === 'bank_transfer' || p.type === 'other';
+      p.type === 'mobile_payment' ||
+      p.type === 'bank_transfer' ||
+      p.type === 'bank_transfer_usd' ||
+      p.type === 'card' ||
+      p.type === 'other';
 
     if (needsPaymentAccount) {
       if (!p.paymentAccountId)
@@ -240,7 +244,12 @@ export class AccountsReceivableService {
         );
       const account = await this.paymentAccounts.assertUsableForPaymentType(
         p.paymentAccountId,
-        p.type as 'mobile_payment' | 'bank_transfer' | 'other',
+        p.type as
+          | 'mobile_payment'
+          | 'bank_transfer'
+          | 'bank_transfer_usd'
+          | 'card'
+          | 'other',
       );
       out.paymentAccountId = account.id;
       out.bankCode = account.bankCode ?? null;
@@ -251,11 +260,15 @@ export class AccountsReceivableService {
       );
     }
 
-    if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
+    if (
+      p.type === 'mobile_payment' ||
+      p.type === 'bank_transfer' ||
+      p.type === 'card'
+    ) {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
-        throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
+        throw new BadRequestException('Pago móvil/transferencia/punto debe ser en BS');
       const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('Cobro en BS requiere tasa USD/Bs');
@@ -267,6 +280,11 @@ export class AccountsReceivableService {
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+    } else if (p.type === 'bank_transfer_usd') {
+      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (p.amountCurrency !== 'USD')
+        throw new BadRequestException('Transferencia en dólares debe ser en USD');
+      out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_usd') {
       if (p.amountCurrency !== 'USD')
         throw new BadRequestException('cash_usd debe ser en USD');

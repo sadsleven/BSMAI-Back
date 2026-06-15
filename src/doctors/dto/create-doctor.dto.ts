@@ -58,6 +58,12 @@ export class CreateDoctorDto {
   @Matches(RIF_PATTERN, { message: RIF_MESSAGE })
   rif?: string;
 
+  /** Dirección del centro donde atiende el doctor. Opcional. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500, { message: 'La dirección del centro no puede superar 500 caracteres' })
+  centerAddress?: string;
+
   @IsArray()
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por doctor' })
   @ValidateNested({ each: true })

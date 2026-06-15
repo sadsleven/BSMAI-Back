@@ -153,6 +153,7 @@ export class DoctorsService {
       lastName: dto.lastName.trim(),
       isLegalEntity: isLegal,
       rif,
+      centerAddress: dto.centerAddress?.trim() || null,
       isActive: dto.isActive ?? true,
       specialties,
       phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
@@ -219,6 +220,9 @@ export class DoctorsService {
       accountFieldsChanged = true;
     }
     if (dto.isActive !== undefined) doctor.isActive = dto.isActive;
+    if (dto.centerAddress !== undefined) {
+      doctor.centerAddress = dto.centerAddress?.trim() || null;
+    }
 
     // isLegalEntity / rif coupled rules
     const nextLegal = dto.isLegalEntity ?? doctor.isLegalEntity;

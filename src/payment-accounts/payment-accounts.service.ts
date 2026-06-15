@@ -134,12 +134,16 @@ export class PaymentAccountsService {
       if (dto.idDocument !== undefined) acc.idDocument = patch.idDocument ?? null;
       if (dto.accountHolderName !== undefined)
         acc.accountHolderName = patch.accountHolderName ?? null;
-    } else if (t === 'bank_transfer') {
+    } else if (t === 'bank_transfer' || t === 'bank_transfer_usd') {
       if (dto.bankCode !== undefined) acc.bankCode = patch.bankCode ?? null;
       if (dto.accountNumber !== undefined) acc.accountNumber = patch.accountNumber ?? null;
       if (dto.accountHolderName !== undefined)
         acc.accountHolderName = patch.accountHolderName ?? null;
       if (dto.idDocument !== undefined) acc.idDocument = patch.idDocument ?? null;
+    } else if (t === 'card') {
+      if (dto.bankCode !== undefined) acc.bankCode = patch.bankCode ?? null;
+      if (dto.accountHolderName !== undefined)
+        acc.accountHolderName = patch.accountHolderName ?? null;
     } else {
       if (dto.description !== undefined) acc.description = patch.description ?? null;
     }
@@ -208,7 +212,13 @@ export class PaymentAccountsService {
     type: PaymentAccountType,
     bankCode: string | undefined,
   ): Promise<void> {
-    if (type !== 'mobile_payment' && type !== 'bank_transfer') return;
+    if (
+      type !== 'mobile_payment' &&
+      type !== 'bank_transfer' &&
+      type !== 'bank_transfer_usd' &&
+      type !== 'card'
+    )
+      return;
     if (!bankCode) return;
     const bank = await this.banksRepo.findOne({ where: { code: bankCode } });
     if (!bank) {
@@ -239,11 +249,18 @@ export class PaymentAccountsService {
       base.phoneNumber = dto.phoneNumber ?? null;
       base.idDocument = dto.idDocument ?? null;
       base.accountHolderName = dto.accountHolderName ?? null;
-    } else if (dto.type === 'bank_transfer') {
+    } else if (
+      dto.type === 'bank_transfer' ||
+      dto.type === 'bank_transfer_usd'
+    ) {
       base.bankCode = dto.bankCode ?? null;
       base.accountNumber = dto.accountNumber ?? null;
       base.accountHolderName = dto.accountHolderName ?? null;
       base.idDocument = dto.idDocument ?? null;
+    } else if (dto.type === 'card') {
+      // Punto (POS de tarjeta): banco emisor + titular.
+      base.bankCode = dto.bankCode ?? null;
+      base.accountHolderName = dto.accountHolderName ?? null;
     } else {
       base.description = dto.description ?? null;
     }

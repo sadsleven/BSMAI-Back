@@ -8,7 +8,12 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export type PaymentAccountType = 'mobile_payment' | 'bank_transfer' | 'other';
+export type PaymentAccountType =
+  | 'mobile_payment'
+  | 'bank_transfer'
+  | 'bank_transfer_usd'
+  | 'card'
+  | 'other';
 
 /**
  * Cuenta propia del negocio donde se recibe dinero. Catálogo global,
@@ -34,7 +39,7 @@ export class PaymentAccount {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  // mobile_payment + bank_transfer
+  // mobile_payment + bank_transfer + card
   @Column({ type: 'varchar', length: 8, nullable: true })
   bankCode?: string | null;
 
@@ -46,7 +51,7 @@ export class PaymentAccount {
   @Column({ type: 'varchar', length: 24, nullable: true })
   idDocument?: string | null;
 
-  // mobile_payment + bank_transfer
+  // mobile_payment + bank_transfer + card
   @Column({ type: 'varchar', length: 200, nullable: true })
   accountHolderName?: string | null;
 
