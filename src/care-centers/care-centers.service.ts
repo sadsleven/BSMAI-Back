@@ -274,13 +274,27 @@ export class CareCentersService {
     return this.findOne(saved.id);
   }
 
-  /** Establece/cambia la contraseña de acceso del centro (vía cuenta vinculada). */
+  /**
+   * Establece/cambia la contraseña de acceso del centro (vía cuenta vinculada).
+   * Si aún no tiene cuenta, la aprovisiona (requiere email).
+   */
   async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
     const center = await this.findOne(id);
     if (!center.userId) {
-      throw new BadRequestException(
-        'El centro no tiene acceso habilitado. Asigná una contraseña desde la edición.',
-      );
+      if (!center.email) {
+        throw new BadRequestException(
+          'El email es requerido para habilitar el acceso del centro. Asigná un email desde la edición.',
+        );
+      }
+      const userId = await this.providerAccounts.provisionOrUpdateAccount({
+        existingUserId: null,
+        email: center.email,
+        firstName: center.businessName,
+        lastName: CARE_CENTER_USER_LAST_NAME,
+        password: dto.newPassword,
+      });
+      await this.repo.update(center.id, { userId });
+      return;
     }
     await this.providerAccounts.setPassword(center.userId, dto.newPassword);
   }

@@ -315,13 +315,27 @@ export class DoctorsService {
     return this.findOne(saved.id);
   }
 
-  /** Establece/cambia la contraseña de acceso del doctor (vía cuenta vinculada). */
+  /**
+   * Establece/cambia la contraseña de acceso del doctor (vía cuenta vinculada).
+   * Si aún no tiene cuenta, la aprovisiona (requiere email).
+   */
   async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
     const doctor = await this.findOne(id);
     if (!doctor.userId) {
-      throw new BadRequestException(
-        'El doctor no tiene acceso habilitado. Asigná una contraseña desde la edición.',
-      );
+      if (!doctor.email) {
+        throw new BadRequestException(
+          'El email es requerido para habilitar el acceso del doctor. Asigná un email desde la edición.',
+        );
+      }
+      const userId = await this.providerAccounts.provisionOrUpdateAccount({
+        existingUserId: null,
+        email: doctor.email,
+        firstName: doctor.firstName,
+        lastName: doctor.lastName,
+        password: dto.newPassword,
+      });
+      await this.repo.update(doctor.id, { userId });
+      return;
     }
     await this.providerAccounts.setPassword(doctor.userId, dto.newPassword);
   }
