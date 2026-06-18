@@ -100,13 +100,22 @@ export class DoctorsService {
   }
 
   async findAssignable(): Promise<Doctor[]> {
+    // relationLoadStrategy:'query' → las relaciones eager (phones, specialties,
+    // paymentMethods, servicePrices) se cargan en SELECTs separados. Sin esto,
+    // este find() SIN paginar une todo en una sola consulta y multiplica filas
+    // por doctor (producto cartesiano) sobre TODOS los doctores → OOM.
     return this.repo.find({
       where: { isActive: true },
       order: { firstName: 'ASC', lastName: 'ASC' },
+      relationLoadStrategy: 'query',
     });
   }
 
   async findOne(id: string, withDeleted = false): Promise<Doctor> {
+    // relationLoadStrategy:'query' → cada to-many (phones, specialties,
+    // paymentMethods, servicePrices) se carga en su PROPIO SELECT en vez de un
+    // único JOIN. Evita el producto cartesiano (phones × specialties ×
+    // paymentMethods × servicePrices) que infla filas y presiona el heap.
     const doctor = await this.repo.findOne({
       where: { id },
       relations: {
@@ -115,6 +124,7 @@ export class DoctorsService {
         paymentMethods: true,
         servicePrices: { serviceType: true },
       },
+      relationLoadStrategy: 'query',
       withDeleted,
     });
     if (!doctor) throw new NotFoundException('Doctor no encontrado');

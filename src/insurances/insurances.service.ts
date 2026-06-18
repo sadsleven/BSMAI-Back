@@ -69,16 +69,23 @@ export class InsurancesService {
   }
 
   async findAssignable(): Promise<Insurance[]> {
+    // relationLoadStrategy:'query' → eager (phones, servicePrices) en SELECTs
+    // separados; evita el producto cartesiano sobre TODOS los seguros en este
+    // find() sin paginar.
     return this.repo.find({
       where: { isActive: true },
       order: { name: 'ASC' },
+      relationLoadStrategy: 'query',
     });
   }
 
   async findOne(id: string, withDeleted = false): Promise<Insurance> {
+    // relationLoadStrategy:'query' → phones y servicePrices en SELECTs
+    // separados; evita el producto cartesiano phones × servicePrices.
     const insurance = await this.repo.findOne({
       where: { id },
       relations: { phones: true, servicePrices: { serviceType: true } },
+      relationLoadStrategy: 'query',
       withDeleted,
     });
     if (!insurance) throw new NotFoundException('Seguro no encontrado');

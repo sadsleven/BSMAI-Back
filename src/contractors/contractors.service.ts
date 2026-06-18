@@ -59,10 +59,14 @@ export class ContractorsService {
   }
 
   async findAssignable(): Promise<Contractor[]> {
+    // relationLoadStrategy:'query' → carga insurances (y su eager phones/
+    // servicePrices) en SELECTs separados; evita el producto cartesiano
+    // contractors × insurances × insurance.servicePrices sin paginar.
     return this.repo.find({
       where: { isActive: true },
       relations: { insurances: true },
       order: { name: 'ASC' },
+      relationLoadStrategy: 'query',
     });
   }
 

@@ -576,16 +576,22 @@ export class OrdersService implements OnModuleInit {
     const ccIds = Array.from(
       new Set(rows.filter((r) => r.providerType === 'care_center').map((r) => r.careCenterId!)),
     );
+    // loadEagerRelations:false → evita que Doctor/CareCenter auto-unan sus
+    // eager to-many (phones, paymentMethods, servicePrices). Sin esto, .find()
+    // multiplica filas por proveedor (producto cartesiano) y revienta el heap.
+    // Sólo necesitamos isActive (y specialties explícito) para validar.
     const doctors = doctorIds.length
       ? await this.doctorsRepo.find({
           where: { id: In(doctorIds), deletedAt: IsNull() },
           relations: { specialties: true },
+          loadEagerRelations: false,
         })
       : [];
     const ccs = ccIds.length
       ? await this.careCentersRepo.find({
           where: { id: In(ccIds), deletedAt: IsNull() },
           relations: { specialties: true },
+          loadEagerRelations: false,
         })
       : [];
     const docMap = new Map(doctors.map((d) => [d.id, d]));

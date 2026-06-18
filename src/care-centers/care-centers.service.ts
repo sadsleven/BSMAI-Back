@@ -96,13 +96,19 @@ export class CareCentersService {
   }
 
   async findAssignable(): Promise<CareCenter[]> {
+    // relationLoadStrategy:'query' → eager (phones, specialties, paymentMethods,
+    // servicePrices) en SELECTs separados; evita el producto cartesiano sobre
+    // TODOS los centros en este find() sin paginar → OOM.
     return this.repo.find({
       where: { isActive: true },
       order: { businessName: 'ASC' },
+      relationLoadStrategy: 'query',
     });
   }
 
   async findOne(id: string, withDeleted = false): Promise<CareCenter> {
+    // relationLoadStrategy:'query' → cada to-many en su propio SELECT, evita el
+    // producto cartesiano (phones × specialties × paymentMethods × servicePrices).
     const center = await this.repo.findOne({
       where: { id },
       relations: {
@@ -111,6 +117,7 @@ export class CareCentersService {
         paymentMethods: true,
         servicePrices: { serviceType: true },
       },
+      relationLoadStrategy: 'query',
       withDeleted,
     });
     if (!center) throw new NotFoundException('Centro de atención no encontrado');

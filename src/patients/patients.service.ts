@@ -132,6 +132,9 @@ export class PatientsService {
   }
 
   async findOne(id: string, withDeleted = false): Promise<Patient> {
+    // loadEagerRelations:false → corta el auto-eager de los Insurance anidados
+    // (insurance.phones + insurance.servicePrices), que son el multiplicador
+    // que reventaba el heap. Las relaciones explícitas siguen cargando.
     const patient = await this.repo.findOne({
       where: { id },
       relations: {
@@ -139,6 +142,7 @@ export class PatientsService {
         contractors: { insurances: true },
         insurances: true,
       },
+      loadEagerRelations: false,
       withDeleted,
     });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
@@ -161,10 +165,34 @@ export class PatientsService {
       contractor: { id: string; name: string } | null;
     }>
   > {
-    const patient = await this.repo.findOne({
-      where: { id, deletedAt: IsNull() },
-      relations: { contractors: { insurances: true }, insurances: true },
-    });
+    // QueryBuilder en vez de find({relations}) a propósito: las relaciones
+    // `eager` de Patient/Contractor/Insurance (phones, servicePrices, etc.) NO
+    // se auto-aplican en QueryBuilder. Un find() las uniría todas en una sola
+    // consulta → producto cartesiano (phones × contractors × insurances ×
+    // servicePrices…) que hidrata millones de filas duplicadas y revienta el
+    // heap (OOM). Aquí sólo unimos lo necesario. Condiciones activo/no-borrado
+    // van en el ON del JOIN (no en WHERE) para no descartar al paciente que
+    // sólo tiene seguros directos.
+    const patient = await this.repo
+      .createQueryBuilder('patient')
+      .leftJoinAndSelect(
+        'patient.contractors',
+        'contractor',
+        'contractor.deletedAt IS NULL AND contractor.isActive = true',
+      )
+      .leftJoinAndSelect(
+        'contractor.insurances',
+        'contractorInsurance',
+        'contractorInsurance.deletedAt IS NULL AND contractorInsurance.isActive = true',
+      )
+      .leftJoinAndSelect(
+        'patient.insurances',
+        'directInsurance',
+        'directInsurance.deletedAt IS NULL AND directInsurance.isActive = true',
+      )
+      .where('patient.id = :id', { id })
+      .andWhere('patient.deletedAt IS NULL')
+      .getOne();
     if (!patient) throw new NotFoundException('Paciente no encontrado');
 
     const items: Array<{
