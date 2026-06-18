@@ -168,6 +168,10 @@ export class SearchService {
       .andWhere(
         new Brackets((b) => {
           b.where('LOWER(o.orderNumber) LIKE :like', { like })
+            .orWhere(
+              'EXISTS (SELECT 1 FROM "order_internal_orders" iio WHERE iio."orderId" = o.id AND LOWER(iio."internalNumber") LIKE :like)',
+              { like },
+            )
             .orWhere('LOWER(COALESCE(holder.firstName, \'\')) LIKE :like', { like })
             .orWhere('LOWER(COALESCE(holder.lastName, \'\')) LIKE :like', { like })
             .orWhere('LOWER(COALESCE(holder.businessName, \'\')) LIKE :like', { like })

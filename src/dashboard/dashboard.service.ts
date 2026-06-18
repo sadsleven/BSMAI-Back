@@ -100,13 +100,18 @@ export class DashboardService {
         'ar',
         'ar.id = lnk."receivableId" AND ar."deletedAt" IS NULL',
       )
-      .innerJoin('orders', 'o', 'o.id = ar."orderId" AND o."deletedAt" IS NULL')
       .where('p."paymentDate" >= :from', { from })
       .andWhere('p."paymentDate" <= :to', { to });
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
       if (allowed.length === 0) qb.andWhere('1 = 0');
-      else qb.andWhere('o."branchId" IN (:...allowed)', { allowed });
+      else
+        qb.andWhere(
+          `EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro
+                   JOIN "orders" o ON o.id = aro."orderId" AND o."deletedAt" IS NULL
+                   WHERE aro."receivableId" = ar.id AND o."branchId" IN (:...allowed))`,
+          { allowed },
+        );
     }
     const result = await qb
       .select('COALESCE(SUM(p."amountInUsd"), 0)', 'total')
@@ -115,76 +120,84 @@ export class DashboardService {
     return { amount, currency: 'USD' };
   }
 
-  /** Total USD por cobrar pendiente (Σ priceAmount − Σ amountInUsd cobrado, no negativo). */
+  /**
+   * Total USD por cobrar pendiente. Por lote (no cobrado del todo): target USD
+   * (Σ pivot `targetUsd`, o `priceAmount` para órdenes con tasa fija) − cobrado
+   * USD. Aproximación del KPI (los lotes con tasa fija se valoran a priceAmount).
+   */
   async receivableTotalUsd(
     user: AuthenticatedUser,
   ): Promise<{ amount: number; currency: 'USD' }> {
-    const qb = this.arRepo
-      .createQueryBuilder('ar')
-      .innerJoin('ar.order', 'o')
-      .where('ar.status IN (:...statuses)', {
-        statuses: ['uncollected', 'partially_collected'],
-      })
-      .andWhere('ar."deletedAt" IS NULL')
-      .andWhere('o."deletedAt" IS NULL')
-      .leftJoin('ar.payments', 'p');
+    const params: unknown[] = [];
+    let branchSql = '';
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
-      if (allowed.length === 0) qb.andWhere('1 = 0');
-      else qb.andWhere('o."branchId" IN (:...allowed)', { allowed });
+      if (allowed.length === 0) return { amount: 0, currency: 'USD' };
+      params.push(allowed);
+      branchSql = `AND EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro2
+                     JOIN "orders" o2 ON o2.id = aro2."orderId" AND o2."deletedAt" IS NULL
+                     WHERE aro2."receivableId" = ar.id AND o2."branchId" = ANY($1))`;
     }
-    const rows = await qb
-      .select('ar.id', 'id')
-      .addSelect('o."priceAmount"', 'priceAmount')
-      .addSelect('COALESCE(SUM(p."amountInUsd"), 0)', 'paid')
-      .groupBy('ar.id')
-      .addGroupBy('o."priceAmount"')
-      .getRawMany<{ id: string; priceAmount: string; paid: string }>();
+    const rows = await this.dataSource.query<{ target: string; paid: string }[]>(
+      `SELECT
+         (SELECT COALESCE(SUM(COALESCE(aro."targetUsd", o."priceAmount")), 0)
+            FROM "accounts_receivable_orders" aro
+            JOIN "orders" o ON o.id = aro."orderId"
+           WHERE aro."receivableId" = ar.id) AS target,
+         (SELECT COALESCE(SUM(p."amountInUsd"), 0)
+            FROM "accounts_receivable_payment_links" l
+            JOIN "accounts_receivable_payments" p ON p.id = l."paymentId" AND p."deletedAt" IS NULL
+           WHERE l."receivableId" = ar.id) AS paid
+       FROM "accounts_receivable" ar
+       WHERE ar."deletedAt" IS NULL
+         AND ar.status IN ('uncollected','partially_collected')
+         ${branchSql}`,
+      params,
+    );
     const total = rows.reduce(
-      (s, r) => s + Math.max(0, Number(r.priceAmount) - Number(r.paid)),
+      (s, r) => s + Math.max(0, Number(r.target) - Number(r.paid)),
       0,
     );
     return { amount: +total.toFixed(2), currency: 'USD' };
   }
 
-  /** Total USD por pagar pendiente (Σ providerAmount bruto − Σ amountInUsd pagado). */
+  /**
+   * Total USD por pagar pendiente. Por lote (no pagado del todo): bruto USD
+   * (Σ pivot `grossUsd`) − pagado USD. Bruto: la retención SENIAT se contabiliza
+   * aparte (retenciones por pagar).
+   */
   async payableTotalUsd(
     user: AuthenticatedUser,
   ): Promise<{ amount: number; currency: 'USD' }> {
-    const qb = this.apRepo
-      .createQueryBuilder('ap')
-      .innerJoin('ap.order', 'o')
-      .leftJoin('ap.payments', 'p')
-      .where('ap.status IN (:...statuses)', {
-        statuses: ['unpaid', 'partially_paid'],
-      })
-      .andWhere('ap."deletedAt" IS NULL')
-      .andWhere('o."deletedAt" IS NULL')
-      .andWhere('ap."providerAmount" IS NOT NULL');
+    const params: unknown[] = [];
+    let branchSql = '';
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
-      if (allowed.length === 0) qb.andWhere('1 = 0');
-      else qb.andWhere('o."branchId" IN (:...allowed)', { allowed });
+      if (allowed.length === 0) return { amount: 0, currency: 'USD' };
+      params.push(allowed);
+      branchSql = `AND EXISTS (SELECT 1 FROM "accounts_payable_orders" apo2
+                     JOIN "order_internal_orders" iio2 ON iio2.id = apo2."internalOrderId"
+                     JOIN "orders" o2 ON o2.id = iio2."orderId" AND o2."deletedAt" IS NULL
+                     WHERE apo2."payableId" = ap.id AND o2."branchId" = ANY($1))`;
     }
-    const rows = await qb
-      .select('ap.id', 'id')
-      .addSelect('ap."providerAmount"', 'providerAmount')
-      .addSelect('COALESCE(SUM(p."amountInUsd"), 0)', 'paid')
-      .groupBy('ap.id')
-      .addGroupBy('ap."providerAmount"')
-      .getRawMany<{
-        id: string;
-        providerAmount: string;
-        paid: string;
-      }>();
-    // Pending USD = bruto providerAmount − pagado. La retención SENIAT se
-    // aplica al lote al registrar el pago (taxes_payable), no por AP, así que
-    // el target del dashboard es el bruto.
-    const total = rows.reduce((s, r) => {
-      const provider = Number(r.providerAmount);
-      const paid = Number(r.paid);
-      return s + Math.max(0, provider - paid);
-    }, 0);
+    const rows = await this.dataSource.query<{ gross: string; paid: string }[]>(
+      `SELECT
+         (SELECT COALESCE(SUM(apo."grossUsd"), 0)
+            FROM "accounts_payable_orders" apo WHERE apo."payableId" = ap.id) AS gross,
+         (SELECT COALESCE(SUM(p."amountInUsd"), 0)
+            FROM "accounts_payable_payment_links" l
+            JOIN "accounts_payable_payments" p ON p.id = l."paymentId" AND p."deletedAt" IS NULL
+           WHERE l."payableId" = ap.id) AS paid
+       FROM "accounts_payable" ap
+       WHERE ap."deletedAt" IS NULL
+         AND ap.status IN ('unpaid','partially_paid')
+         ${branchSql}`,
+      params,
+    );
+    const total = rows.reduce(
+      (s, r) => s + Math.max(0, Number(r.gross) - Number(r.paid)),
+      0,
+    );
     return { amount: +total.toFixed(2), currency: 'USD' };
   }
 
@@ -194,22 +207,24 @@ export class DashboardService {
    * dashboard las muestra en su moneda nativa, sin convertir a USD.
    */
   async taxesPayableTotalBs(): Promise<{ amount: number; currency: 'BS' }> {
-    const rows = await this.tpRepo
+    // Adeudado = Σ retención de obligaciones no pagadas; menos lo ya abonado en
+    // lotes SENIAT aún no pagados del todo.
+    const owedRows = await this.tpRepo
       .createQueryBuilder('tp')
-      .leftJoin('tp.payments', 'p')
-      .where('tp.status IN (:...statuses)', {
-        statuses: ['unpaid', 'partially_paid'],
-      })
+      .where('tp.status != :paid', { paid: 'paid' })
       .andWhere('tp."deletedAt" IS NULL')
-      .select('tp.id', 'id')
-      .addSelect('tp."taxAmountBs"', 'taxAmountBs')
-      .addSelect('COALESCE(SUM(p."amountInBs"), 0)', 'paidBs')
-      .groupBy('tp.id')
-      .addGroupBy('tp."taxAmountBs"')
-      .getRawMany<{ id: string; taxAmountBs: string; paidBs: string }>();
-    const totalBs = rows.reduce(
-      (s, r) => s + Math.max(0, Number(r.taxAmountBs) - Number(r.paidBs)),
+      .select('COALESCE(SUM(tp."taxAmountBs"), 0)', 'owed')
+      .getRawOne<{ owed: string }>();
+    const paidRows = await this.dataSource.query<{ paid: string }[]>(
+      `SELECT COALESCE(SUM(p."amountInBs"), 0) AS paid
+       FROM "tax_payment_batch_payment_links" l
+       JOIN "taxes_payable_payments" p ON p.id = l."paymentId" AND p."deletedAt" IS NULL
+       JOIN "tax_payment_batches" b ON b.id = l."batchId"
+       WHERE b.status != 'paid' AND b."deletedAt" IS NULL`,
+    );
+    const totalBs = Math.max(
       0,
+      Number(owedRows?.owed ?? 0) - Number(paidRows[0]?.paid ?? 0),
     );
     return { amount: +totalBs.toFixed(2), currency: 'BS' };
   }

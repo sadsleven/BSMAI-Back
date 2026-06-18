@@ -13,6 +13,7 @@ import { Order, OrderStatus } from './entities/order.entity';
 import { OrderPayment } from './entities/order-payment.entity';
 import { OrderServiceType } from './entities/order-service-type.entity';
 import { OrderProviderReport } from './entities/order-provider-report.entity';
+import { OrderInternalOrder } from './entities/order-internal-order.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrderServiceTypeRowDto } from './dto/order-service-type.dto';
@@ -111,6 +112,7 @@ export class OrdersService implements OnModuleInit {
     await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
     await this.bumpSequence('accounts_receivable_seq', 'RECEIVABLE_NUMBER_START');
     await this.bumpSequence('taxes_payable_seq', 'TAX_PAYABLE_NUMBER_START');
+    await this.bumpSequence('tax_payment_batch_seq', 'TAX_BATCH_NUMBER_START');
   }
 
   private userHasPermission(user: AuthenticatedUser, perm: string): boolean {
@@ -186,11 +188,22 @@ export class OrdersService implements OnModuleInit {
     return u.map((r) => r.id);
   }
 
-  private async generateOrderNumber(): Promise<string> {
-    const result = await this.dataSource.query<{ nextval: string }[]>(
-      "SELECT nextval('orders_seq') AS nextval",
-    );
-    return String(result[0].nextval);
+  /**
+   * Extrae `n` números consecutivos de `orders_seq` dentro de la transacción
+   * dada. Cada proveedor distinto de una orden consume uno; el primero es además
+   * el número BASE de la orden (`orders.orderNumber`). La secuencia es atómica y
+   * monotónica: creaciones concurrentes simplemente intercalan valores globales
+   * (unicidad garantizada; los gaps son aceptables y nunca se reutilizan).
+   */
+  private async drawOrderNumbers(mgr: EntityManager, n: number): Promise<string[]> {
+    const out: string[] = [];
+    for (let i = 0; i < n; i += 1) {
+      const r = await mgr.query<{ nextval: string }[]>(
+        "SELECT nextval('orders_seq') AS nextval",
+      );
+      out.push(String(r[0].nextval));
+    }
+    return out;
   }
 
   private orderRelations() {
@@ -205,7 +218,9 @@ export class OrdersService implements OnModuleInit {
         serviceType: true,
         doctor: true,
         careCenter: true,
+        internalOrder: true,
       },
+      internalOrders: true,
       pathologies: true,
       createdBy: true,
       amountAuthorizedBy: true,
@@ -274,6 +289,8 @@ export class OrdersService implements OnModuleInit {
       .leftJoinAndSelect('o.contractor', 'contractor')
       .leftJoinAndSelect('o.insurance', 'insurance')
       .leftJoinAndSelect('insurance.phones', 'insurancePhones')
+      // Órdenes internas (números por proveedor) para mostrar todos en el listado.
+      .leftJoinAndSelect('o.internalOrders', 'orderInternalOrders')
       .orderBy(`o.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -328,6 +345,7 @@ export class OrdersService implements OnModuleInit {
       const s = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(
         `(LOWER(o."orderNumber") LIKE :s
+          OR EXISTS (SELECT 1 FROM "order_internal_orders" iio WHERE iio."orderId" = o.id AND LOWER(iio."internalNumber") LIKE :s)
           OR LOWER(holder."firstName") LIKE :s
           OR LOWER(holder."lastName") LIKE :s
           OR LOWER(holder."businessName") LIKE :s
@@ -377,6 +395,11 @@ export class OrdersService implements OnModuleInit {
     const order = await this.repo.findOne({
       where: { id },
       relations: this.orderRelations(),
+      // CRÍTICO: no auto-cargar relaciones `eager` anidadas (seguros/contratistas
+      // del paciente, servicePrices de seguros/doctores/centros, etc.). Junto a las
+      // relaciones to-many de la orden producen un PRODUCTO CARTESIANO que explota
+      // la memoria (OOM) para pacientes con muchos seguros. La orden no las necesita.
+      loadEagerRelations: false,
       withDeleted,
     });
     if (!order) throw new NotFoundException('Orden no encontrada');
@@ -430,12 +453,18 @@ export class OrdersService implements OnModuleInit {
     const holder = await this.patientsRepo.findOne({
       where: { id: dto.holderId!, deletedAt: IsNull() },
       relations: { contractors: { insurances: true }, insurances: true },
+      // Sólo se validan IDs de seguros/contratistas del titular. Sin eager: el
+      // eager de Patient duplica el join de `insurances` (explícito + eager) y,
+      // con los `servicePrices` eager de cada seguro, produce un producto
+      // cartesiano que revienta la memoria (OOM) en titulares con muchos seguros.
+      loadEagerRelations: false,
     });
     if (!holder) throw new BadRequestException('Titular no encontrado o eliminado');
 
     if (dto.patientId && dto.patientId !== dto.holderId) {
       const pat = await this.patientsRepo.findOne({
         where: { id: dto.patientId, deletedAt: IsNull() },
+        loadEagerRelations: false,
       });
       if (!pat) throw new BadRequestException('Paciente no encontrado o eliminado');
     }
@@ -636,7 +665,11 @@ export class OrdersService implements OnModuleInit {
     };
 
     const needsPaymentAccount =
-      p.type === 'mobile_payment' || p.type === 'bank_transfer' || p.type === 'other';
+      p.type === 'mobile_payment' ||
+      p.type === 'bank_transfer' ||
+      p.type === 'bank_transfer_usd' ||
+      p.type === 'card' ||
+      p.type === 'other';
 
     if (needsPaymentAccount) {
       if (!p.paymentAccountId)
@@ -645,7 +678,12 @@ export class OrdersService implements OnModuleInit {
         );
       const account = await this.paymentAccounts.assertUsableForPaymentType(
         p.paymentAccountId,
-        p.type as 'mobile_payment' | 'bank_transfer' | 'other',
+        p.type as
+          | 'mobile_payment'
+          | 'bank_transfer'
+          | 'bank_transfer_usd'
+          | 'card'
+          | 'other',
       );
       out.paymentAccountId = account.id;
       // Snapshot desde la cuenta para histórico — independiente de cambios futuros.
@@ -657,11 +695,15 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
+    if (
+      p.type === 'mobile_payment' ||
+      p.type === 'bank_transfer' ||
+      p.type === 'card'
+    ) {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
-        throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
+        throw new BadRequestException('Pago móvil/transferencia/punto debe ser en BS');
       const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
       if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
       if (rate.currency !== 'USD')
@@ -675,6 +717,11 @@ export class OrdersService implements OnModuleInit {
       if (rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+    } else if (p.type === 'bank_transfer_usd') {
+      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (p.amountCurrency !== 'USD')
+        throw new BadRequestException('Transferencia en dólares debe ser en USD');
+      out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_usd') {
       if (p.amountCurrency !== 'USD')
         throw new BadRequestException('cash_usd debe ser en USD');
@@ -719,6 +766,65 @@ export class OrdersService implements OnModuleInit {
     return out;
   }
 
+  /** Σ de los pagos del Paso 1 convertidos a USD (moneda del precio). */
+  private async sumPaymentsUsd(payments: CreateOrderPaymentDto[]): Promise<number> {
+    let total = 0;
+    for (const p of payments) {
+      total += await computeAmountInUsd(
+        {
+          amountValue: p.amountValue,
+          amountCurrency: p.amountCurrency,
+          exchangeRateId: p.exchangeRateId ?? null,
+        },
+        this.ratesRepo,
+        { usdExchangeRateId: null },
+      );
+    }
+    return Math.round(total * 100) / 100;
+  }
+
+  /**
+   * Regla de pago del Paso 1 según tipo de orden:
+   *  - `cash` (contado): los pagos deben CUADRAR el precio total (Σ = priceUsd).
+   *  - `cashea`: la cuota inicial (`casheaFirstInstallmentAmount`) > 0 es un PAGO
+   *    real del titular en el Paso 1; los pagos deben cubrirla (Σ ≈ inicial). El
+   *    resto lo financia Cashea (queda como cuenta por cobrar). Es "como crédito"
+   *    pero con inicial cobrada de entrada.
+   *  - `credit`/`insurance`: no se exige pago en el Paso 1.
+   * Precio y pagos en USD (pricing USD-only). `sumUsd` aplica a `cash` y `cashea`.
+   */
+  private assertStep1Payments(
+    type: 'cash' | 'credit' | 'insurance' | 'cashea',
+    sumUsd: number,
+    priceUsd: number,
+    casheaInitialUsd: number | null | undefined,
+  ): void {
+    const TOL = 0.01;
+    if (type === 'cash') {
+      if (priceUsd <= 0) {
+        throw new BadRequestException('La orden de contado no tiene monto a cobrar');
+      }
+      if (Math.abs(sumUsd - priceUsd) > TOL) {
+        throw new BadRequestException(
+          `La orden de contado debe estar cuadrada: pagos USD ${sumUsd.toFixed(2)} de ${priceUsd.toFixed(2)}`,
+        );
+      }
+    } else if (type === 'cashea') {
+      const initial = Number(casheaInitialUsd ?? 0);
+      if (!(initial > 0)) {
+        throw new BadRequestException(
+          'Cashea requiere una cuota inicial mayor a 0 para continuar',
+        );
+      }
+      if (Math.abs(sumUsd - initial) > TOL) {
+        throw new BadRequestException(
+          `Cashea: los pagos deben cubrir la cuota inicial: pagos USD ${sumUsd.toFixed(2)} de inicial ${initial.toFixed(2)}`,
+        );
+      }
+    }
+    // credit / insurance: sin requisito de pago en el Paso 1.
+  }
+
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
 
@@ -754,8 +860,25 @@ export class OrdersService implements OnModuleInit {
       };
     }
 
+    // Regla de pago Paso 1: contado cuadrado / cashea con inicial pagada.
+    const step1SumUsd =
+      dto.type === 'cash' || dto.type === 'cashea'
+        ? await this.sumPaymentsUsd(dto.payments ?? [])
+        : 0;
+    this.assertStep1Payments(
+      dto.type,
+      step1SumUsd,
+      effectivePriceAmount,
+      dto.casheaFirstInstallmentAmount,
+    );
+
     const savedId = await this.dataSource.transaction(async (mgr) => {
-      const orderNumber = await this.generateOrderNumber();
+      // Una orden interna (= un número) por proveedor distinto. Se extraen todos
+      // los números por adelantado; el primero es además el número BASE de la
+      // orden (base == proveedor 1). Una orden siempre tiene ≥1 proveedor.
+      const distinct = this.distinctProvidersFromRows(dto.serviceTypes);
+      const numbers = await this.drawOrderNumbers(mgr, distinct.length);
+      const orderNumber = numbers[0];
       const entity = mgr.create(Order, {
         orderNumber,
         branchId: dto.branchId,
@@ -788,8 +911,30 @@ export class OrdersService implements OnModuleInit {
       });
       const saved = await mgr.save(entity);
 
-      // Insertar filas OST.
-      await this.persistOrderServiceTypes(mgr, saved.id, dto.serviceTypes);
+      // Crear las órdenes internas (1 por proveedor distinto) con su número.
+      const iioByKey = new Map<ProviderKey, { id: string; internalNumber: string }>();
+      let position = 0;
+      for (const { providerType, providerId, key } of distinct) {
+        const internalNumber = numbers[position];
+        position += 1;
+        const inserted = await mgr.query<{ id: string }[]>(
+          `INSERT INTO "order_internal_orders"
+             ("orderId", "providerType", "doctorId", "careCenterId", "internalNumber", "sequencePosition")
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+          [
+            saved.id,
+            providerType,
+            providerType === 'doctor' ? providerId : null,
+            providerType === 'care_center' ? providerId : null,
+            internalNumber,
+            position,
+          ],
+        );
+        iioByKey.set(key, { id: inserted[0].id, internalNumber });
+      }
+
+      // Insertar filas OST (ligadas a su orden interna).
+      await this.persistOrderServiceTypes(mgr, saved.id, dto.serviceTypes, iioByKey);
 
       const pIds = Array.from(new Set(dto.pathologyIds ?? []));
       if (pIds.length) {
@@ -800,7 +945,7 @@ export class OrdersService implements OnModuleInit {
           .add(pIds);
       }
 
-      if (dto.type === 'cash' && dto.payments?.length) {
+      if ((dto.type === 'cash' || dto.type === 'cashea') && dto.payments?.length) {
         for (const p of dto.payments) {
           const payload = await this.resolvePaymentForSave(p, null);
           await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: saved.id }));
@@ -816,50 +961,10 @@ export class OrdersService implements OnModuleInit {
         dto.serviceTypes.map((r) => r.serviceTypeId),
       );
 
-      // Auto-generación de cuentas: una accounts_payable por proveedor distinto.
-      const distinct = this.distinctProvidersFromRows(dto.serviceTypes);
-      for (const { providerType, providerId } of distinct) {
-        const payableNumberRows = await mgr.query<{ nextval: string }[]>(
-          `SELECT nextval('accounts_payable_seq') AS nextval`,
-        );
-        const payableNumber = String(payableNumberRows[0].nextval);
-        await mgr.query(
-          `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT DO NOTHING`,
-          [
-            saved.id,
-            payableNumber,
-            providerType,
-            providerType === 'doctor' ? providerId : null,
-            providerType === 'care_center' ? providerId : null,
-          ],
-        );
-      }
-      // Auto-generación de cuenta por cobrar:
-      //  - type='insurance' → deudor=seguro (insuranceId)
-      //  - type='credit'    → deudor=titular (holderId)
-      //  - type='cashea'    → deudor=titular (holderId). El target se ajusta por
-      //                       comisión Cashea en AccountsReceivableService.
-      // Misma tabla, mismo sequence; columnas insuranceId/holderId son XOR (CHECK ck_ar_debtor_xor).
-      const arDebtor =
-        dto.type === 'insurance' && dto.insuranceId
-          ? { insuranceId: dto.insuranceId, holderId: null as string | null }
-          : dto.type === 'credit' || dto.type === 'cashea'
-            ? { insuranceId: null as string | null, holderId: dto.holderId }
-            : null;
-      if (arDebtor) {
-        const receivableNumberRows = await mgr.query<{ nextval: string }[]>(
-          `SELECT nextval('accounts_receivable_seq') AS nextval`,
-        );
-        const receivableNumber = String(receivableNumberRows[0].nextval);
-        await mgr.query(
-          `INSERT INTO "accounts_receivable" ("orderId", "receivableNumber", "insuranceId", "holderId")
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT ("orderId") DO NOTHING`,
-          [saved.id, receivableNumber, arDebtor.insuranceId, arDebtor.holderId],
-        );
-      }
+      // Modelo Pendientes + Lotes: las cuentas por pagar/cobrar NO se auto-generan.
+      // El usuario arma los lotes manualmente desde sus módulos. El monto a cada
+      // proveedor se persiste en `order_internal_orders.providerAmountUsd` al
+      // facturar (Paso 4); las órdenes con deudor quedan como pendientes de cobro.
 
       return saved.id;
     });
@@ -867,13 +972,19 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(savedId, user);
   }
 
-  /** Replace-all de filas OST. Usa raw inserts para evitar problemas con composite PK + relations. */
+  /**
+   * Inserta las filas OST, cada una ligada a la orden interna de su proveedor
+   * (`internalOrderId`). El borrado previo lo hace el caller: en `update` debe
+   * ocurrir ANTES de reconciliar `order_internal_orders` (la FK OST→interna
+   * impide borrar una interna mientras alguna fila OST la referencie). Usa raw
+   * inserts para evitar problemas con composite PK + relations.
+   */
   private async persistOrderServiceTypes(
     mgr: EntityManager,
     orderId: string,
     rows: OrderServiceTypeRowDto[],
+    iioByKey: Map<ProviderKey, { id: string; internalNumber: string }>,
   ): Promise<void> {
-    await mgr.delete(OrderServiceType, { orderId });
     if (!rows.length) return;
     // Cantidad sólo para STs con allowsQuantity; el resto se fuerza a 1.
     const ids = Array.from(new Set(rows.map((r) => r.serviceTypeId)));
@@ -882,17 +993,106 @@ export class OrdersService implements OnModuleInit {
       select: ['id', 'allowsQuantity'],
     });
     const allowsQtyById = new Map(sts.map((s) => [s.id, s.allowsQuantity]));
-    const values = rows.map((r) => ({
-      orderId,
-      serviceTypeId: r.serviceTypeId,
-      providerType: r.providerType,
-      doctorId: r.providerType === 'doctor' ? r.doctorId ?? null : null,
-      careCenterId: r.providerType === 'care_center' ? r.careCenterId ?? null : null,
-      quantity: allowsQtyById.get(r.serviceTypeId)
-        ? Math.max(1, Math.trunc(r.quantity ?? 1))
-        : 1,
-    }));
+    const values = rows.map((r) => {
+      const providerId = r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
+      const iio = iioByKey.get(`${r.providerType}:${providerId}` as ProviderKey);
+      if (!iio) {
+        throw new BadRequestException(
+          'Falta la orden interna del proveedor de un tipo de servicio',
+        );
+      }
+      return {
+        orderId,
+        serviceTypeId: r.serviceTypeId,
+        providerType: r.providerType,
+        doctorId: r.providerType === 'doctor' ? r.doctorId ?? null : null,
+        careCenterId:
+          r.providerType === 'care_center' ? r.careCenterId ?? null : null,
+        quantity: allowsQtyById.get(r.serviceTypeId)
+          ? Math.max(1, Math.trunc(r.quantity ?? 1))
+          : 1,
+        internalOrderId: iio.id,
+      };
+    });
     await mgr.insert(OrderServiceType, values);
+  }
+
+  /**
+   * Reconcilia `order_internal_orders` en una edición de borrador. Devuelve el
+   * mapa proveedor→(id, número) COMPLETO (sobrevivientes + nuevos) para ligar
+   * las filas OST. Requiere que las filas OST de la orden YA hayan sido borradas
+   * (la FK OST→interna es CASCADE; borrar OST primero deja las internas sin
+   * referencias y permite eliminar las huérfanas con seguridad).
+   *
+   *  - Sobreviviente (proveedor sigue): se mantiene su fila y su número (NUNCA
+   *    se renumera).
+   *  - Quitado (proveedor ya no está): se BORRA su fila → número quemado (gap,
+   *    nunca reutilizado; la secuencia no retrocede).
+   *  - Nuevo: extrae `nextval('orders_seq')` y crea su fila (posición al final).
+   *
+   * `orders.orderNumber` (base) NO se toca aquí: queda congelado aun si el
+   * proveedor de la posición 1 se quita (política FREEZE).
+   */
+  private async reconcileInternalOrders(
+    mgr: EntityManager,
+    orderId: string,
+    distinct: Array<{
+      providerType: 'doctor' | 'care_center';
+      providerId: string;
+      key: ProviderKey;
+    }>,
+  ): Promise<Map<ProviderKey, { id: string; internalNumber: string }>> {
+    const existing = await mgr.query<
+      Array<{
+        id: string;
+        providerType: 'doctor' | 'care_center';
+        doctorId: string | null;
+        careCenterId: string | null;
+        internalNumber: string;
+        sequencePosition: number;
+      }>
+    >(
+      `SELECT id, "providerType", "doctorId", "careCenterId", "internalNumber", "sequencePosition"
+       FROM "order_internal_orders" WHERE "orderId" = $1`,
+      [orderId],
+    );
+    const keepKeys = new Set(distinct.map((p) => p.key));
+    const map = new Map<ProviderKey, { id: string; internalNumber: string }>();
+    let maxPos = 0;
+    for (const r of existing) {
+      if (r.sequencePosition > maxPos) maxPos = r.sequencePosition;
+      const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
+      const key = `${r.providerType}:${pid}` as ProviderKey;
+      if (keepKeys.has(key)) {
+        map.set(key, { id: r.id, internalNumber: r.internalNumber });
+      } else {
+        // Proveedor quitado: borra su orden interna → número quemado.
+        await mgr.query(`DELETE FROM "order_internal_orders" WHERE id = $1`, [r.id]);
+      }
+    }
+    for (const { providerType, providerId, key } of distinct) {
+      if (map.has(key)) continue;
+      const numRows = await mgr.query<{ nextval: string }[]>(
+        "SELECT nextval('orders_seq') AS nextval",
+      );
+      const internalNumber = String(numRows[0].nextval);
+      maxPos += 1;
+      const inserted = await mgr.query<{ id: string }[]>(
+        `INSERT INTO "order_internal_orders"
+           ("orderId", "providerType", "doctorId", "careCenterId", "internalNumber", "sequencePosition")
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [
+          orderId,
+          providerType,
+          providerType === 'doctor' ? providerId : null,
+          providerType === 'care_center' ? providerId : null,
+          internalNumber,
+          maxPos,
+        ],
+      );
+      map.set(key, { id: inserted[0].id, internalNumber });
+    }
+    return map;
   }
 
   /** Set único de proveedores activos en la orden. Preserva orden de aparición. */
@@ -1246,23 +1446,19 @@ export class OrdersService implements OnModuleInit {
         );
       }
 
-      // Escribir monto USD por cada accounts_payable de la orden, matched por proveedor.
+      // Escribir el monto USD a pagar por cada proveedor en SU orden interna
+      // (`providerAmountUsd`). Es la "unidad de deuda" del módulo Cuentas por
+      // pagar: queda como pendiente listo para que el usuario arme un lote.
       for (const p of dto.providers) {
         const providerId =
           p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
         await mgr.query(
-          `UPDATE "accounts_payable"
-           SET "providerAmount" = $1
+          `UPDATE "order_internal_orders"
+           SET "providerAmountUsd" = $1
            WHERE "orderId" = $2
-             AND "recipientType" = $3
-             AND COALESCE("doctorId", "careCenterId") = $4
-             AND "deletedAt" IS NULL`,
-          [
-            p.amount.toFixed(2),
-            order.id,
-            p.providerType,
-            providerId,
-          ],
+             AND "providerType" = $3
+             AND COALESCE("doctorId", "careCenterId") = $4`,
+          [p.amount.toFixed(2), order.id, p.providerType, providerId],
         );
       }
     });
@@ -1464,6 +1660,26 @@ export class OrdersService implements OnModuleInit {
       nextCashea = null;
     }
 
+    // Regla de pago Paso 1 (la orden sigue en borrador). Pagos efectivos =
+    // nuevos si se reemplazan, sino los snapshot existentes (amountInUsd).
+    const updSumUsd =
+      merged.type === 'cash' || merged.type === 'cashea'
+        ? dto.payments !== undefined
+          ? await this.sumPaymentsUsd(dto.payments)
+          : Math.round(
+              (existing.payments ?? []).reduce(
+                (s, p) => s + Number(p.amountInUsd || 0),
+                0,
+              ) * 100,
+            ) / 100
+        : 0;
+    this.assertStep1Payments(
+      merged.type,
+      updSumUsd,
+      merged.priceAmount,
+      merged.casheaFirstInstallmentAmount,
+    );
+
     await this.dataSource.transaction(async (mgr) => {
       Object.assign(existing, {
         branchId: merged.branchId,
@@ -1499,8 +1715,23 @@ export class OrdersService implements OnModuleInit {
       });
       await mgr.save(existing);
 
-      // Replace OST rows.
-      await this.persistOrderServiceTypes(mgr, existing.id, merged.serviceTypes);
+      // Reconciliar OST + órdenes internas. Orden FK-safe (OST→interna es CASCADE):
+      //   1) borrar todas las OST (libera las referencias a las internas),
+      //   2) reconciliar order_internal_orders (sobrevive/quema/agrega número),
+      //   3) reinsertar OST ligadas a su orden interna.
+      const distinct = this.distinctProvidersFromRows(merged.serviceTypes);
+      await mgr.delete(OrderServiceType, { orderId: existing.id });
+      const iioByKey = await this.reconcileInternalOrders(
+        mgr,
+        existing.id,
+        distinct,
+      );
+      await this.persistOrderServiceTypes(
+        mgr,
+        existing.id,
+        merged.serviceTypes,
+        iioByKey,
+      );
 
       // Pathologies replace.
       const pRel = mgr.createQueryBuilder().relation(Order, 'pathologies').of(existing.id);
@@ -1510,12 +1741,18 @@ export class OrdersService implements OnModuleInit {
 
       if (dto.payments !== undefined) {
         await mgr.delete(OrderPayment, { orderId: existing.id });
-        if (merged.type === 'cash' && dto.payments.length) {
+        if (
+          (merged.type === 'cash' || merged.type === 'cashea') &&
+          dto.payments.length
+        ) {
           for (const p of dto.payments) {
             const payload = await this.resolvePaymentForSave(p, null);
             await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: existing.id }));
           }
         }
+      } else if (merged.type !== 'cash' && merged.type !== 'cashea') {
+        // Cambió a crédito/seguro sin reenviar pagos: limpiar pagos previos.
+        await mgr.delete(OrderPayment, { orderId: existing.id });
       }
 
       // Re-snapshot buyer pricing.
@@ -1531,133 +1768,51 @@ export class OrdersService implements OnModuleInit {
         merged.serviceTypes.map((r) => r.serviceTypeId),
       );
 
-      // Reconciliar accounts_payable según nuevos proveedores distintos.
-      const distinct = this.distinctProvidersFromRows(merged.serviceTypes);
-      // Mantiene las existentes que aún correspondan; soft-deletea las huérfanas.
-      const existingAccounts = await mgr.query<
-        Array<{ id: string; recipientType: string; doctorId: string | null; careCenterId: string | null }>
-      >(
-        `SELECT id, "recipientType", "doctorId", "careCenterId"
-         FROM "accounts_payable"
-         WHERE "orderId" = $1 AND "deletedAt" IS NULL`,
-        [existing.id],
-      );
-      const keepKeys = new Set(
-        distinct.map((p) => `${p.providerType}:${p.providerId}`),
-      );
-      for (const acc of existingAccounts) {
-        const accKey = `${acc.recipientType}:${
-          acc.recipientType === 'doctor' ? acc.doctorId : acc.careCenterId
-        }`;
-        if (!keepKeys.has(accKey)) {
-          await mgr.query(
-            `UPDATE "accounts_payable" SET "deletedAt" = now() WHERE id = $1`,
-            [acc.id],
-          );
-        }
-      }
-      const existingKeys = new Set(
-        existingAccounts
-          .map(
-            (acc) =>
-              `${acc.recipientType}:${
-                acc.recipientType === 'doctor' ? acc.doctorId : acc.careCenterId
-              }`,
-          )
-          .filter((k) => keepKeys.has(k)),
-      );
-      for (const { providerType, providerId, key } of distinct) {
-        if (existingKeys.has(key)) continue;
-        const payableNumberRows = await mgr.query<{ nextval: string }[]>(
-          `SELECT nextval('accounts_payable_seq') AS nextval`,
-        );
-        const payableNumber = String(payableNumberRows[0].nextval);
-        await mgr.query(
-          `INSERT INTO "accounts_payable" ("orderId", "payableNumber", "recipientType", "doctorId", "careCenterId")
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT DO NOTHING`,
-          [
-            existing.id,
-            payableNumber,
-            providerType,
-            providerType === 'doctor' ? providerId : null,
-            providerType === 'care_center' ? providerId : null,
-          ],
-        );
-      }
-
-      // Reconciliar cuenta por cobrar según merged.type. Una orden tiene a lo
-      // sumo una AR activa por su UNIQUE en orderId.
-      const arDebtor =
-        merged.type === 'insurance' && merged.insuranceId
-          ? { insuranceId: merged.insuranceId, holderId: null as string | null }
-          : merged.type === 'credit' || merged.type === 'cashea'
-            ? { insuranceId: null as string | null, holderId: merged.holderId }
-            : null;
-      const existingArRows = await mgr.query<
-        Array<{ id: string; insuranceId: string | null; holderId: string | null }>
-      >(
-        `SELECT id, "insuranceId", "holderId"
-         FROM "accounts_receivable"
-         WHERE "orderId" = $1 AND "deletedAt" IS NULL`,
-        [existing.id],
-      );
-      const currentAr = existingArRows[0] ?? null;
-      const matchesDebtor =
-        currentAr &&
-        arDebtor &&
-        currentAr.insuranceId === arDebtor.insuranceId &&
-        currentAr.holderId === arDebtor.holderId;
-      if (currentAr && !matchesDebtor) {
-        await mgr.query(
-          `UPDATE "accounts_receivable" SET "deletedAt" = now() WHERE id = $1`,
-          [currentAr.id],
-        );
-      }
-      if (arDebtor && !matchesDebtor) {
-        const receivableNumberRows = await mgr.query<{ nextval: string }[]>(
-          `SELECT nextval('accounts_receivable_seq') AS nextval`,
-        );
-        const receivableNumber = String(receivableNumberRows[0].nextval);
-        await mgr.query(
-          `INSERT INTO "accounts_receivable" ("orderId", "receivableNumber", "insuranceId", "holderId")
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT ("orderId") DO NOTHING`,
-          [existing.id, receivableNumber, arDebtor.insuranceId, arDebtor.holderId],
-        );
-      }
+      // Modelo Pendientes + Lotes: no hay cuentas por pagar/cobrar ligadas a la
+      // orden que reconciliar. La edición sólo ocurre en borrador y los montos a
+      // proveedor (pendientes) se escriben al facturar; un borrador nunca tiene
+      // órdenes internas dentro de un lote.
     });
 
     return this.findOne(existing.id, user);
   }
 
   /**
-   * Soft-delete cascada: marca `deletedAt` con el mismo timestamp en orden,
-   * accounts_payable y accounts_receivable. Mantener un timestamp común
-   * permite que `restore` revierta exactamente las filas tumbadas por esta
-   * cascada y respete las cuentas que pudieran estar previamente eliminadas.
-   *
-   * `taxes_payable` NO se toca: el comprobante de retención es un documento
-   * fiscal histórico ligado al pago realizado, no a la orden.
+   * Soft-delete de la orden. En el modelo Pendientes + Lotes las cuentas por
+   * pagar/cobrar no cuelgan de la orden, así que no hay cascada: en cambio se
+   * BLOQUEA el borrado si alguna orden interna de esta orden ya está dentro de
+   * un lote de pago, o la orden está dentro de un lote de cobro (anular el lote
+   * primero evita pivots colgantes o totales que se encojan).
    */
   async softDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user);
-    await this.dataSource.transaction(async (mgr) => {
-      const ts = new Date();
-      await mgr.query(
-        `UPDATE "accounts_payable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
-        [ts, id],
+    await this.assertNotInBatch(id);
+    await this.repo.update({ id }, { deletedAt: new Date() });
+  }
+
+  /** Lanza si la orden participa en un lote de cuentas por pagar/cobrar. */
+  private async assertNotInBatch(orderId: string): Promise<void> {
+    const inPayable = await this.dataSource.query<{ c: string }[]>(
+      `SELECT count(*)::int AS c
+       FROM "accounts_payable_orders" apo
+       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+       WHERE iio."orderId" = $1`,
+      [orderId],
+    );
+    const inReceivable = await this.dataSource.query<{ c: string }[]>(
+      `SELECT count(*)::int AS c FROM "accounts_receivable_orders" WHERE "orderId" = $1`,
+      [orderId],
+    );
+    if (Number(inPayable[0]?.c ?? 0) > 0 || Number(inReceivable[0]?.c ?? 0) > 0) {
+      throw new BadRequestException(
+        'La orden está incluida en un lote de cuentas por pagar/cobrar. Anulá el lote antes de eliminar la orden.',
       );
-      await mgr.query(
-        `UPDATE "accounts_receivable" SET "deletedAt" = $1 WHERE "orderId" = $2 AND "deletedAt" IS NULL`,
-        [ts, id],
-      );
-      await mgr.update(Order, { id }, { deletedAt: ts });
-    });
+    }
   }
 
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user, true);
+    await this.assertNotInBatch(id);
     await this.repo.delete(id);
   }
 
@@ -1666,18 +1821,7 @@ export class OrdersService implements OnModuleInit {
     if (!order) throw new NotFoundException('Orden no encontrada');
     await this.assertBranchVisibility(order.branchId, user);
     if (!order.deletedAt) return this.findOne(id, user);
-    const ts = order.deletedAt;
-    await this.dataSource.transaction(async (mgr) => {
-      await mgr.query(
-        `UPDATE "accounts_payable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
-        [id, ts],
-      );
-      await mgr.query(
-        `UPDATE "accounts_receivable" SET "deletedAt" = NULL WHERE "orderId" = $1 AND "deletedAt" = $2`,
-        [id, ts],
-      );
-      await mgr.update(Order, { id }, { deletedAt: null });
-    });
+    await this.repo.update({ id }, { deletedAt: null });
     return this.findOne(id, user);
   }
 

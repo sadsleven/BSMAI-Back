@@ -23,6 +23,6 @@ export class QueryInflowsDto {
 
   /** Filtra por tipo de pago. */
   @IsOptional()
-  @IsIn(['mobile_payment', 'bank_transfer', 'other'])
-  type?: 'mobile_payment' | 'bank_transfer' | 'other';
+  @IsIn(['mobile_payment', 'bank_transfer', 'card', 'other'])
+  type?: 'mobile_payment' | 'bank_transfer' | 'card' | 'other';
 }

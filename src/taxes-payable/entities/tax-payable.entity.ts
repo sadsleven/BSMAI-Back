@@ -5,18 +5,15 @@ import {
   Entity,
   Index,
   JoinColumn,
-  JoinTable,
-  ManyToMany,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Order } from '../../orders/entities/order.entity';
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import { AccountsPayable } from '../../accounts-payable/entities/accounts-payable.entity';
 import { TaxUnit } from '../../tax-units/entities/tax-unit.entity';
-import { TaxPayablePayment } from './tax-payable-payment.entity';
+import { TaxPaymentBatch } from './tax-payment-batch.entity';
 
 export type TaxPayableStatus = 'paid' | 'unpaid' | 'partially_paid';
 export type TaxPayableRecipientType = 'doctor' | 'care_center';
@@ -88,32 +85,28 @@ export class TaxPayable {
   @Column({ type: 'timestamptz', nullable: true })
   paidAt?: Date | null;
 
-  /** Órdenes contenidas en la factura agrupada del pago al proveedor. */
-  @ManyToMany(() => Order, { cascade: false })
-  @JoinTable({
-    name: 'taxes_payable_orders',
-    joinColumn: { name: 'taxPayableId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'orderId', referencedColumnName: 'id' },
-  })
-  orders: Order[];
+  /**
+   * Lote de Cuentas por pagar que originó esta retención (1:1). Se generó al
+   * quedar el lote AP totalmente pagado. CASCADE: anular el lote AP (sin haber
+   * pagado la retención al SENIAT) elimina la obligación.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  sourcePayableId?: string | null;
 
-  /** Cuentas por pagar cubiertas por el pago al proveedor que originó esta retención. */
-  @ManyToMany(() => AccountsPayable, { cascade: false })
-  @JoinTable({
-    name: 'taxes_payable_payables',
-    joinColumn: { name: 'taxPayableId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'payableId', referencedColumnName: 'id' },
-  })
-  accountsPayables: AccountsPayable[];
+  @ManyToOne(() => AccountsPayable, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'sourcePayableId' })
+  sourcePayable?: AccountsPayable | null;
 
-  /** Pagos al SENIAT aplicados sobre esta retención. */
-  @ManyToMany(() => TaxPayablePayment, (p) => p.taxes, { cascade: false })
-  @JoinTable({
-    name: 'taxes_payable_payment_links',
-    joinColumn: { name: 'taxPayableId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'paymentId', referencedColumnName: 'id' },
+  /** Lote SENIAT al que pertenece esta obligación (null = pendiente, no agrupada). */
+  @Column({ type: 'uuid', nullable: true })
+  taxPaymentBatchId?: string | null;
+
+  @ManyToOne(() => TaxPaymentBatch, (b) => b.obligations, {
+    onDelete: 'SET NULL',
+    nullable: true,
   })
-  payments: TaxPayablePayment[];
+  @JoinColumn({ name: 'taxPaymentBatchId' })
+  taxPaymentBatch?: TaxPaymentBatch | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -123,4 +116,10 @@ export class TaxPayable {
 
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;
+
+  /**
+   * Transient (NO columna). Números de orden interna del lote AP que originó esta
+   * retención. Lo popula el servicio al listar/ver para los comprobantes/UI.
+   */
+  internalNumbers?: string[];
 }

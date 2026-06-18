@@ -32,6 +32,10 @@ export class CareCenter {
   @Column({ type: 'varchar', length: 24, nullable: true })
   rif?: string | null;
 
+  /** Dirección del centro de atención. Opcional. */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  centerAddress?: string | null;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 

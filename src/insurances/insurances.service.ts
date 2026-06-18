@@ -56,7 +56,7 @@ export class InsurancesService {
 
     if (search && search.trim()) {
       qb.andWhere(
-        '(LOWER(insurance.name) LIKE :s OR LOWER(insurance.description) LIKE :s OR LOWER(insurance.email) LIKE :s)',
+        '(LOWER(insurance.name) LIKE :s OR LOWER(insurance.shortName) LIKE :s OR LOWER(insurance.description) LIKE :s OR LOWER(insurance.email) LIKE :s)',
         { s: `%${search.trim().toLowerCase()}%` },
       );
     }
@@ -94,6 +94,7 @@ export class InsurancesService {
     await this.validateServicePrices(dto.servicePrices ?? []);
     const insurance = this.repo.create({
       name: dto.name.trim(),
+      shortName: dto.shortName?.trim() || null,
       description: dto.description?.trim() ?? null,
       email,
       fiscalAddress: dto.fiscalAddress?.trim() || null,
@@ -127,6 +128,8 @@ export class InsurancesService {
         insurance.name = name;
       }
     }
+    if (dto.shortName !== undefined)
+      insurance.shortName = dto.shortName?.trim() || null;
     if (dto.description !== undefined)
       insurance.description = dto.description?.trim() ?? null;
     if (dto.email !== undefined) {

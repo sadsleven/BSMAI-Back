@@ -22,6 +22,12 @@ export class CreateInsuranceDto {
   @MaxLength(200)
   name: string;
 
+  /** Nombre corto / abreviatura del seguro. Opcional. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100, { message: 'El nombre corto no puede superar 100 caracteres' })
+  shortName?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -56,7 +62,7 @@ export class CreateInsuranceDto {
    */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(5000)
   @ValidateNested({ each: true })
   @Type(() => ServicePriceDto)
   servicePrices?: ServicePriceDto[];

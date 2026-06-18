@@ -16,6 +16,8 @@ import { PaymentAccount } from '../../payment-accounts/entities/payment-account.
 export type AccountsReceivablePaymentType =
   | 'mobile_payment'
   | 'bank_transfer'
+  | 'bank_transfer_usd'
+  | 'card'
   | 'cash_usd'
   | 'cash_eur'
   | 'cash_bs'

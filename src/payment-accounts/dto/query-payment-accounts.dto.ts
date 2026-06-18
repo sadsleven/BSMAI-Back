@@ -20,8 +20,8 @@ export class QueryPaymentAccountsDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['mobile_payment', 'bank_transfer', 'other'])
-  type?: 'mobile_payment' | 'bank_transfer' | 'other';
+  @IsIn(['mobile_payment', 'bank_transfer', 'card', 'other'])
+  type?: 'mobile_payment' | 'bank_transfer' | 'card' | 'other';
 
   @IsOptional()
   @IsIn(['name', 'type', 'createdAt', 'updatedAt'])
@@ -47,6 +47,6 @@ export class QueryPaymentAccountsDto {
 
 export class AssignablePaymentAccountsQueryDto {
   @IsOptional()
-  @IsIn(['mobile_payment', 'bank_transfer', 'other'])
-  type?: 'mobile_payment' | 'bank_transfer' | 'other';
+  @IsIn(['mobile_payment', 'bank_transfer', 'card', 'other'])
+  type?: 'mobile_payment' | 'bank_transfer' | 'card' | 'other';
 }

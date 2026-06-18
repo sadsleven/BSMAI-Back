@@ -41,6 +41,10 @@ export class Doctor {
   @Column({ type: 'varchar', length: 24, nullable: true, unique: true })
   rif?: string | null;
 
+  /** Dirección del centro donde atiende el doctor. Opcional. */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  centerAddress?: string | null;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 

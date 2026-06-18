@@ -134,6 +134,7 @@ export class CareCentersService {
       businessName,
       email,
       rif,
+      centerAddress: dto.centerAddress?.trim() || null,
       isActive: dto.isActive ?? true,
       specialties,
       phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
@@ -200,6 +201,9 @@ export class CareCentersService {
       }
     }
     if (dto.isActive !== undefined) center.isActive = dto.isActive;
+    if (dto.centerAddress !== undefined) {
+      center.centerAddress = dto.centerAddress?.trim() || null;
+    }
 
     if (dto.specialtyIds) {
       center.specialties = await this.resolveSpecialties(dto.specialtyIds);

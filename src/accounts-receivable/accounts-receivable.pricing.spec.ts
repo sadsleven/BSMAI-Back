@@ -78,7 +78,7 @@ describe('Cashea pricing (funciones puras)', () => {
   });
 
   describe('targetUsdForOrder', () => {
-    it('Cashea → precio − comisión', () => {
+    it('Cashea → precio − comisión − cuota inicial (cobrada del titular en Paso 1)', () => {
       const order = makeOrder({
         type: 'cashea',
         priceAmount: '100.00',
@@ -86,7 +86,8 @@ describe('Cashea pricing (funciones puras)', () => {
         casheaFirstInstallmentRate: '0.0400',
         casheaTotalRate: '0.0600',
       });
-      expect(targetUsdForOrder(order)).toBe(92.4);
+      // 100 − 7.6 (comisión) − 40 (inicial ya pagada) = 52.4 → resto financiado.
+      expect(targetUsdForOrder(order)).toBe(52.4);
     });
 
     it('no-Cashea → precio íntegro', () => {

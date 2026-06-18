@@ -60,14 +60,39 @@ export class TaxPayablePaymentDto {
   amountValue: number;
 }
 
-export class RegisterTaxPaymentDto {
+/** Crear un lote SENIAT para UN proveedor, con sus obligaciones de retención. */
+export class CreateTaxBatchDto {
+  @IsIn(['doctor', 'care_center'])
+  recipientType: 'doctor' | 'care_center';
+
+  @IsOptional()
+  @IsUUID()
+  doctorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  careCenterId?: string;
+
   @IsArray()
-  @ArrayMinSize(1, { message: 'Seleccioná al menos una cuenta' })
-  @ArrayMaxSize(50)
+  @ArrayMinSize(1, { message: 'Agregá al menos una retención' })
+  @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   taxPayableIds: string[];
+}
 
+/** Agregar/quitar obligaciones de un lote existente (mismo proveedor). */
+export class MutateTaxBatchObligationsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  taxPayableIds: string[];
+}
+
+/** Registrar uno o más pagos al SENIAT sobre un lote (id por path). */
+export class RegisterTaxPaymentDto {
   @IsArray()
   @ArrayMinSize(1, { message: 'Registrá al menos un pago' })
   @ArrayMaxSize(20)
@@ -76,6 +101,35 @@ export class RegisterTaxPaymentDto {
   payments: TaxPayablePaymentDto[];
 }
 
+/** Pendientes (obligaciones de retención sin lote). */
+export class QueryPendingTaxDto {
+  @IsOptional()
+  @IsNumber()
+  page?: number;
+
+  @IsOptional()
+  @IsNumber()
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  doctorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  careCenterId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
+/** Listado de lotes SENIAT. */
 export class QueryTaxesPayableDto {
   @IsOptional()
   @IsNumber()
@@ -107,12 +161,8 @@ export class QueryTaxesPayableDto {
   branchId?: string;
 
   @IsOptional()
-  @IsUUID()
-  orderId?: string;
-
-  @IsOptional()
-  @IsIn(['taxPayableNumber', 'taxAmountBs', 'grossAmountBs', 'createdAt', 'updatedAt'])
-  sortBy?: 'taxPayableNumber' | 'taxAmountBs' | 'grossAmountBs' | 'createdAt' | 'updatedAt';
+  @IsIn(['taxBatchNumber', 'createdAt', 'updatedAt'])
+  sortBy?: 'taxBatchNumber' | 'createdAt' | 'updatedAt';
 
   @IsOptional()
   @Matches(/^(ASC|DESC)$/i)

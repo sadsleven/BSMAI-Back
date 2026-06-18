@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 //Modules
 import { SeedModule } from './seed/seed.module';
+import { BaremosSeedModule } from './seed/baremos/baremos-seed.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -36,6 +37,7 @@ import { AppConfigModule } from './app-config/app-config.module';
 import { SearchModule } from './search/search.module';
 import { FilesModule } from './files/files.module';
 import { PaymentAccountsModule } from './payment-accounts/payment-accounts.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -44,6 +46,7 @@ import { PaymentAccountsModule } from './payment-accounts/payment-accounts.modul
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     ConnectionBD,
     SeedModule,
+    BaremosSeedModule,
     WebsocketModule,
     AuthModule,
     UsersModule,
@@ -71,6 +74,7 @@ import { PaymentAccountsModule } from './payment-accounts/payment-accounts.modul
     SearchModule,
     FilesModule,
     PaymentAccountsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

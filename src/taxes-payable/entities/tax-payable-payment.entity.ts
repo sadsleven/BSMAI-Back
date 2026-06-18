@@ -10,7 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
-import { TaxPayable } from './tax-payable.entity';
+import { TaxPaymentBatch } from './tax-payment-batch.entity';
 
 export type TaxPayablePaymentType =
   | 'mobile_payment'
@@ -59,8 +59,8 @@ export class TaxPayablePayment {
   @Column({ type: 'numeric', precision: 18, scale: 2, default: 0 })
   amountInBs: string;
 
-  @ManyToMany(() => TaxPayable, (t) => t.payments)
-  taxes: TaxPayable[];
+  @ManyToMany(() => TaxPaymentBatch, (b) => b.payments)
+  batches: TaxPaymentBatch[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

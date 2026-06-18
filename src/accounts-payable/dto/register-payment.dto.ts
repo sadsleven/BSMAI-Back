@@ -60,14 +60,39 @@ export class AccountsPayablePaymentDto {
   amountValue: number;
 }
 
-export class RegisterPaymentDto {
+/** Crear un lote de Cuentas por pagar para UN proveedor, con sus órdenes internas. */
+export class CreateAccountsPayableBatchDto {
+  @IsIn(['doctor', 'care_center'])
+  recipientType: 'doctor' | 'care_center';
+
+  @IsOptional()
+  @IsUUID()
+  doctorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  careCenterId?: string;
+
   @IsArray()
-  @ArrayMinSize(1, { message: 'Seleccioná al menos una cuenta' })
-  @ArrayMaxSize(50)
+  @ArrayMinSize(1, { message: 'Agregá al menos una orden interna' })
+  @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
-  payableIds: string[];
+  internalOrderIds: string[];
+}
 
+/** Agregar/quitar órdenes internas de un lote existente (mismo proveedor). */
+export class MutateAccountsPayableOrdersDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  internalOrderIds: string[];
+}
+
+/** Registrar uno o más pagos sobre un lote (id por path). */
+export class RegisterPaymentDto {
   @IsArray()
   @ArrayMinSize(1, { message: 'Registrá al menos un pago' })
   @ArrayMaxSize(20)
@@ -76,6 +101,35 @@ export class RegisterPaymentDto {
   payments: AccountsPayablePaymentDto[];
 }
 
+/** Pendientes (órdenes internas facturadas, sin lote). */
+export class QueryPendingPayableDto {
+  @IsOptional()
+  @IsNumber()
+  page?: number;
+
+  @IsOptional()
+  @IsNumber()
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  doctorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  careCenterId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
+/** Listado de lotes. */
 export class QueryAccountsPayableDto {
   @IsOptional()
   @IsNumber()
@@ -107,12 +161,8 @@ export class QueryAccountsPayableDto {
   branchId?: string;
 
   @IsOptional()
-  @IsUUID()
-  orderId?: string;
-
-  @IsOptional()
-  @IsIn(['orderNumber', 'createdAt', 'updatedAt'])
-  sortBy?: 'orderNumber' | 'createdAt' | 'updatedAt';
+  @IsIn(['payableNumber', 'createdAt', 'updatedAt'])
+  sortBy?: 'payableNumber' | 'createdAt' | 'updatedAt';
 
   @IsOptional()
   @Matches(/^(ASC|DESC)$/i)

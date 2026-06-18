@@ -245,7 +245,6 @@ export class PaymentAccountReportsService {
         'ar',
         'ar.id = lnk."receivableId" AND ar."deletedAt" IS NULL',
       )
-      .innerJoin('orders', 'o', 'o.id = ar."orderId" AND o."deletedAt" IS NULL')
       .leftJoin('insurances', 'ins', 'ins.id = ar."insuranceId"')
       .leftJoin('patients', 'h', 'h.id = ar."holderId"')
       .leftJoin('payment_accounts', 'pa', 'pa.id = p."paymentAccountId"')
@@ -255,7 +254,13 @@ export class PaymentAccountReportsService {
     this.applyCommonFilters(qb, 'p', query);
     if (allowed) {
       if (!allowed.length) qb.andWhere('1 = 0');
-      else qb.andWhere('o."branchId" IN (:...allowed)', { allowed });
+      else
+        qb.andWhere(
+          `EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro
+                   JOIN "orders" o ON o.id = aro."orderId" AND o."deletedAt" IS NULL
+                   WHERE aro."receivableId" = ar.id AND o."branchId" IN (:...allowed))`,
+          { allowed },
+        );
     }
 
     const raw = await qb
