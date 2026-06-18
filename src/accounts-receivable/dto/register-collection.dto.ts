@@ -74,14 +74,39 @@ export class AccountsReceivablePaymentDto {
   amountValue: number;
 }
 
-export class RegisterCollectionDto {
+/** Crear un lote de Cuentas por cobrar para UN deudor, con sus órdenes. */
+export class CreateAccountsReceivableBatchDto {
+  @IsIn(['insurance', 'holder'])
+  debtorType: 'insurance' | 'holder';
+
+  @IsOptional()
+  @IsUUID()
+  insuranceId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  holderId?: string;
+
   @IsArray()
-  @ArrayMinSize(1, { message: 'Seleccioná al menos una cuenta' })
-  @ArrayMaxSize(50)
+  @ArrayMinSize(1, { message: 'Agregá al menos una orden' })
+  @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
-  receivableIds: string[];
+  orderIds: string[];
+}
 
+/** Agregar/quitar órdenes de un lote existente (mismo deudor y modo). */
+export class MutateAccountsReceivableOrdersDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  orderIds: string[];
+}
+
+/** Registrar uno o más cobros sobre un lote (id por path). */
+export class RegisterCollectionDto {
   @IsArray()
   @ArrayMinSize(1, { message: 'Registrá al menos un cobro' })
   @ArrayMaxSize(20)
@@ -90,6 +115,39 @@ export class RegisterCollectionDto {
   payments: AccountsReceivablePaymentDto[];
 }
 
+/** Pendientes (órdenes finalizadas con deudor, sin lote). */
+export class QueryPendingReceivableDto {
+  @IsOptional()
+  @IsNumber()
+  page?: number;
+
+  @IsOptional()
+  @IsNumber()
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsIn(['insurance', 'holder'])
+  debtorType?: 'insurance' | 'holder';
+
+  @IsOptional()
+  @IsUUID()
+  insuranceId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  holderId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
+/** Listado de lotes. */
 export class QueryAccountsReceivableDto {
   @IsOptional()
   @IsNumber()
@@ -125,12 +183,8 @@ export class QueryAccountsReceivableDto {
   branchId?: string;
 
   @IsOptional()
-  @IsUUID()
-  orderId?: string;
-
-  @IsOptional()
-  @IsIn(['orderNumber', 'createdAt', 'updatedAt'])
-  sortBy?: 'orderNumber' | 'createdAt' | 'updatedAt';
+  @IsIn(['receivableNumber', 'createdAt', 'updatedAt'])
+  sortBy?: 'receivableNumber' | 'createdAt' | 'updatedAt';
 
   @IsOptional()
   @Matches(/^(ASC|DESC)$/i)

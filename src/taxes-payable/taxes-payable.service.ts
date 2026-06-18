@@ -5,23 +5,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { TaxPayable } from './entities/tax-payable.entity';
 import { TaxPayablePayment } from './entities/tax-payable-payment.entity';
+import { TaxPaymentBatch } from './entities/tax-payment-batch.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import {
+  CreateTaxBatchDto,
+  QueryPendingTaxDto,
   QueryTaxesPayableDto,
-  RegisterTaxPaymentDto,
   TaxPayablePaymentDto,
 } from './dto/register-tax-payment.dto';
-import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { computeAmountInBs } from '../shared/utils/payment-conversion';
 
 const TOLERANCE_BS = 0.01;
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 @Injectable()
 export class TaxesPayableService {
@@ -30,11 +32,15 @@ export class TaxesPayableService {
     private readonly repo: Repository<TaxPayable>,
     @InjectRepository(TaxPayablePayment)
     private readonly paymentsRepo: Repository<TaxPayablePayment>,
+    @InjectRepository(TaxPaymentBatch)
+    private readonly batchRepo: Repository<TaxPaymentBatch>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) {
+    void this.paymentsRepo;
+  }
 
   private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
     if (user.isSuperAdmin) {
@@ -56,10 +62,103 @@ export class TaxesPayableService {
     return u.map((r) => r.id);
   }
 
-  async findAll(
-    query: QueryTaxesPayableDto,
+  /** EXISTS de scope sucursal: la retención cuelga de su lote AP → órdenes internas → órdenes. */
+  private branchScopeExists(alias: string): string {
+    return `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_s
+              JOIN "order_internal_orders" iio_s ON iio_s.id = apo_s."internalOrderId"
+              JOIN "orders" o_s ON o_s.id = iio_s."orderId"
+              WHERE apo_s."payableId" = ${alias}."sourcePayableId" AND o_s."branchId" IN (:...allowed))`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pendientes: obligaciones de retención sin lote.
+  // ---------------------------------------------------------------------------
+  async listPending(
+    query: QueryPendingTaxDto,
     user: AuthenticatedUser,
   ): Promise<PaginatedResponse<TaxPayable>> {
+    const { page = 1, limit = 10, search, doctorId, careCenterId, branchId } = query;
+    const qb = this.repo
+      .createQueryBuilder('tp')
+      .leftJoinAndSelect('tp.doctor', 'doctor')
+      .leftJoinAndSelect('tp.careCenter', 'careCenter')
+      .where('tp."taxPaymentBatchId" IS NULL');
+
+    if (!user.isSuperAdmin) {
+      const allowed = await this.resolveUserBranchIds(user);
+      if (allowed.length === 0) return { data: [], metadata: { total: 0, page, lastPage: 1 } };
+      qb.andWhere(this.branchScopeExists('tp'), { allowed });
+    }
+    if (doctorId) qb.andWhere('tp."doctorId" = :doctorId', { doctorId });
+    if (careCenterId) qb.andWhere('tp."careCenterId" = :careCenterId', { careCenterId });
+    if (branchId) qb.andWhere(this.branchScopeExistsSingle('tp'), { branchId });
+    if (search && search.trim()) {
+      const s = `%${search.trim().toLowerCase()}%`;
+      qb.andWhere(
+        `(LOWER(tp."taxPayableNumber") LIKE :s
+          OR EXISTS (SELECT 1 FROM "accounts_payable_orders" apo2
+                     JOIN "order_internal_orders" iio2 ON iio2.id = apo2."internalOrderId"
+                     WHERE apo2."payableId" = tp."sourcePayableId" AND LOWER(iio2."internalNumber") LIKE :s))`,
+        { s },
+      );
+    }
+    qb.orderBy('tp.taxPayableNumber', 'DESC');
+    const offset = (page - 1) * limit;
+    qb.skip(offset).take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    await this.attachInternalNumbers(data);
+    return {
+      data,
+      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+    };
+  }
+
+  private branchScopeExistsSingle(alias: string): string {
+    return `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_b
+              JOIN "order_internal_orders" iio_b ON iio_b.id = apo_b."internalOrderId"
+              JOIN "orders" o_b ON o_b.id = iio_b."orderId"
+              WHERE apo_b."payableId" = ${alias}."sourcePayableId" AND o_b."branchId" = :branchId)`;
+  }
+
+  /** Popula `internalNumbers` en cada obligación desde su lote AP de origen. */
+  private async attachInternalNumbers(taxes: TaxPayable[]): Promise<void> {
+    const sourceIds = Array.from(
+      new Set(taxes.map((t) => t.sourcePayableId).filter(Boolean) as string[]),
+    );
+    if (!sourceIds.length) {
+      for (const t of taxes) t.internalNumbers = [];
+      return;
+    }
+    const rows = await this.dataSource.query<
+      Array<{ payableId: string; internalNumber: string }>
+    >(
+      `SELECT apo."payableId", iio."internalNumber"
+       FROM "accounts_payable_orders" apo
+       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+       WHERE apo."payableId" = ANY($1)
+       ORDER BY iio."internalNumber"::int`,
+      [sourceIds],
+    );
+    const byPayable = new Map<string, string[]>();
+    for (const r of rows) {
+      const arr = byPayable.get(r.payableId) ?? [];
+      arr.push(r.internalNumber);
+      byPayable.set(r.payableId, arr);
+    }
+    for (const t of taxes) {
+      t.internalNumbers = t.sourcePayableId
+        ? byPayable.get(t.sourcePayableId) ?? []
+        : [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lotes SENIAT.
+  // ---------------------------------------------------------------------------
+  async listBatches(
+    query: QueryTaxesPayableDto,
+    user: AuthenticatedUser,
+  ): Promise<PaginatedResponse<TaxPaymentBatch>> {
     const {
       page = 1,
       limit = 10,
@@ -68,77 +167,417 @@ export class TaxesPayableService {
       doctorId,
       careCenterId,
       branchId,
-      orderId,
       sortBy = 'createdAt',
       sortDir = 'DESC',
     } = query;
 
-    const qb = this.repo
-      .createQueryBuilder('tp')
-      .leftJoinAndSelect('tp.taxUnit', 'taxUnit')
-      .leftJoinAndSelect('tp.doctor', 'doctor')
-      .leftJoinAndSelect('tp.careCenter', 'careCenter')
-      .leftJoinAndSelect('tp.orders', 'orders')
-      .leftJoinAndSelect('orders.branch', 'branch')
-      .leftJoinAndSelect('tp.accountsPayables', 'ap')
-      .leftJoinAndSelect('tp.payments', 'payments')
+    const qb = this.batchRepo
+      .createQueryBuilder('tpb')
+      .leftJoinAndSelect('tpb.doctor', 'doctor')
+      .leftJoinAndSelect('tpb.careCenter', 'careCenter')
+      .leftJoinAndSelect('tpb.obligations', 'obl')
+      .leftJoinAndSelect('tpb.payments', 'payments')
       .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
 
-    if (sortBy === 'taxPayableNumber') {
-      qb.orderBy('tp.taxPayableNumber', sortDir);
-    } else {
-      qb.orderBy(`tp.${sortBy}`, sortDir);
-    }
+    qb.orderBy(`tpb.${sortBy}`, sortDir);
 
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
       if (allowed.length === 0) qb.andWhere('1 = 0');
-      else qb.andWhere('orders.branchId IN (:...allowed)', { allowed });
+      else
+        qb.andWhere(
+          `EXISTS (SELECT 1 FROM "taxes_payable" tp2
+                   JOIN "accounts_payable_orders" apo2 ON apo2."payableId" = tp2."sourcePayableId"
+                   JOIN "order_internal_orders" iio2 ON iio2.id = apo2."internalOrderId"
+                   JOIN "orders" o2 ON o2.id = iio2."orderId"
+                   WHERE tp2."taxPaymentBatchId" = tpb.id AND o2."branchId" IN (:...allowed))`,
+          { allowed },
+        );
     }
-
-    if (status) qb.andWhere('tp.status = :status', { status });
-    if (doctorId) qb.andWhere('tp.doctorId = :doctorId', { doctorId });
-    if (careCenterId) qb.andWhere('tp.careCenterId = :careCenterId', { careCenterId });
-    if (branchId) qb.andWhere('orders.branchId = :branchId', { branchId });
-    if (orderId) qb.andWhere('orders.id = :orderId', { orderId });
-
+    if (status) qb.andWhere('tpb.status = :status', { status });
+    if (doctorId) qb.andWhere('tpb.doctorId = :doctorId', { doctorId });
+    if (careCenterId) qb.andWhere('tpb.careCenterId = :careCenterId', { careCenterId });
+    if (branchId) {
+      qb.andWhere(
+        `EXISTS (SELECT 1 FROM "taxes_payable" tp3
+                 JOIN "accounts_payable_orders" apo3 ON apo3."payableId" = tp3."sourcePayableId"
+                 JOIN "order_internal_orders" iio3 ON iio3.id = apo3."internalOrderId"
+                 JOIN "orders" o3 ON o3.id = iio3."orderId"
+                 WHERE tp3."taxPaymentBatchId" = tpb.id AND o3."branchId" = :branchId)`,
+        { branchId },
+      );
+    }
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(
-        `(LOWER(orders."orderNumber") LIKE :s OR LOWER(tp."taxPayableNumber") LIKE :s)`,
+        `(LOWER(tpb."taxBatchNumber") LIKE :s
+          OR EXISTS (SELECT 1 FROM "taxes_payable" tp4 WHERE tp4."taxPaymentBatchId" = tpb.id AND LOWER(tp4."taxPayableNumber") LIKE :s))`,
         { s },
       );
     }
 
-    return paginateBuilder<TaxPayable>(qb, page, limit);
+    const offset = (page - 1) * limit;
+    qb.skip(offset).take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    for (const b of data) {
+      this.computeFigures(b);
+      await this.attachInternalNumbers(b.obligations ?? []);
+    }
+    return {
+      data,
+      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+    };
   }
 
-  async findOne(id: string, user: AuthenticatedUser): Promise<TaxPayable> {
-    const tax = await this.repo.findOne({
+  async findOneBatch(id: string, user: AuthenticatedUser): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote SENIAT no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    this.computeFigures(batch);
+    await this.attachInternalNumbers(batch.obligations ?? []);
+    return batch;
+  }
+
+  private loadBatch(mgr: EntityManager, id: string): Promise<TaxPaymentBatch | null> {
+    return mgr.findOne(TaxPaymentBatch, {
       where: { id },
       relations: {
-        taxUnit: true,
         doctor: true,
         careCenter: true,
-        orders: { branch: true, billingExchangeRate: true },
-        accountsPayables: true,
+        obligations: { taxUnit: true },
         payments: { exchangeRate: true },
       },
     });
-    if (!tax) throw new NotFoundException('Retención por pagar no encontrada');
-    await this.assertVisibility(tax, user);
-    return tax;
   }
 
-  private async assertVisibility(tax: TaxPayable, user: AuthenticatedUser): Promise<void> {
+  private computeFigures(batch: TaxPaymentBatch): void {
+    const targetBs = round2(
+      (batch.obligations ?? []).reduce((s, o) => s + Number(o.taxAmountBs || 0), 0),
+    );
+    const paidBs = round2(
+      (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
+    );
+    batch.targetBs = targetBs;
+    batch.paidBs = paidBs;
+    batch.pendingBs = Math.max(0, round2(targetBs - paidBs));
+  }
+
+  private async assertBatchVisibility(
+    batch: TaxPaymentBatch,
+    user: AuthenticatedUser,
+  ): Promise<void> {
     if (user.isSuperAdmin) return;
     const allowed = new Set(await this.resolveUserBranchIds(user));
-    const branchIds = (tax.orders ?? []).map((o) => o.branchId).filter(Boolean);
-    if (branchIds.length === 0 || branchIds.some((b) => !allowed.has(b))) {
-      throw new ForbiddenException('No tenés acceso a este impuesto por pagar');
+    const sourceIds = (batch.obligations ?? [])
+      .map((o) => o.sourcePayableId)
+      .filter(Boolean) as string[];
+    if (sourceIds.length === 0) {
+      throw new ForbiddenException('No tenés acceso a este lote');
+    }
+    const rows = await this.dataSource.query<{ branchId: string }[]>(
+      `SELECT DISTINCT o."branchId"
+       FROM "accounts_payable_orders" apo
+       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+       JOIN "orders" o ON o.id = iio."orderId"
+       WHERE apo."payableId" = ANY($1)`,
+      [sourceIds],
+    );
+    if (rows.length === 0 || rows.some((r) => !allowed.has(r.branchId))) {
+      throw new ForbiddenException('No tenés acceso a este lote');
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Crear / mutar lote.
+  // ---------------------------------------------------------------------------
+  async createBatch(
+    dto: CreateTaxBatchDto,
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const providerId = dto.recipientType === 'doctor' ? dto.doctorId : dto.careCenterId;
+    if (!providerId) {
+      throw new BadRequestException(
+        `Falta ${dto.recipientType === 'doctor' ? 'doctorId' : 'careCenterId'}`,
+      );
+    }
+    await this.validateObligations(dto.taxPayableIds, dto.recipientType, providerId, user);
+
+    const id = await this.dataSource.transaction(async (mgr) => {
+      const seq = await mgr.query<{ nextval: string }[]>(
+        `SELECT nextval('tax_payment_batch_seq') AS nextval`,
+      );
+      const inserted = await mgr.query<{ id: string }[]>(
+        `INSERT INTO "tax_payment_batches" ("taxBatchNumber", "recipientType", "doctorId", "careCenterId", "status")
+         VALUES ($1, $2, $3, $4, 'unpaid') RETURNING id`,
+        [
+          String(seq[0].nextval),
+          dto.recipientType,
+          dto.recipientType === 'doctor' ? providerId : null,
+          dto.recipientType === 'care_center' ? providerId : null,
+        ],
+      );
+      const batchId = inserted[0].id;
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "taxPaymentBatchId" = $1 WHERE id = ANY($2)`,
+        [batchId, dto.taxPayableIds],
+      );
+      return batchId;
+    });
+
+    return this.findOneBatch(id, user);
+  }
+
+  async addObligations(
+    id: string,
+    taxPayableIds: string[],
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'No se pueden agregar retenciones a un lote pagado. Editá o quitá un pago primero.',
+      );
+    }
+    const providerId = batch.recipientType === 'doctor' ? batch.doctorId : batch.careCenterId;
+    await this.validateObligations(taxPayableIds, batch.recipientType, providerId!, user);
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "taxPaymentBatchId" = $1 WHERE id = ANY($2)`,
+        [id, taxPayableIds],
+      );
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  async removeObligations(
+    id: string,
+    taxPayableIds: string[],
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'No se pueden quitar retenciones de un lote pagado. Editá o quitá un pago primero.',
+      );
+    }
+    const remaining = (batch.obligations ?? []).filter(
+      (o) => !taxPayableIds.includes(o.id),
+    );
+    if (remaining.length === 0) {
+      throw new BadRequestException('El lote quedaría vacío. Eliminá el lote en su lugar.');
+    }
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "taxPaymentBatchId" = NULL, "status" = 'unpaid', "paidAt" = NULL
+         WHERE id = ANY($1) AND "taxPaymentBatchId" = $2`,
+        [taxPayableIds, id],
+      );
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  private async validateObligations(
+    taxPayableIds: string[],
+    recipientType: 'doctor' | 'care_center',
+    providerId: string,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    const taxes = await this.repo.find({
+      where: { id: In(taxPayableIds) },
+    });
+    if (taxes.length !== taxPayableIds.length) {
+      throw new BadRequestException('Alguna retención no existe');
+    }
+    for (const t of taxes) {
+      if (t.taxPaymentBatchId) {
+        throw new BadRequestException(
+          'Una retención ya está en otro lote. Quitala de ese lote primero.',
+        );
+      }
+      const pid = t.recipientType === 'doctor' ? t.doctorId : t.careCenterId;
+      if (t.recipientType !== recipientType || pid !== providerId) {
+        throw new BadRequestException(
+          'Todas las retenciones del lote deben ser del mismo proveedor',
+        );
+      }
+    }
+    if (!user.isSuperAdmin) {
+      const allowed = new Set(await this.resolveUserBranchIds(user));
+      const sourceIds = taxes.map((t) => t.sourcePayableId).filter(Boolean) as string[];
+      if (sourceIds.length) {
+        const rows = await this.dataSource.query<{ branchId: string }[]>(
+          `SELECT DISTINCT o."branchId"
+           FROM "accounts_payable_orders" apo
+           JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+           JOIN "orders" o ON o.id = iio."orderId"
+           WHERE apo."payableId" = ANY($1)`,
+          [sourceIds],
+        );
+        if (rows.some((r) => !allowed.has(r.branchId))) {
+          throw new ForbiddenException('No tenés acceso a una de las retenciones');
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pagos al SENIAT.
+  // ---------------------------------------------------------------------------
+  async registerPayment(
+    id: string,
+    payments: TaxPayablePaymentDto[],
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'El lote ya está pagado. Para corregir, editá o eliminá un pago.',
+      );
+    }
+    this.computeFigures(batch);
+    const usdRateId = await this.usdRateForBatch(batch);
+    const priorPaidBs = batch.paidBs ?? 0;
+    const newPaymentsBs = await this.computePaymentsTotalBs(payments, usdRateId);
+    if (newPaymentsBs <= 0) {
+      throw new BadRequestException('El monto de los pagos debe ser mayor a 0');
+    }
+    const cumulativeBs = round2(priorPaidBs + newPaymentsBs);
+    const targetBs = batch.targetBs ?? 0;
+    if (cumulativeBs - targetBs > TOLERANCE_BS) {
+      throw new BadRequestException(
+        `El total de pagos (Bs ${cumulativeBs.toFixed(2)}) excede el monto a pagar al SENIAT (Bs ${targetBs.toFixed(2)})`,
+      );
+    }
+
+    await this.dataSource.transaction(async (mgr) => {
+      for (const p of payments) {
+        const payload = await this.resolvePaymentForSave(p, usdRateId);
+        const saved = await mgr.save(mgr.create(TaxPayablePayment, payload));
+        await mgr.query(
+          `INSERT INTO "tax_payment_batch_payment_links" ("batchId", "paymentId")
+           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [id, saved.id],
+        );
+      }
+      await this.recomputeStatus(mgr, id);
+    });
+
+    return this.findOneBatch(id, user);
+  }
+
+  async editPayment(
+    id: string,
+    paymentId: string,
+    dto: TaxPayablePaymentDto,
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
+      throw new NotFoundException('Pago no encontrado en este lote');
+    }
+    const usdRateId = await this.usdRateForBatch(batch);
+    await this.dataSource.transaction(async (mgr) => {
+      const payload = await this.resolvePaymentForSave(dto, usdRateId);
+      await mgr.update(TaxPayablePayment, paymentId, payload);
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  async deletePayment(
+    id: string,
+    paymentId: string,
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
+      throw new NotFoundException('Pago no encontrado en este lote');
+    }
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.query(
+        `DELETE FROM "tax_payment_batch_payment_links" WHERE "batchId" = $1 AND "paymentId" = $2`,
+        [id, paymentId],
+      );
+      await mgr.query(`DELETE FROM "taxes_payable_payments" WHERE id = $1`, [paymentId]);
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  async deleteBatch(id: string, user: AuthenticatedUser): Promise<void> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    await this.dataSource.transaction(async (mgr) => {
+      // Liberar obligaciones (vuelven a Pendientes).
+      await mgr.query(
+        `UPDATE "taxes_payable" SET "taxPaymentBatchId" = NULL, "status" = 'unpaid', "paidAt" = NULL
+         WHERE "taxPaymentBatchId" = $1`,
+        [id],
+      );
+      const payIds = (batch.payments ?? []).map((p) => p.id);
+      if (payIds.length) {
+        await mgr.query(`DELETE FROM "taxes_payable_payments" WHERE id = ANY($1)`, [payIds]);
+      }
+      await mgr.query(`DELETE FROM "tax_payment_batches" WHERE id = $1`, [id]);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Recompute.
+  // ---------------------------------------------------------------------------
+  private async recomputeStatus(mgr: EntityManager, id: string): Promise<void> {
+    const batch = await this.loadBatch(mgr, id);
+    if (!batch) return;
+    this.computeFigures(batch);
+    const target = batch.targetBs ?? 0;
+    const paid = batch.paidBs ?? 0;
+    let status: 'unpaid' | 'partially_paid' | 'paid';
+    if (paid + TOLERANCE_BS >= target && paid > 0) status = 'paid';
+    else if (paid > 0) status = 'partially_paid';
+    else status = 'unpaid';
+
+    const paidAt = status === 'paid' ? batch.paidAt ?? new Date() : null;
+    await mgr.update(TaxPaymentBatch, id, { status, paidAt });
+    // Las obligaciones espejan el estado del lote.
+    await mgr.query(
+      `UPDATE "taxes_payable" SET "status" = $2, "paidAt" = $3 WHERE "taxPaymentBatchId" = $1`,
+      [id, status, status === 'paid' ? paidAt : null],
+    );
+  }
+
+  private async usdRateForBatch(batch: TaxPaymentBatch): Promise<string | null> {
+    const sourceIds = (batch.obligations ?? [])
+      .map((o) => o.sourcePayableId)
+      .filter(Boolean) as string[];
+    if (!sourceIds.length) return null;
+    const rows = await this.dataSource.query<{ billingExchangeRateId: string | null }[]>(
+      `SELECT o."billingExchangeRateId"
+       FROM "accounts_payable_orders" apo
+       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+       JOIN "orders" o ON o.id = iio."orderId"
+       WHERE apo."payableId" = $1
+       LIMIT 1`,
+      [sourceIds[0]],
+    );
+    return rows[0]?.billingExchangeRateId ?? null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Conversión de pagos (sin cambios respecto al modelo anterior).
+  // ---------------------------------------------------------------------------
   private async resolvePaymentForSave(
     p: TaxPayablePaymentDto,
     usdExchangeRateId?: string | null,
@@ -204,94 +643,6 @@ export class TaxesPayableService {
     return out;
   }
 
-  async registerPayment(
-    dto: RegisterTaxPaymentDto,
-    user: AuthenticatedUser,
-  ): Promise<TaxPayable[]> {
-    const taxes = await this.repo.find({
-      where: { id: In(dto.taxPayableIds) },
-      relations: {
-        taxUnit: true,
-        doctor: true,
-        careCenter: true,
-        orders: { branch: true, billingExchangeRate: true },
-        accountsPayables: true,
-        payments: true,
-      },
-    });
-    if (taxes.length !== dto.taxPayableIds.length)
-      throw new BadRequestException('Alguna cuenta no existe');
-
-    for (const t of taxes) await this.assertVisibility(t, user);
-
-    if (taxes.some((t) => t.status === 'paid')) {
-      throw new BadRequestException('Hay cuentas ya pagadas en la selección');
-    }
-
-    // Agrupación: mismo proveedor (doctor o centro).
-    const doctorIds = new Set(taxes.map((t) => t.doctorId).filter(Boolean));
-    const careCenterIds = new Set(taxes.map((t) => t.careCenterId).filter(Boolean));
-    if (
-      doctorIds.size > 1 ||
-      careCenterIds.size > 1 ||
-      (doctorIds.size > 0 && careCenterIds.size > 0)
-    ) {
-      throw new BadRequestException(
-        'Solo se pueden agrupar impuestos del mismo doctor o centro de atención',
-      );
-    }
-
-    // Target en Bs (la retención se entrega al SENIAT en Bs).
-    let totalTargetBs = 0;
-    for (const t of taxes) totalTargetBs += Number(t.taxAmountBs);
-
-    const existingPaidBs = taxes.reduce(
-      (sum, t) =>
-        sum + (t.payments ?? []).reduce((s, p) => s + (Number(p.amountInBs) || 0), 0),
-      0,
-    );
-
-    const usdRateId = taxes[0]?.orders?.[0]?.billingExchangeRateId ?? null;
-    const totalPaymentsBs = await this.computePaymentsTotalBs(dto.payments, usdRateId);
-    const newTotalBs = existingPaidBs + totalPaymentsBs;
-
-    if (newTotalBs > totalTargetBs + TOLERANCE_BS) {
-      throw new BadRequestException(
-        `El total de pagos (Bs ${newTotalBs.toFixed(2)}) excede el monto a pagar al SENIAT (Bs ${totalTargetBs.toFixed(2)})`,
-      );
-    }
-
-    const isFullyPaid = Math.abs(totalTargetBs - newTotalBs) <= TOLERANCE_BS;
-    const newStatus: 'paid' | 'partially_paid' = isFullyPaid ? 'paid' : 'partially_paid';
-
-    const ids = await this.dataSource.transaction(async (mgr) => {
-      const savedPaymentIds: string[] = [];
-      for (const p of dto.payments) {
-        const payload = await this.resolvePaymentForSave(p, usdRateId);
-        const entity = mgr.create(TaxPayablePayment, payload);
-        const saved = await mgr.save(entity);
-        savedPaymentIds.push(saved.id);
-      }
-      for (const t of taxes) {
-        for (const paymentId of savedPaymentIds) {
-          await mgr.query(
-            `INSERT INTO "taxes_payable_payment_links" ("taxPayableId", "paymentId")
-             VALUES ($1, $2)
-             ON CONFLICT DO NOTHING`,
-            [t.id, paymentId],
-          );
-        }
-        await mgr.update(TaxPayable, t.id, {
-          status: newStatus,
-          paidAt: isFullyPaid ? new Date() : null,
-        });
-      }
-      return taxes.map((t) => t.id);
-    });
-
-    return Promise.all(ids.map((id) => this.findOne(id, user)));
-  }
-
   private async computePaymentsTotalBs(
     payments: TaxPayablePaymentDto[],
     usdExchangeRateId: string | null,
@@ -308,6 +659,6 @@ export class TaxesPayableService {
         { usdExchangeRateId },
       );
     }
-    return total;
+    return round2(total);
   }
 }

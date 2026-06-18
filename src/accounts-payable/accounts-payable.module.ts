@@ -2,13 +2,17 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountsPayable } from './entities/accounts-payable.entity';
 import { AccountsPayablePayment } from './entities/accounts-payable-payment.entity';
+import { AccountsPayableOrder } from './entities/accounts-payable-order.entity';
 import { Order } from '../orders/entities/order.entity';
+import { OrderInternalOrder } from '../orders/entities/order-internal-order.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
+import { CareCenter } from '../care-centers/entities/care-center.entity';
 import { TaxPayable } from '../taxes-payable/entities/tax-payable.entity';
 import { TaxPayablePayment } from '../taxes-payable/entities/tax-payable-payment.entity';
+import { TaxPaymentBatch } from '../taxes-payable/entities/tax-payment-batch.entity';
 import { TaxUnitsModule } from '../tax-units/tax-units.module';
 import { AccountsPayableService } from './accounts-payable.service';
 import { AccountsPayableController } from './accounts-payable.controller';
@@ -18,13 +22,17 @@ import { AccountsPayableController } from './accounts-payable.controller';
     TypeOrmModule.forFeature([
       AccountsPayable,
       AccountsPayablePayment,
+      AccountsPayableOrder,
       Order,
+      OrderInternalOrder,
       Branch,
       Bank,
       ExchangeRate,
       Doctor,
+      CareCenter,
       TaxPayable,
       TaxPayablePayment,
+      TaxPaymentBatch,
     ]),
     TaxUnitsModule,
   ],

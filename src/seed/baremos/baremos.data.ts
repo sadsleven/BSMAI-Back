@@ -217,16 +217,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 550
       },
       {
-        "name": "CARDIOLOGIA / VASCULAR PERIFERICO / CARDIOVASCULAR",
-        "priceUsd": 50
-      },
-      {
         "name": "CELULAS L.E",
         "priceUsd": 27
-      },
-      {
-        "name": "CIRUGIA GENERAL",
-        "priceUsd": 50
       },
       {
         "name": "CITOMEGALOVIRUS ( IGG + IGM )",
@@ -291,6 +283,98 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "CONSULTA + CITOLOGÍA (INCLUYE EL ESTUDIO) + ECO TRANSVAGINAL + COLPOSCOPIA TOMA DE BIOPSIA",
         "priceUsd": 200
+      },
+      {
+        "name": "CONSULTA: CARDIOLOGIA / VASCULAR PERIFERICO / CARDIOVASCULAR",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: DERMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: ENDOCRINOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: FISIATRIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: GASTROENTEROLOGIA / PROCTOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: GINECOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: INMUNOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: NEUROLOGIA / NEUROCIRUGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: NUTRICION / DIETETICA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: ODONTOLIGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: OFTALMOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: ONCOLOGIA / MASTOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: PSIQUIATRIA / PSICOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: REUMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: UROLOGÍA",
+        "priceUsd": 50
       },
       {
         "name": "CONTAJE DE CELULAS ENDOTELIALES / BIOMICROSCOPICA",
@@ -367,10 +451,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "DEPURACION DE CREATININA",
         "priceUsd": 25
-      },
-      {
-        "name": "DERMATOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "DESHIDROGENASA DEL ACIDO LACTICO (LDH)",
@@ -633,10 +713,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 35
       },
       {
-        "name": "ENDOCRINOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "ESCLEROSIS DE ULCERA SANGRANTE",
         "priceUsd": 250
       },
@@ -683,10 +759,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "FIBRINOGENO",
         "priceUsd": 38
-      },
-      {
-        "name": "FISIATRIA",
-        "priceUsd": 50
       },
       {
         "name": "FLUJOMETRIA URINARIA",
@@ -737,16 +809,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 22
       },
       {
-        "name": "GASTROENTEROLOGIA / PROCTOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "GASTROSTOMIA ENDOSCOPICA PERCUTANEA",
         "priceUsd": 1600
-      },
-      {
-        "name": "GINECOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "GLICEMIA EN AYUNAS",
@@ -881,10 +945,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 75
       },
       {
-        "name": "INMUNOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "INSULINA EN AYUNAS",
         "priceUsd": 74
       },
@@ -933,14 +993,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 38
       },
       {
-        "name": "MEDICINA GENERAL",
-        "priceUsd": 50
-      },
-      {
-        "name": "MEDICINA INTERNA",
-        "priceUsd": 50
-      },
-      {
         "name": "MICOPLASMA PNEUMONIAE ( IGA + IGG + IGM )",
         "priceUsd": 38
       },
@@ -965,44 +1017,12 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 30
       },
       {
-        "name": "NEFROLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "NEUMONOLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "NEUROLOGIA / NEUROCIRUGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "NUTRICION / DIETETICA",
-        "priceUsd": 50
-      },
-      {
         "name": "OCT SEGMENTO ANTERIOR Y POSTERIOR",
         "priceUsd": 100
       },
       {
-        "name": "ODONTOLIGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "OFTALMOLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "ONCOLOGIA / MASTOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "ORINA",
         "priceUsd": 22
-      },
-      {
-        "name": "OTORRINOLARINGOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "PANEL DE ALIMENTOS INHULANTES",
@@ -1019,10 +1039,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "PARACENTESIS DIAGNOSTICA",
         "priceUsd": 200
-      },
-      {
-        "name": "PEDIATRIA",
-        "priceUsd": 50
       },
       {
         "name": "PERFIL 1 PREVISORA ( HC + GL + UR + CR + COL + TRIG )",
@@ -1149,10 +1165,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 100
       },
       {
-        "name": "PSIQUIATRIA / PSICOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "PTERIGION",
         "priceUsd": 100
       },
@@ -1195,10 +1207,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "RETIRO DE CATETER DOBLE J (ANESTESIA LOCAL)",
         "priceUsd": 250
-      },
-      {
-        "name": "REUMATOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "RMN ARTICULACION TEMPORO MANDIBULAR",
@@ -1893,10 +1901,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 22
       },
       {
-        "name": "TRAUMATOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "TRIGLICERIDOS",
         "priceUsd": 22
       },
@@ -1979,10 +1983,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "UROCULTIVO Y ANTIBIOGRAMA",
         "priceUsd": 32
-      },
-      {
-        "name": "UROLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "UROTAC",
@@ -2091,14 +2091,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 10
       },
       {
-        "name": "CARDIOLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "CIRUGIA GENERAL",
-        "priceUsd": 50
-      },
-      {
         "name": "CITOLOGÍA VAGINAL",
         "priceUsd": 40
       },
@@ -2125,6 +2117,94 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "COLESTEROL TOTAL Y SUS FRACCIONES",
         "priceUsd": 7.5
+      },
+      {
+        "name": "CONSULTA: CARDIOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: DERMATOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: ENDOCRINOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: GASTROENTEROLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: GINECOLOGIA OBSTETRICIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: MASTOLOGIA",
+        "priceUsd": 70
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: NEUROCIRUGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: NEUROLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: NUTRICIONISTA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: OFTALMOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: ONCOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: REHABILITACION / FISIATRIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: REUMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: UROLOGÍA",
+        "priceUsd": 60
       },
       {
         "name": "COPROCULTIVO (CULTIVO DE LAS HECES)",
@@ -2165,10 +2245,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "DEPURACIÓN DE CREATININA Y PROTEINURIA EN ORINA DE 24 HRS",
         "priceUsd": 22
-      },
-      {
-        "name": "DERMATOLOGIA",
-        "priceUsd": 60
       },
       {
         "name": "ECO DOPPLER VENOSO DE MIEMBROS INFERIORES",
@@ -2231,10 +2307,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 18
       },
       {
-        "name": "ENDOCRINOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "EPSTEIN BARR VIRUS IGG",
         "priceUsd": 25
       },
@@ -2289,14 +2361,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "GAMMAGLUTAMILTRANSPEPTIDASA (GGTP)",
         "priceUsd": 9
-      },
-      {
-        "name": "GASTROENTEROLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "GINECOLOGIA OBSTETRICIA",
-        "priceUsd": 50
       },
       {
         "name": "GLICEMIA/GLUCOSA",
@@ -2395,18 +2459,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 5.5
       },
       {
-        "name": "MASTOLOGIA",
-        "priceUsd": 70
-      },
-      {
-        "name": "MEDICINA GENERAL",
-        "priceUsd": 50
-      },
-      {
-        "name": "MEDICINA INTERNA",
-        "priceUsd": 50
-      },
-      {
         "name": "MICROALBUMINURIA EN ORINA PARCIAL",
         "priceUsd": 19
       },
@@ -2415,44 +2467,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 90
       },
       {
-        "name": "NEFROLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "NEUMONOLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "NEUROCIRUGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "NEUROLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "NUTRICIONISTA",
-        "priceUsd": 50
-      },
-      {
-        "name": "OFTALMOLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "ONCOLOGIA",
-        "priceUsd": 60
-      },
-      {
         "name": "ORINA",
         "priceUsd": 5
-      },
-      {
-        "name": "OTORRINOLARINGOLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "PEDIATRIA",
-        "priceUsd": 50
       },
       {
         "name": "PEPTIDO CITRULINADO",
@@ -2549,14 +2565,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "PT (Tiempo de Protrombina)",
         "priceUsd": 5
-      },
-      {
-        "name": "REHABILITACION / FISIATRIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "REUMATOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "SANGRE OCULTA EN HECES",
@@ -2683,10 +2691,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 18
       },
       {
-        "name": "TRAUMATOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "TRIGLICERIDOS",
         "priceUsd": 6
       },
@@ -2705,10 +2709,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "UROCULTIVO",
         "priceUsd": 45
-      },
-      {
-        "name": "UROLOGIA",
-        "priceUsd": 60
       },
       {
         "name": "UROTOMOGRAFIA",
@@ -2817,14 +2817,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 5
       },
       {
-        "name": "CARDIOLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "CIRUGIA GENERAL",
-        "priceUsd": 45
-      },
-      {
         "name": "CITOLOGÍA VAGINAL",
         "priceUsd": 20
       },
@@ -2873,6 +2865,66 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 44
       },
       {
+        "name": "CONSULTA: CARDIOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: DERMATOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: GASTROENTEROLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: GINECOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: NEUROLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: REHABILITACION / FISIATRIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: REUMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 45
+      },
+      {
         "name": "COPROCULTIVO (CULTIVO DE LAS HECES)",
         "priceUsd": 25.2
       },
@@ -2911,10 +2963,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "DEPURACIÓN DE CREATININA Y PROTEINURIA EN ORINA DE 24 HRS",
         "priceUsd": 12
-      },
-      {
-        "name": "DERMATOLOGIA",
-        "priceUsd": 60
       },
       {
         "name": "ECO DOPPLER VENOSO DE MIEMBROS INFERIORES",
@@ -3061,14 +3109,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 7
       },
       {
-        "name": "GASTROENTEROLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "GINECOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "GLICEMIA/GLUCOSA",
         "priceUsd": 2.5
       },
@@ -3205,14 +3245,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 9
       },
       {
-        "name": "MEDICINA GENERAL",
-        "priceUsd": 45
-      },
-      {
-        "name": "MEDICINA INTERNA",
-        "priceUsd": 45
-      },
-      {
         "name": "MICROALBUMINURIA EN ORINA PARCIAL",
         "priceUsd": 10
       },
@@ -3221,28 +3253,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 100
       },
       {
-        "name": "NEFROLOGIA",
-        "priceUsd": 45
-      },
-      {
-        "name": "NEUMONOLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "NEUROLOGIA",
-        "priceUsd": 60
-      },
-      {
         "name": "ORINA",
         "priceUsd": 3.5
-      },
-      {
-        "name": "OTORRINOLARINGOLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "PEDIATRIA",
-        "priceUsd": 45
       },
       {
         "name": "PERFIL 20",
@@ -3325,16 +3337,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 3.5
       },
       {
-        "name": "REHABILITACION / FISIATRIA",
-        "priceUsd": 45
-      },
-      {
         "name": "RETIRO DE PUNTOS",
         "priceUsd": 30
-      },
-      {
-        "name": "REUMATOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "SANGRE OCULTA EN HECES",
@@ -3403,10 +3407,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "TRANSFERRINA",
         "priceUsd": 10
-      },
-      {
-        "name": "TRAUMATOLOGIA",
-        "priceUsd": 45
       },
       {
         "name": "TRIGLICERIDOS",
@@ -3507,7 +3507,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 8
       },
       {
-        "name": "ANTICUERPOS ANTITIROID ",
+        "name": "ANTICUERPOS ANTITIROID",
         "priceUsd": 47.8
       },
       {
@@ -3599,16 +3599,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 8
       },
       {
-        "name": "CARDIOLOGIA",
-        "priceUsd": 50
-      },
-      {
         "name": "CARGA GLICOSILADA",
         "priceUsd": 13
-      },
-      {
-        "name": "CIRUGIA GENERAL",
-        "priceUsd": 30
       },
       {
         "name": "CITOGRAMA DE MOCO NASAL",
@@ -3645,6 +3637,70 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "COLESTEROL TOTAL",
         "priceUsd": 3.2
+      },
+      {
+        "name": "CONSULTA: CARDIOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: ENDOCRINOLOGIA",
+        "priceUsd": 40
+      },
+      {
+        "name": "CONSULTA: FISIATRIA",
+        "priceUsd": 35
+      },
+      {
+        "name": "CONSULTA: GINECOLOGIA",
+        "priceUsd": 40
+      },
+      {
+        "name": "CONSULTA: MASTOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: MEDICINA FAMILIAR",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 25
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 35
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 40
+      },
+      {
+        "name": "CONSULTA: ONCOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 40
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: REUMATOLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 35
+      },
+      {
+        "name": "CONSULTA: UROLOGÍA",
+        "priceUsd": 50
       },
       {
         "name": "CONTAJE DE EOSINOFILOS",
@@ -3731,10 +3787,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 12
       },
       {
-        "name": "ENDOCRINOLOGIA",
-        "priceUsd": 40
-      },
-      {
         "name": "EPSTEIN BAR IgG",
         "priceUsd": 19.3
       },
@@ -3767,10 +3819,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 10
       },
       {
-        "name": "FISIATRIA",
-        "priceUsd": 35
-      },
-      {
         "name": "FOSFATASA ACIDA TOTAL",
         "priceUsd": 7
       },
@@ -3801,10 +3849,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "GIARDIA LAMBIA",
         "priceUsd": 4.5
-      },
-      {
-        "name": "GINECOLOGIA",
-        "priceUsd": 40
       },
       {
         "name": "GLICEMIA EN AYUNAS",
@@ -4043,22 +4087,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 5
       },
       {
-        "name": "MASTOLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "MEDICINA FAMILIAR",
-        "priceUsd": 30
-      },
-      {
-        "name": "MEDICINA GENERAL",
-        "priceUsd": 25
-      },
-      {
-        "name": "MEDICINA INTERNA",
-        "priceUsd": 35
-      },
-      {
         "name": "MICOPLASMA IgG",
         "priceUsd": 10
       },
@@ -4067,24 +4095,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 8
       },
       {
-        "name": "NEFROLOGIA",
-        "priceUsd": 40
-      },
-      {
-        "name": "ONCOLOGIA",
-        "priceUsd": 60
-      },
-      {
         "name": "ORINA",
         "priceUsd": 5
-      },
-      {
-        "name": "OTORRINOLARINGOLOGIA",
-        "priceUsd": 40
-      },
-      {
-        "name": "PEDIATRIA",
-        "priceUsd": 30
       },
       {
         "name": "POTASIO EN ORINA PARCIAL",
@@ -4133,10 +4145,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "RELACION AU/CREAT",
         "priceUsd": 8
-      },
-      {
-        "name": "REUMATOLOGIA",
-        "priceUsd": 30
       },
       {
         "name": "RX 1 PROYECCION",
@@ -4205,10 +4213,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "TOXOPLASMOSIS IgG",
         "priceUsd": 8
-      },
-      {
-        "name": "TRAUMATOLOGIA",
-        "priceUsd": 35
       },
       {
         "name": "TRIGLICERIDOS",
@@ -4325,10 +4329,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "UROCULTIVO",
         "priceUsd": 41.3
-      },
-      {
-        "name": "UROLOGO",
-        "priceUsd": 50
       },
       {
         "name": "V.D.R.L. CUALITATIVO",
@@ -4541,16 +4541,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 33.76
       },
       {
-        "name": "CARDIOLOGIA",
-        "priceUsd": 55
-      },
-      {
         "name": "CEA",
         "priceUsd": 22
-      },
-      {
-        "name": "CIRUGIA GENERAL",
-        "priceUsd": 55
       },
       {
         "name": "CITOLOGÍA VAGINAL",
@@ -4597,6 +4589,82 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 86.26
       },
       {
+        "name": "CONSULTA: CARDIOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: DERMATOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: GASTROENTEROLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: GINECOLOGIA OBSTETRICIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA PEDRIATRICA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: NEUROLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: OFTALMOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: PSIQUIATRIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: REHABILITACION / FISIATRIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: REUMATOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 55
+      },
+      {
+        "name": "CONSULTA: UROLOGÍA",
+        "priceUsd": 55
+      },
+      {
         "name": "COPROCULTIVO (CULTIVO DE LAS HECES)",
         "priceUsd": 48.76
       },
@@ -4635,10 +4703,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "DEPURACIÓN DE CREATININA Y PROTEINURIA EN ORINA DE 24 HRS",
         "priceUsd": 22.5
-      },
-      {
-        "name": "DERMATOLOGIA",
-        "priceUsd": 55
       },
       {
         "name": "DIMERO D",
@@ -4779,14 +4843,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "GAMMAGLUTAMILTRANSPEPTIDASA (GGTP)",
         "priceUsd": 15
-      },
-      {
-        "name": "GASTROENTEROLOGIA",
-        "priceUsd": 55
-      },
-      {
-        "name": "GINECOLOGIA OBSTETRICIA",
-        "priceUsd": 55
       },
       {
         "name": "GLICEMIA/GLUCOSA",
@@ -4937,14 +4993,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 18.76
       },
       {
-        "name": "MEDICINA GENERAL",
-        "priceUsd": 55
-      },
-      {
-        "name": "MEDICINA INTERNA",
-        "priceUsd": 55
-      },
-      {
         "name": "MICROALBUMINURIA EN ORINA PARCIAL",
         "priceUsd": 20.63
       },
@@ -4953,36 +5001,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 110
       },
       {
-        "name": "NEFROLOGIA",
-        "priceUsd": 55
-      },
-      {
-        "name": "NEUMONOLOGIA",
-        "priceUsd": 55
-      },
-      {
-        "name": "NEUMONOLOGIA PEDRIATRICA",
-        "priceUsd": 55
-      },
-      {
-        "name": "NEUROLOGIA",
-        "priceUsd": 55
-      },
-      {
-        "name": "OFTALMOLOGIA",
-        "priceUsd": 55
-      },
-      {
         "name": "ORINA",
         "priceUsd": 6.58
-      },
-      {
-        "name": "OTORRINOLARINGOLOGIA",
-        "priceUsd": 55
-      },
-      {
-        "name": "PEDIATRIA",
-        "priceUsd": 55
       },
       {
         "name": "PERFIL 20",
@@ -5061,20 +5081,12 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 37.5
       },
       {
-        "name": "PSIQUIATRIA",
-        "priceUsd": 55
-      },
-      {
         "name": "PT (Tiempo de Protrombina)",
         "priceUsd": 6.58
       },
       {
         "name": "RA TEST",
         "priceUsd": 15.5
-      },
-      {
-        "name": "REHABILITACION / FISIATRIA",
-        "priceUsd": 55
       },
       {
         "name": "RELACION ACIDO U / CREATIN",
@@ -5095,10 +5107,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "RETRACCION DE COAGULO",
         "priceUsd": 10
-      },
-      {
-        "name": "REUMATOLOGIA",
-        "priceUsd": 55
       },
       {
         "name": "SANGRE OCULTA EN HECES",
@@ -5321,10 +5329,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 20.63
       },
       {
-        "name": "TRAUMATOLOGIA",
-        "priceUsd": 55
-      },
-      {
         "name": "TRIGLICERIDOS",
         "priceUsd": 7.5
       },
@@ -5343,10 +5347,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "UROCULTIVO",
         "priceUsd": 43.13
-      },
-      {
-        "name": "UROLOGIA",
-        "priceUsd": 55
       },
       {
         "name": "UROTAC CON CONTRASTE EV.",
@@ -5479,16 +5479,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 33.76
       },
       {
-        "name": "CARDIOLOGIA",
-        "priceUsd": 60
-      },
-      {
         "name": "CEA",
         "priceUsd": 22
-      },
-      {
-        "name": "CIRUGIA GENERAL",
-        "priceUsd": 45
       },
       {
         "name": "CITOLOGÍA VAGINAL",
@@ -5539,6 +5531,66 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 86.26
       },
       {
+        "name": "CONSULTA: CARDIOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: DERMATOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: GASTROENTEROLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: GINECOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: NEUROLOGIA",
+        "priceUsd": 60
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: REHABILITACION / FISIATRIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "CONSULTA: REUMATOLOGIA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 45
+      },
+      {
         "name": "COPROCULTIVO (CULTIVO DE LAS HECES)",
         "priceUsd": 48.76
       },
@@ -5581,10 +5633,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "DEPURACIÓN DE CREATININA Y PROTEINURIA EN ORINA DE 24 HRS",
         "priceUsd": 22.5
-      },
-      {
-        "name": "DERMATOLOGIA",
-        "priceUsd": 60
       },
       {
         "name": "DIMERO D",
@@ -5725,14 +5773,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "GAMMAGLUTAMILTRANSPEPTIDASA (GGTP)",
         "priceUsd": 15
-      },
-      {
-        "name": "GASTROENTEROLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "GINECOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "GLICEMIA/GLUCOSA",
@@ -5883,14 +5923,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 18.76
       },
       {
-        "name": "MEDICINA GENERAL",
-        "priceUsd": 45
-      },
-      {
-        "name": "MEDICINA INTERNA",
-        "priceUsd": 45
-      },
-      {
         "name": "MICROALBUMINURIA EN ORINA PARCIAL",
         "priceUsd": 20.63
       },
@@ -5899,28 +5931,8 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 110
       },
       {
-        "name": "NEFROLOGIA",
-        "priceUsd": 45
-      },
-      {
-        "name": "NEUMONOLOGIA",
-        "priceUsd": 60
-      },
-      {
-        "name": "NEUROLOGIA",
-        "priceUsd": 60
-      },
-      {
         "name": "ORINA",
         "priceUsd": 6.58
-      },
-      {
-        "name": "OTORRINOLARINGOLOGIA",
-        "priceUsd": 50
-      },
-      {
-        "name": "PEDIATRIA",
-        "priceUsd": 45
       },
       {
         "name": "PERFIL 20",
@@ -6007,20 +6019,12 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 15
       },
       {
-        "name": "REHABILITACION / FISIATRIA",
-        "priceUsd": 45
-      },
-      {
         "name": "RELACION ACIDO U / CREATININA",
         "priceUsd": 10
       },
       {
         "name": "RELACION UREA / CREATININA",
         "priceUsd": 10
-      },
-      {
-        "name": "REUMATOLOGIA",
-        "priceUsd": 50
       },
       {
         "name": "SANGRE OCULTA EN HECES",
@@ -6085,10 +6089,6 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       {
         "name": "TRANSFERRINA",
         "priceUsd": 20.63
-      },
-      {
-        "name": "TRAUMATOLOGIA",
-        "priceUsd": 45
       },
       {
         "name": "TRIGLICERIDOS",

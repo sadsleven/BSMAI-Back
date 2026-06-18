@@ -37,6 +37,7 @@ import { AppConfigModule } from './app-config/app-config.module';
 import { SearchModule } from './search/search.module';
 import { FilesModule } from './files/files.module';
 import { PaymentAccountsModule } from './payment-accounts/payment-accounts.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { PaymentAccountsModule } from './payment-accounts/payment-accounts.modul
     SearchModule,
     FilesModule,
     PaymentAccountsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

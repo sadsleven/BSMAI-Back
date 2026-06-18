@@ -37,11 +37,87 @@ function cellNum(v) {
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
 }
-const norm = (v) => cellText(v).replace(/\s+/g, ' ').trim();
+// Colapsa espacios y elimina caracteres de control (algunas celdas traen
+// separadores de unidad U+001F al final, ej. Seguros Venezuela).
+const norm = (v) =>
+  cellText(v)
+    .replace(/\s+/g, ' ')
+    .split('')
+    .filter((c) => {
+      const code = c.charCodeAt(0);
+      return code > 31 && code !== 127;
+    })
+    .join('')
+    .trim();
 const round2 = (n) => Math.round(n * 100) / 100;
 
 // nombre = fila de sección/categoría, no un servicio real
 const CATEGORY_RE = /^(consultas|consultas y procedimientos|laboratorios|imagenologia|rayos x|especialidades|tomografias|servicios|servicio de imagen)/i;
+
+/** Quita diacríticos para comparar claves. */
+const stripAccents = (s) => s.normalize('NFD').replace(/\p{M}/gu, '');
+/** Clave de comparación: sin acentos, MAYÚSCULAS, espacios colapsados. */
+const consultKey = (s) => stripAccents(s).replace(/\s+/g, ' ').toUpperCase().trim();
+
+/**
+ * Tipos de servicio que son CONSULTA de una especialidad (no exámenes ni
+ * procedimientos). Claves normalizadas (sin acentos, MAYÚSCULAS). Las consultas
+ * se renombran a "CONSULTA: <nombre>" tanto en seguros como en doctores.
+ */
+const SPECIALTY_CONSULT_KEYS = new Set([
+  'CARDIOLOGIA',
+  'CARDIOLOGIA / VASCULAR PERIFERICO / CARDIOVASCULAR',
+  'CIRUGIA GENERAL',
+  'DERMATOLOGIA',
+  'ENDOCRINOLOGIA',
+  'FISIATRIA',
+  'GASTROENTEROLOGIA',
+  'GASTROENTEROLOGIA / PROCTOLOGIA',
+  'GINECOLOGIA',
+  'GINECOLOGIA OBSTETRICIA',
+  'INMUNOLOGIA',
+  'MASTOLOGIA',
+  'MEDICINA FAMILIAR',
+  'MEDICINA GENERAL',
+  'MEDICINA INTERNA',
+  'NEFROLOGIA',
+  'NEUMONOLOGIA',
+  'NEUMONOLOGIA PEDRIATRICA',
+  'NEUROCIRUGIA',
+  'NEUROLOGIA',
+  'NEUROLOGIA / NEUROCIRUGIA',
+  'NUTRICION / DIETETICA',
+  'NUTRICIONISTA',
+  'ODONTOLIGIA',
+  'OFTALMOLOGIA',
+  'ONCOLOGIA',
+  'ONCOLOGIA / MASTOLOGIA',
+  'OTORRINOLARINGOLOGIA',
+  'PEDIATRIA',
+  'PSIQUIATRIA',
+  'PSIQUIATRIA / PSICOLOGIA',
+  'REHABILITACION / FISIATRIA',
+  'REUMATOLOGIA',
+  'TRAUMATOLOGIA',
+  'UROLOGIA',
+  'UROLOGO',
+]);
+
+/**
+ * Nombre canónico de la especialidad por clave normalizada. Unifica variantes
+ * (ej. UROLOGO/UROLOGIA → "UROLOGÍA"). Sin entrada → se usa el nombre original.
+ */
+const CONSULT_CANONICAL = new Map([
+  ['UROLOGIA', 'UROLOGÍA'],
+  ['UROLOGO', 'UROLOGÍA'],
+]);
+
+/** Prefija "CONSULTA: " si el nombre es una consulta de especialidad. */
+const consultaName = (name) => {
+  const key = consultKey(name);
+  if (!SPECIALTY_CONSULT_KEYS.has(key)) return name;
+  return `CONSULTA: ${CONSULT_CANONICAL.get(key) ?? name}`;
+};
 
 const CONFIGS = [
   {
@@ -119,8 +195,9 @@ const CONFIGS = [
           skippedLong++;
           continue;
         }
-        const key = name.toUpperCase();
-        if (!m.has(key)) m.set(key, { name, priceUsd: round2(price) });
+        const display = consultaName(name);
+        const key = display.toUpperCase();
+        if (!m.has(key)) m.set(key, { name: display, priceUsd: round2(price) });
       }
     }
     const services = [...m.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'));
@@ -205,7 +282,7 @@ async function parseDoctors() {
       lastName,
       cedula: 'SIN-CED-' + String(rows.length + 1).padStart(2, '0'),
       specialtyName: category,
-      serviceTypeName: category,
+      serviceTypeName: 'CONSULTA: ' + category,
       priceUsd: round2(cost),
     });
   }

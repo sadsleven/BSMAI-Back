@@ -23,6 +23,7 @@ import { OrderPayment } from './order-payment.entity';
 import { OrderServiceType } from './order-service-type.entity';
 import { OrderServicePricing } from './order-service-pricing.entity';
 import { OrderProviderReport } from './order-provider-report.entity';
+import { OrderInternalOrder } from './order-internal-order.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
@@ -49,6 +50,12 @@ export class Order {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /**
+   * Número BASE de la orden = `internalNumber` del proveedor con
+   * `sequencePosition = 1` (ver {@link OrderInternalOrder}). Congelado de por
+   * vida (nunca se regenera al editar, aun si ese proveedor se quita). Lo usan
+   * cuentas por cobrar, título de la orden y el buscador como ancla por-orden.
+   */
   @Column({ type: 'varchar', length: 32, unique: true })
   orderNumber: string;
 
@@ -124,6 +131,13 @@ export class Order {
    */
   @OneToMany(() => OrderServiceType, (ost) => ost.order, { cascade: false })
   orderServiceTypes: OrderServiceType[];
+
+  /**
+   * Órdenes internas: una por proveedor distinto, cada una con su propio número
+   * (`internalNumber`). Se generan al crear y se reconcilian al editar (borrador).
+   */
+  @OneToMany(() => OrderInternalOrder, (iio) => iio.order, { cascade: false })
+  internalOrders: OrderInternalOrder[];
 
   @ManyToMany(() => Pathology, { eager: false })
   @JoinTable({

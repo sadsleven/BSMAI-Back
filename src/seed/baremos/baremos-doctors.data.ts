@@ -24,7 +24,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "BRUZUAL",
     "cedula": "SIN-CED-01",
     "specialtyName": "MEDICINA GENERAL",
-    "serviceTypeName": "MEDICINA GENERAL",
+    "serviceTypeName": "CONSULTA: MEDICINA GENERAL",
     "priceUsd": 20
   },
   {
@@ -32,7 +32,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "CANADEL",
     "cedula": "SIN-CED-02",
     "specialtyName": "MEDICINA GENERAL",
-    "serviceTypeName": "MEDICINA GENERAL",
+    "serviceTypeName": "CONSULTA: MEDICINA GENERAL",
     "priceUsd": 20
   },
   {
@@ -40,7 +40,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "RINDON",
     "cedula": "SIN-CED-03",
     "specialtyName": "MEDICINA INTERNA",
-    "serviceTypeName": "MEDICINA INTERNA",
+    "serviceTypeName": "CONSULTA: MEDICINA INTERNA",
     "priceUsd": 25
   },
   {
@@ -48,7 +48,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "MAESTRE",
     "cedula": "SIN-CED-04",
     "specialtyName": "MEDICINA INTERNA",
-    "serviceTypeName": "MEDICINA INTERNA",
+    "serviceTypeName": "CONSULTA: MEDICINA INTERNA",
     "priceUsd": 25
   },
   {
@@ -56,7 +56,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "PENOTT",
     "cedula": "SIN-CED-05",
     "specialtyName": "MEDICINA INTERNA",
-    "serviceTypeName": "MEDICINA INTERNA",
+    "serviceTypeName": "CONSULTA: MEDICINA INTERNA",
     "priceUsd": 25
   },
   {
@@ -64,7 +64,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "RIVERA",
     "cedula": "SIN-CED-06",
     "specialtyName": "FISIATRIA",
-    "serviceTypeName": "FISIATRIA",
+    "serviceTypeName": "CONSULTA: FISIATRIA",
     "priceUsd": 30
   },
   {
@@ -72,7 +72,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "ZABALA",
     "cedula": "SIN-CED-07",
     "specialtyName": "TRAUMATOLOGIA",
-    "serviceTypeName": "TRAUMATOLOGIA",
+    "serviceTypeName": "CONSULTA: TRAUMATOLOGIA",
     "priceUsd": 40
   },
   {
@@ -80,7 +80,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "CHALLA",
     "cedula": "SIN-CED-08",
     "specialtyName": "TRAUMATOLOGIA",
-    "serviceTypeName": "TRAUMATOLOGIA",
+    "serviceTypeName": "CONSULTA: TRAUMATOLOGIA",
     "priceUsd": 40
   },
   {
@@ -88,7 +88,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "MONTAÑO",
     "cedula": "SIN-CED-09",
     "specialtyName": "NEUROLOGIA",
-    "serviceTypeName": "NEUROLOGIA",
+    "serviceTypeName": "CONSULTA: NEUROLOGIA",
     "priceUsd": 50
   },
   {
@@ -96,7 +96,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "REINOZA",
     "cedula": "SIN-CED-10",
     "specialtyName": "NEFROLOGIA",
-    "serviceTypeName": "NEFROLOGIA",
+    "serviceTypeName": "CONSULTA: NEFROLOGIA",
     "priceUsd": 40
   },
   {
@@ -104,7 +104,7 @@ export const BAREMO_DOCTORS: BaremoDoctorSeed[] = [
     "lastName": "GRANADO",
     "cedula": "SIN-CED-11",
     "specialtyName": "NEFROLOGIA",
-    "serviceTypeName": "NEFROLOGIA",
+    "serviceTypeName": "CONSULTA: NEFROLOGIA",
     "priceUsd": 40
   }
 ];

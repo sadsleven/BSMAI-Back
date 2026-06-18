@@ -89,7 +89,7 @@ export class CreateDoctorDto {
    */
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(500)
+  @ArrayMaxSize(5000)
   @ValidateNested({ each: true })
   @Type(() => ServicePriceDto)
   servicePrices?: ServicePriceDto[];

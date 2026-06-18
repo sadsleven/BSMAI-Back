@@ -8,13 +8,14 @@ import {
   JoinTable,
   ManyToMany,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Order } from '../../orders/entities/order.entity';
 import { Insurance } from '../../insurances/entities/insurance.entity';
 import { Patient } from '../../patients/entities/patient.entity';
 import { AccountsReceivablePayment } from './accounts-receivable-payment.entity';
+import { AccountsReceivableOrder } from './accounts-receivable-order.entity';
 
 export type AccountsReceivableStatus =
   | 'collected'
@@ -22,9 +23,15 @@ export type AccountsReceivableStatus =
   | 'partially_collected'
   | 'overcollected';
 
-/** Tipo de deudor: seguro (orden type='insurance') o titular (orden type='credit'). */
+/** Tipo de deudor: seguro (orden type='insurance') o titular (orden type='credit'/'cashea'). */
 export type AccountsReceivableDebtorType = 'insurance' | 'holder';
 
+/**
+ * LOTE de Cuentas por cobrar. Creado por el usuario para UN deudor (seguro o
+ * titular), agrupa N órdenes (`orders` → {@link AccountsReceivableOrder}) y
+ * acumula M cobros. El target/modo (Bs tasa fija vs USD) se snapshotea por orden
+ * en el pivot. Sin tope: puede quedar `overcollected`.
+ */
 @Entity({ name: 'accounts_receivable' })
 @Index('idx_ar_status', ['status'])
 @Index('idx_ar_insurance', ['insuranceId'])
@@ -35,13 +42,6 @@ export class AccountsReceivable {
 
   @Column({ type: 'varchar', length: 32, unique: true })
   receivableNumber: string;
-
-  @Column({ type: 'uuid', unique: true })
-  orderId: string;
-
-  @ManyToOne(() => Order, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'orderId' })
-  order: Order;
 
   /** Seguro deudor. Excluyente con `holderId` (CHECK ck_ar_debtor_xor). */
   @Column({ type: 'uuid', nullable: true })
@@ -65,6 +65,10 @@ export class AccountsReceivable {
   @Column({ type: 'timestamptz', nullable: true })
   collectedAt?: Date | null;
 
+  /** Órdenes incluidas en el lote (pivot con snapshot de modo y target). */
+  @OneToMany(() => AccountsReceivableOrder, (o) => o.receivable, { cascade: false })
+  orders: AccountsReceivableOrder[];
+
   @ManyToMany(() => AccountsReceivablePayment, (p) => p.accounts, { cascade: false })
   @JoinTable({
     name: 'accounts_receivable_payment_links',
@@ -81,4 +85,20 @@ export class AccountsReceivable {
 
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;
+
+  // --- Transient (NO columnas). Calculados por el servicio al listar/ver. ---
+  /** Modo de cobro del lote: 'fixed' (Bs tasa fija) o 'usd'. Uniforme por lote. */
+  mode?: 'usd' | 'fixed';
+  /** Target USD del lote (modo usd). */
+  targetUsd?: number;
+  /** Target Bs del lote (modo fixed). */
+  targetBs?: number;
+  /** Cobrado USD (Σ cobros). */
+  collectedUsd?: number;
+  /** Cobrado Bs (Σ cobros). */
+  collectedBs?: number;
+  /** Falta por cobrar USD (modo usd). */
+  pendingUsd?: number;
+  /** Falta por cobrar Bs (modo fixed). */
+  pendingBs?: number;
 }
