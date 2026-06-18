@@ -173,9 +173,9 @@ export class TaxesPayableService {
 
     const qb = this.batchRepo
       .createQueryBuilder('tpb')
-      .leftJoinAndSelect('tpb.doctor', 'doctor')
-      .leftJoinAndSelect('tpb.careCenter', 'careCenter')
       .leftJoinAndSelect('tpb.obligations', 'obl')
+      .leftJoinAndSelect('obl.doctor', 'oblDoctor')
+      .leftJoinAndSelect('obl.careCenter', 'oblCareCenter')
       .leftJoinAndSelect('tpb.payments', 'payments')
       .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
 
@@ -195,8 +195,17 @@ export class TaxesPayableService {
         );
     }
     if (status) qb.andWhere('tpb.status = :status', { status });
-    if (doctorId) qb.andWhere('tpb.doctorId = :doctorId', { doctorId });
-    if (careCenterId) qb.andWhere('tpb.careCenterId = :careCenterId', { careCenterId });
+    // Un lote puede tener varios proveedores → filtrar por EXISTS sobre sus obligaciones.
+    if (doctorId)
+      qb.andWhere(
+        `EXISTS (SELECT 1 FROM "taxes_payable" tpd WHERE tpd."taxPaymentBatchId" = tpb.id AND tpd."doctorId" = :doctorId)`,
+        { doctorId },
+      );
+    if (careCenterId)
+      qb.andWhere(
+        `EXISTS (SELECT 1 FROM "taxes_payable" tpc WHERE tpc."taxPaymentBatchId" = tpb.id AND tpc."careCenterId" = :careCenterId)`,
+        { careCenterId },
+      );
     if (branchId) {
       qb.andWhere(
         `EXISTS (SELECT 1 FROM "taxes_payable" tp3
@@ -242,9 +251,7 @@ export class TaxesPayableService {
     return mgr.findOne(TaxPaymentBatch, {
       where: { id },
       relations: {
-        doctor: true,
-        careCenter: true,
-        obligations: { taxUnit: true },
+        obligations: { taxUnit: true, doctor: true, careCenter: true },
         payments: { exchangeRate: true },
       },
     });
@@ -294,27 +301,16 @@ export class TaxesPayableService {
     dto: CreateTaxBatchDto,
     user: AuthenticatedUser,
   ): Promise<TaxPaymentBatch> {
-    const providerId = dto.recipientType === 'doctor' ? dto.doctorId : dto.careCenterId;
-    if (!providerId) {
-      throw new BadRequestException(
-        `Falta ${dto.recipientType === 'doctor' ? 'doctorId' : 'careCenterId'}`,
-      );
-    }
-    await this.validateObligations(dto.taxPayableIds, dto.recipientType, providerId, user);
+    await this.validateObligations(dto.taxPayableIds, user);
 
     const id = await this.dataSource.transaction(async (mgr) => {
       const seq = await mgr.query<{ nextval: string }[]>(
         `SELECT nextval('tax_payment_batch_seq') AS nextval`,
       );
       const inserted = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "tax_payment_batches" ("taxBatchNumber", "recipientType", "doctorId", "careCenterId", "status")
-         VALUES ($1, $2, $3, $4, 'unpaid') RETURNING id`,
-        [
-          String(seq[0].nextval),
-          dto.recipientType,
-          dto.recipientType === 'doctor' ? providerId : null,
-          dto.recipientType === 'care_center' ? providerId : null,
-        ],
+        `INSERT INTO "tax_payment_batches" ("taxBatchNumber", "status")
+         VALUES ($1, 'unpaid') RETURNING id`,
+        [String(seq[0].nextval)],
       );
       const batchId = inserted[0].id;
       await mgr.query(
@@ -340,8 +336,7 @@ export class TaxesPayableService {
         'No se pueden agregar retenciones a un lote pagado. Editá o quitá un pago primero.',
       );
     }
-    const providerId = batch.recipientType === 'doctor' ? batch.doctorId : batch.careCenterId;
-    await this.validateObligations(taxPayableIds, batch.recipientType, providerId!, user);
+    await this.validateObligations(taxPayableIds, user);
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(
         `UPDATE "taxes_payable" SET "taxPaymentBatchId" = $1 WHERE id = ANY($2)`,
@@ -384,8 +379,6 @@ export class TaxesPayableService {
 
   private async validateObligations(
     taxPayableIds: string[],
-    recipientType: 'doctor' | 'care_center',
-    providerId: string,
     user: AuthenticatedUser,
   ): Promise<void> {
     const taxes = await this.repo.find({
@@ -394,16 +387,12 @@ export class TaxesPayableService {
     if (taxes.length !== taxPayableIds.length) {
       throw new BadRequestException('Alguna retención no existe');
     }
+    // Un lote SENIAT puede mezclar proveedores: el pago va al fisco, no al
+    // proveedor. Sólo se valida que no estén ya en otro lote.
     for (const t of taxes) {
       if (t.taxPaymentBatchId) {
         throw new BadRequestException(
           'Una retención ya está en otro lote. Quitala de ese lote primero.',
-        );
-      }
-      const pid = t.recipientType === 'doctor' ? t.doctorId : t.careCenterId;
-      if (t.recipientType !== recipientType || pid !== providerId) {
-        throw new BadRequestException(
-          'Todas las retenciones del lote deben ser del mismo proveedor',
         );
       }
     }

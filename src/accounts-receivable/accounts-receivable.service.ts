@@ -146,7 +146,10 @@ export class AccountsReceivableService {
 
     const whereSql = where.join(' AND ');
     const countRows = await this.dataSource.query<{ c: string }[]>(
-      `SELECT count(*)::int AS c FROM "orders" o WHERE ${whereSql}`,
+      `SELECT count(*)::int AS c FROM "orders" o
+       LEFT JOIN "insurances" i ON i.id = o."insuranceId"
+       LEFT JOIN "patients" p ON p.id = o."holderId"
+       WHERE ${whereSql}`,
       params,
     );
     const total = Number(countRows[0]?.c ?? 0);

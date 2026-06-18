@@ -59,7 +59,7 @@ export class AccountsReceivable {
   @JoinColumn({ name: 'holderId' })
   holder?: Patient | null;
 
-  @Column({ type: 'varchar', length: 16, default: 'uncollected' })
+  @Column({ type: 'varchar', length: 32, default: 'uncollected' })
   status: AccountsReceivableStatus;
 
   @Column({ type: 'timestamptz', nullable: true })

@@ -4,55 +4,32 @@ import {
   DeleteDateColumn,
   Entity,
   Index,
-  JoinColumn,
   JoinTable,
   ManyToMany,
-  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Doctor } from '../../doctors/entities/doctor.entity';
-import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import { TaxPayablePayment } from './tax-payable-payment.entity';
 import { TaxPayable } from './tax-payable.entity';
 
 export type TaxPaymentBatchStatus = 'paid' | 'unpaid' | 'partially_paid';
-export type TaxPaymentBatchRecipientType = 'doctor' | 'care_center';
 
 /**
- * LOTE de pago al SENIAT. Creado por el usuario para UN proveedor (doctor o
- * centro), agrupa N obligaciones de retención (`obligations` → `TaxPayable` con
- * `taxPaymentBatchId`) y acumula M pagos. Target = Σ `taxAmountBs` de sus
- * obligaciones. Al quedar pagado, sus obligaciones pasan a `paid`.
+ * LOTE de pago al SENIAT. Creado por el usuario; agrupa N obligaciones de
+ * retención (`obligations` → `TaxPayable` con `taxPaymentBatchId`) que pueden
+ * ser de VARIOS proveedores (el proveedor vive en cada obligación, no en el
+ * lote) y acumula M pagos. Target = Σ `taxAmountBs` de sus obligaciones. Al
+ * quedar pagado, sus obligaciones pasan a `paid`.
  */
 @Entity({ name: 'tax_payment_batches' })
 @Index('idx_tpb_status', ['status'])
-@Index('idx_tpb_doctor', ['doctorId'])
-@Index('idx_tpb_careCenter', ['careCenterId'])
 export class TaxPaymentBatch {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'varchar', length: 32, unique: true })
   taxBatchNumber: string;
-
-  @Column({ type: 'varchar', length: 16 })
-  recipientType: TaxPaymentBatchRecipientType;
-
-  @Column({ type: 'uuid', nullable: true })
-  doctorId?: string | null;
-
-  @ManyToOne(() => Doctor, { onDelete: 'RESTRICT', nullable: true })
-  @JoinColumn({ name: 'doctorId' })
-  doctor?: Doctor | null;
-
-  @Column({ type: 'uuid', nullable: true })
-  careCenterId?: string | null;
-
-  @ManyToOne(() => CareCenter, { onDelete: 'RESTRICT', nullable: true })
-  @JoinColumn({ name: 'careCenterId' })
-  careCenter?: CareCenter | null;
 
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
   status: TaxPaymentBatchStatus;

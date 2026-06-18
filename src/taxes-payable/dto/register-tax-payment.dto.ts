@@ -60,19 +60,12 @@ export class TaxPayablePaymentDto {
   amountValue: number;
 }
 
-/** Crear un lote SENIAT para UN proveedor, con sus obligaciones de retención. */
+/**
+ * Crear un lote SENIAT con sus obligaciones de retención. Un lote puede agrupar
+ * retenciones de varios proveedores (el SENIAT cobra al agente de retención, no
+ * al proveedor).
+ */
 export class CreateTaxBatchDto {
-  @IsIn(['doctor', 'care_center'])
-  recipientType: 'doctor' | 'care_center';
-
-  @IsOptional()
-  @IsUUID()
-  doctorId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  careCenterId?: string;
-
   @IsArray()
   @ArrayMinSize(1, { message: 'Agregá al menos una retención' })
   @ArrayMaxSize(200)
@@ -81,7 +74,7 @@ export class CreateTaxBatchDto {
   taxPayableIds: string[];
 }
 
-/** Agregar/quitar obligaciones de un lote existente (mismo proveedor). */
+/** Agregar/quitar obligaciones de un lote existente. */
 export class MutateTaxBatchObligationsDto {
   @IsArray()
   @ArrayMinSize(1)
