@@ -739,7 +739,7 @@ export class AccountsReceivableService {
       out.accountNumber = account.accountNumber ?? null;
     } else if (p.paymentAccountId) {
       throw new BadRequestException(
-        `Cobros de tipo ${p.type} no pueden referenciar una cuenta de pago`,
+        `Cobros de tipo ${p.type} no pueden referenciar una cuenta bancaria`,
       );
     }
 

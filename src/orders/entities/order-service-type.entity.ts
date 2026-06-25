@@ -58,11 +58,21 @@ export class OrderServiceType {
   internalOrder: OrderInternalOrder;
 
   /**
-   * Cantidad de este ST en la orden (ej. sesiones). Siempre ≥ 1; sólo > 1 si el
-   * ST tiene `allowsQuantity`. El precio de la orden multiplica unidad × cantidad.
+   * Cantidad de este ST en la orden (ej. sesiones). Siempre ≥ 1 (default 1).
+   * Todo ST admite cantidad. El precio de la orden multiplica unidad × cantidad.
    */
   @Column({ type: 'integer', default: 1 })
   quantity: number;
+
+  /**
+   * Nombre personalizado de este ST dentro de la orden (override de
+   * `serviceType.name`). Lo fija el usuario en el Paso 1 — útil cuando el baremo
+   * da un nombre genérico y la orden necesita uno específico (ej. "RX tórax
+   * frontal"). Null = usar `serviceType.name`. Se muestra en Paso 1/2/4 y en el
+   * detalle de la orden; el resto del sistema usa el nombre original.
+   */
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  customName?: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   doctorId?: string | null;

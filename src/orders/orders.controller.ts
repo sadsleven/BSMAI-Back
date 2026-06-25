@@ -37,6 +37,15 @@ export class OrdersController {
     return this.service.findAll(query, user);
   }
 
+  /** Nombres personalizados ya usados para un ST (autocompletar Paso 1). */
+  @RequirePermissions(PERMISSIONS.ORDERS.LIST)
+  @Get('service-types/:serviceTypeId/custom-names')
+  customNames(
+    @Param('serviceTypeId', new ParseUUIDPipe()) serviceTypeId: string,
+  ) {
+    return this.service.customNameSuggestions(serviceTypeId);
+  }
+
   @RequirePermissions(PERMISSIONS.ORDERS.LIST)
   @Get(':id')
   findOne(

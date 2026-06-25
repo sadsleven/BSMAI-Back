@@ -2,8 +2,10 @@ import {
   IsIn,
   IsInt,
   IsOptional,
+  IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -27,14 +29,23 @@ export class OrderServiceTypeRowDto {
   careCenterId?: string;
 
   /**
-   * Cantidad del ST (ej. sesiones). Sólo aplica si el ST tiene `allowsQuantity`;
-   * para el resto el service la fuerza a 1. Default 1 si no se envía.
+   * Cantidad del ST (ej. sesiones). Todo ST admite cantidad. Default 1 si no
+   * se envía; mínimo 1.
    */
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100000)
   quantity?: number;
+
+  /**
+   * Nombre personalizado para este ST en la orden (override de serviceType.name).
+   * Aparece en Paso 1/2/4 y en el detalle. Vacío = usar el nombre original.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  customName?: string;
 
   @IsOptional()
   @IsUUID('4', { each: true })

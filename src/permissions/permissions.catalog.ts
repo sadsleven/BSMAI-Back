@@ -28,7 +28,7 @@ const TAXES_PAYABLE_GROUP = 'Retenciones por pagar';
 const REPORTS_GROUP = 'Reportes';
 const APP_CONFIG_GROUP = 'Configuración';
 const FILES_GROUP = 'Archivos';
-const PAYMENT_ACCOUNTS_GROUP = 'Cuentas de pago';
+const PAYMENT_ACCOUNTS_GROUP = 'Cuentas bancarias';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -302,7 +302,7 @@ const taxUnitsPermissions = buildResourcePermissions(
 const paymentAccountsPermissions = buildResourcePermissions(
   'payment-accounts',
   PAYMENT_ACCOUNTS_GROUP,
-  standardActionLabels('cuenta de pago', 'cuentas de pago'),
+  standardActionLabels('cuenta bancaria', 'cuentas bancarias'),
 );
 
 const ordersPermissions: PermissionDefinition[] = [
@@ -576,7 +576,7 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
   },
   {
     key: 'payment-account-inflows',
-    label: 'Ver dinero recibido por cuenta de pago',
+    label: 'Ver dinero recibido por cuenta bancaria',
     description:
       'Permite acceder al reporte de dinero recibido en las cuentas propias (órdenes y cuentas por cobrar)',
   },

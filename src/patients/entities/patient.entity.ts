@@ -52,8 +52,8 @@ export class Patient {
   @Column({ type: 'date', nullable: true })
   birthDate?: string | null;
 
-  @Column({ type: 'varchar', length: 500 })
-  address: string;
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  address?: string | null;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

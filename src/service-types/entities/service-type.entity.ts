@@ -30,13 +30,6 @@ export class ServiceType {
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   particularPriceUsd: string | null;
 
-  /**
-   * Si true, este ST puede facturarse por cantidad dentro de una orden
-   * (ej. sesiones de fisioterapia). Habilita el campo `quantity` por fila.
-   */
-  @Column({ type: 'boolean', default: false })
-  allowsQuantity: boolean;
-
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

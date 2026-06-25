@@ -74,7 +74,6 @@ export class ServiceTypesService {
       isActive: dto.isActive ?? true,
       particularPriceUsd:
         dto.particularPriceUsd != null ? dto.particularPriceUsd.toFixed(2) : null,
-      allowsQuantity: dto.allowsQuantity ?? false,
     });
     return this.repo.save(st);
   }
@@ -91,7 +90,6 @@ export class ServiceTypesService {
     if (dto.particularPriceUsd !== undefined)
       st.particularPriceUsd =
         dto.particularPriceUsd != null ? dto.particularPriceUsd.toFixed(2) : null;
-    if (dto.allowsQuantity !== undefined) st.allowsQuantity = dto.allowsQuantity;
     return this.repo.save(st);
   }
 

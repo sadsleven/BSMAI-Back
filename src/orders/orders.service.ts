@@ -132,7 +132,7 @@ export class OrdersService implements OnModuleInit {
     const ids = Array.from(new Set(rows.map((r) => r.serviceTypeId)));
     const sts = await this.serviceTypesRepo.find({
       where: { id: In(ids) },
-      select: ['id', 'particularPriceUsd', 'allowsQuantity'],
+      select: ['id', 'particularPriceUsd'],
     });
     const byId = new Map(sts.map((s) => [s.id, s]));
     let sum = 0;
@@ -141,7 +141,8 @@ export class OrdersService implements OnModuleInit {
       if (!st) continue;
       const n = Number(st.particularPriceUsd);
       if (!Number.isFinite(n)) continue;
-      const qty = st.allowsQuantity ? Math.max(1, Math.trunc(r.quantity ?? 1)) : 1;
+      // Todo ST tiene cantidad (≥1, default 1).
+      const qty = Math.max(1, Math.trunc(r.quantity ?? 1));
       sum += n * qty;
     }
     return +sum.toFixed(2);
@@ -405,6 +406,28 @@ export class OrdersService implements OnModuleInit {
     if (!order) throw new NotFoundException('Orden no encontrada');
     await this.assertOrderVisibility(order, user);
     return order;
+  }
+
+  /**
+   * Nombres personalizados ya usados para un Tipo de Servicio (para reutilizar
+   * en el Paso 1 — autocompletar). Distintos, no vacíos, más recientes primero.
+   */
+  async customNameSuggestions(serviceTypeId: string): Promise<string[]> {
+    const rows = await this.repo.manager
+      .getRepository(OrderServiceType)
+      .createQueryBuilder('ost')
+      .innerJoin('ost.order', 'o')
+      .select('ost.customName', 'customName')
+      .addSelect('MAX(ost.updatedAt)', 'last')
+      .where('ost.serviceTypeId = :id', { id: serviceTypeId })
+      .andWhere('ost.customName IS NOT NULL')
+      .andWhere("TRIM(ost.customName) <> ''")
+      .andWhere('o.deletedAt IS NULL')
+      .groupBy('ost.customName')
+      .orderBy('last', 'DESC')
+      .limit(50)
+      .getRawMany<{ customName: string }>();
+    return rows.map((r) => r.customName).filter((n): n is string => !!n);
   }
 
   /**
@@ -697,7 +720,7 @@ export class OrdersService implements OnModuleInit {
       out.accountNumber = account.accountNumber ?? null;
     } else if (p.paymentAccountId) {
       throw new BadRequestException(
-        `Pagos de tipo ${p.type} no pueden referenciar una cuenta de pago`,
+        `Pagos de tipo ${p.type} no pueden referenciar una cuenta bancaria`,
       );
     }
 
@@ -992,13 +1015,7 @@ export class OrdersService implements OnModuleInit {
     iioByKey: Map<ProviderKey, { id: string; internalNumber: string }>,
   ): Promise<void> {
     if (!rows.length) return;
-    // Cantidad sólo para STs con allowsQuantity; el resto se fuerza a 1.
-    const ids = Array.from(new Set(rows.map((r) => r.serviceTypeId)));
-    const sts = await mgr.getRepository(ServiceType).find({
-      where: { id: In(ids) },
-      select: ['id', 'allowsQuantity'],
-    });
-    const allowsQtyById = new Map(sts.map((s) => [s.id, s.allowsQuantity]));
+    // Todo ST tiene cantidad (≥1, default 1).
     const values = rows.map((r) => {
       const providerId = r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
       const iio = iioByKey.get(`${r.providerType}:${providerId}` as ProviderKey);
@@ -1014,9 +1031,9 @@ export class OrdersService implements OnModuleInit {
         doctorId: r.providerType === 'doctor' ? r.doctorId ?? null : null,
         careCenterId:
           r.providerType === 'care_center' ? r.careCenterId ?? null : null,
-        quantity: allowsQtyById.get(r.serviceTypeId)
-          ? Math.max(1, Math.trunc(r.quantity ?? 1))
-          : 1,
+        quantity: Math.max(1, Math.trunc(r.quantity ?? 1)),
+        customName:
+          r.customName && r.customName.trim() ? r.customName.trim() : null,
         internalOrderId: iio.id,
       };
     });
@@ -1580,6 +1597,7 @@ export class OrdersService implements OnModuleInit {
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
       quantity: ost.quantity ?? 1,
+      customName: ost.customName ?? undefined,
     }));
 
     const merged: CreateOrderDto = {
