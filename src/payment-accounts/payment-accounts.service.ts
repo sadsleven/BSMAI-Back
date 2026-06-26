@@ -82,7 +82,7 @@ export class PaymentAccountsService {
 
   async findOne(id: string, withDeleted = false): Promise<PaymentAccount> {
     const acc = await this.repo.findOne({ where: { id }, withDeleted });
-    if (!acc) throw new NotFoundException('Cuenta de pago no encontrada');
+    if (!acc) throw new NotFoundException('Cuenta bancaria no encontrada');
     return acc;
   }
 
@@ -91,7 +91,7 @@ export class PaymentAccountsService {
     if (!name) throw new BadRequestException('El nombre es obligatorio');
 
     const exists = await this.repo.findOne({ where: { name }, withDeleted: false });
-    if (exists) throw new ConflictException('Ya existe una cuenta de pago con ese nombre');
+    if (exists) throw new ConflictException('Ya existe una cuenta bancaria con ese nombre');
 
     await this.assertBankExists(dto.type, dto.bankCode);
 
@@ -104,7 +104,7 @@ export class PaymentAccountsService {
 
     if (dto.type && dto.type !== acc.type) {
       throw new BadRequestException(
-        'No se puede cambiar el tipo de una cuenta de pago. Crea una nueva y deshabilita la anterior.',
+        'No se puede cambiar el tipo de una cuenta bancaria. Crea una nueva y deshabilita la anterior.',
       );
     }
 
@@ -112,7 +112,7 @@ export class PaymentAccountsService {
       const name = dto.name.trim();
       const dupe = await this.repo.findOne({ where: { name } });
       if (dupe && dupe.id !== id) {
-        throw new ConflictException('Ya existe una cuenta de pago con ese nombre');
+        throw new ConflictException('Ya existe una cuenta bancaria con ese nombre');
       }
       acc.name = name;
     }
@@ -169,7 +169,7 @@ export class PaymentAccountsService {
 
   async restore(id: string): Promise<PaymentAccount> {
     const acc = await this.repo.findOne({ where: { id }, withDeleted: true });
-    if (!acc) throw new NotFoundException('Cuenta de pago no encontrada');
+    if (!acc) throw new NotFoundException('Cuenta bancaria no encontrada');
     if (!acc.deletedAt) return acc;
     await this.repo.restore(id);
     return this.findOne(id);
@@ -187,17 +187,17 @@ export class PaymentAccountsService {
     const acc = await this.repo.findOne({ where: { id: paymentAccountId } });
     if (!acc) {
       throw new BadRequestException(
-        `Cuenta de pago ${paymentAccountId} no encontrada`,
+        `Cuenta bancaria ${paymentAccountId} no encontrada`,
       );
     }
     if (acc.deletedAt) {
       throw new BadRequestException(
-        `La cuenta de pago "${acc.name}" está en papelera y no puede usarse`,
+        `La cuenta bancaria "${acc.name}" está en papelera y no puede usarse`,
       );
     }
     if (!acc.isActive) {
       throw new BadRequestException(
-        `La cuenta de pago "${acc.name}" está deshabilitada`,
+        `La cuenta bancaria "${acc.name}" está deshabilitada`,
       );
     }
     if (acc.type !== paymentType) {

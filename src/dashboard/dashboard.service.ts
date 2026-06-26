@@ -68,8 +68,9 @@ export class DashboardService {
   }
 
   /**
-   * Ganancia neta USD del mes (= Σ `priceAmount − doctorAmount` para órdenes
-   * finalizadas del mes). Todo en USD nativo.
+   * Total facturado USD del mes = Σ `priceAmount` de las órdenes finalizadas
+   * del mes (monto bruto facturado, en USD nativo). NO descuenta la liquidación
+   * al proveedor (eso es ganancia, no facturación).
    */
   async billedMonthUsd(
     user: AuthenticatedUser,
@@ -82,9 +83,11 @@ export class DashboardService {
       .andWhere('o.orderDate <= :to', { to })
       .andWhere('o.deletedAt IS NULL');
     await this.applyBranchScope(qb, user);
-    const orders = await qb.getMany();
-    const total = orders.reduce((sum, o) => sum + netProfitUsd(o), 0);
-    return { amount: +total.toFixed(2), currency: 'USD' };
+    const result = await qb
+      .select('COALESCE(SUM(o."priceAmount"), 0)', 'total')
+      .getRawOne<{ total: string }>();
+    const amount = +Number(result?.total ?? 0).toFixed(2);
+    return { amount, currency: 'USD' };
   }
 
   /** Suma USD cobrado este mes (Σ AR payments.amountInUsd con paymentDate en mes). */
@@ -280,10 +283,3 @@ function monthRangeIso(): { from: string; to: string } {
   };
 }
 
-function netProfitUsd(o: Order): number {
-  const price = Number(o.priceAmount);
-  if (!Number.isFinite(price) || price <= 0) return 0;
-  const docAmount = Number(o.doctorAmount ?? 0);
-  if (!Number.isFinite(docAmount) || docAmount <= 0) return price;
-  return price - docAmount;
-}

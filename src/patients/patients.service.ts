@@ -241,7 +241,7 @@ export class PatientsService {
       personType: dto.personType,
       email,
       birthDate: dto.birthDate || null,
-      address: dto.address.trim(),
+      address: dto.address?.trim() || null,
       isActive: dto.isActive ?? true,
     };
 
@@ -333,7 +333,7 @@ export class PatientsService {
     }
 
     if (dto.birthDate !== undefined) patient.birthDate = dto.birthDate || null;
-    if (dto.address !== undefined) patient.address = dto.address.trim();
+    if (dto.address !== undefined) patient.address = dto.address?.trim() || null;
     if (dto.isActive !== undefined) patient.isActive = dto.isActive;
 
     if (dto.phones) {

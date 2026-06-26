@@ -7961,5 +7961,2065 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
         "priceUsd": 18.88
       }
     ]
+  },
+  {
+    "name": "Seguros Universitas",
+    "rif": null,
+    "services": [
+      {
+        "name": "17 OH PROGESTERONA",
+        "priceUsd": 16
+      },
+      {
+        "name": "ACIDO URICO EN ORINA",
+        "priceUsd": 6
+      },
+      {
+        "name": "ACIDO URICO EN ORINA DE 24 HORAS",
+        "priceUsd": 6
+      },
+      {
+        "name": "ACIDO URICO EN SANGRE",
+        "priceUsd": 6
+      },
+      {
+        "name": "ALBUMINA",
+        "priceUsd": 10
+      },
+      {
+        "name": "ALFAFETOPROTEINA (AFP)",
+        "priceUsd": 16
+      },
+      {
+        "name": "AMILASA",
+        "priceUsd": 9
+      },
+      {
+        "name": "ANDROSTENEDIONA",
+        "priceUsd": 20
+      },
+      {
+        "name": "ANTI - ANTIMICROSOMIALES",
+        "priceUsd": 11
+      },
+      {
+        "name": "ANTI PEPTIDO CICLICO CITRULINADO",
+        "priceUsd": 16
+      },
+      {
+        "name": "ANTI-DNA",
+        "priceUsd": 16
+      },
+      {
+        "name": "ANTICUERPOS ANTI-CARDIOLIPINA IGG",
+        "priceUsd": 22
+      },
+      {
+        "name": "ANTICUERPOS ANTI-CARDIOLIPINA IGM",
+        "priceUsd": 22
+      },
+      {
+        "name": "ANTICUERPOS ANTI-NUCLEARES (ANA)",
+        "priceUsd": 20
+      },
+      {
+        "name": "ANTICUERPOS ANTITIROGLOBULINA",
+        "priceUsd": 16
+      },
+      {
+        "name": "ANTIGENO CARCINOEMBRIONARIO (CEA)",
+        "priceUsd": 13
+      },
+      {
+        "name": "ANTIGENO DE SUPERFICIE AgHBs",
+        "priceUsd": 25
+      },
+      {
+        "name": "ANTIGENO PROSTATICO (PSA LIBRE)",
+        "priceUsd": 19
+      },
+      {
+        "name": "ANTIGENO PROSTATICO (PSA TOTAL)",
+        "priceUsd": 18
+      },
+      {
+        "name": "APLICACIÓN DE TRATAMIENTO",
+        "priceUsd": 20
+      },
+      {
+        "name": "BILIRRUBINA TOTAL Y FRACCIONADA",
+        "priceUsd": 6
+      },
+      {
+        "name": "C3",
+        "priceUsd": 16
+      },
+      {
+        "name": "C4",
+        "priceUsd": 16
+      },
+      {
+        "name": "CA 15-3",
+        "priceUsd": 16
+      },
+      {
+        "name": "CA 19-9",
+        "priceUsd": 16
+      },
+      {
+        "name": "CA-125",
+        "priceUsd": 16
+      },
+      {
+        "name": "CALCIO EN ORINA DE 24 HORAS",
+        "priceUsd": 6
+      },
+      {
+        "name": "CALCIO EN ORINA PARCIAL",
+        "priceUsd": 6
+      },
+      {
+        "name": "CALCIO EN SANGRE",
+        "priceUsd": 6
+      },
+      {
+        "name": "CAP. FIJACION DE HIERRO",
+        "priceUsd": 11
+      },
+      {
+        "name": "CH50 COMPLEMENTO HEMOLITICO",
+        "priceUsd": 19
+      },
+      {
+        "name": "CHAGAS",
+        "priceUsd": 16
+      },
+      {
+        "name": "CIRUGIA DE MANOS",
+        "priceUsd": 30
+      },
+      {
+        "name": "CITOLOGÍA",
+        "priceUsd": 35
+      },
+      {
+        "name": "CITOMEGALOVIRUS IGG",
+        "priceUsd": 14
+      },
+      {
+        "name": "CITOMEGALOVIRUS IGM",
+        "priceUsd": 14
+      },
+      {
+        "name": "CK-MB",
+        "priceUsd": 11
+      },
+      {
+        "name": "CLORO EN ORINA PARCIAL",
+        "priceUsd": 5.6
+      },
+      {
+        "name": "CLORO EN SANGRE",
+        "priceUsd": 5.6
+      },
+      {
+        "name": "COCAINA",
+        "priceUsd": 4
+      },
+      {
+        "name": "COLESTEROL",
+        "priceUsd": 6
+      },
+      {
+        "name": "COLESTEROL HDL",
+        "priceUsd": 6
+      },
+      {
+        "name": "COLESTEROL VLDL",
+        "priceUsd": 6
+      },
+      {
+        "name": "COLPOSCOPIA",
+        "priceUsd": 35
+      },
+      {
+        "name": "CONSULTA DE GINECOLOGIA + CITOLOGIA",
+        "priceUsd": 49
+      },
+      {
+        "name": "CONSULTA DE GINECOLOGIA + CITOLOGIA+ECO TRANSVAGINAL",
+        "priceUsd": 75
+      },
+      {
+        "name": "CONSULTA: CARDIOLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: CIRUGIA GENERAL",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: DERMATOLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: FISIATRIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: GASTROENTEROLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: MEDICINA FAMILIAR",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: MEDICINA GENERAL",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: MEDICINA INTERNA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: NEFROLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: NEUMONOLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: NEUROLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: OTORRINOLARINGOLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: PEDIATRIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: TRAUMATOLOGIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONSULTA: UROLOGÍA",
+        "priceUsd": 30
+      },
+      {
+        "name": "CONTROLES MEDICOS POR TRATAMIENTO AMBULATORIO",
+        "priceUsd": 30
+      },
+      {
+        "name": "COPROCULTIVO",
+        "priceUsd": 22
+      },
+      {
+        "name": "CORTISOL (AM)",
+        "priceUsd": 16
+      },
+      {
+        "name": "CORTISOL (PM)",
+        "priceUsd": 16
+      },
+      {
+        "name": "CREATININA EN ORINA",
+        "priceUsd": 6
+      },
+      {
+        "name": "CREATININA EN SANGRE",
+        "priceUsd": 6
+      },
+      {
+        "name": "CURA DE HERIDAS MEDICINA FAMILIAR",
+        "priceUsd": 100
+      },
+      {
+        "name": "CURA DE HERIDAS MEDICINA GENERAL",
+        "priceUsd": 100
+      },
+      {
+        "name": "CURA DE HERIDAS MEDICINA INTERNA",
+        "priceUsd": 100
+      },
+      {
+        "name": "CURA DE HERIDAS PEDIATRIA",
+        "priceUsd": 100
+      },
+      {
+        "name": "CURAS POST-OPERATORIAS",
+        "priceUsd": 130
+      },
+      {
+        "name": "DENGUE BLOT IGG",
+        "priceUsd": 12
+      },
+      {
+        "name": "DENGUE BLOT IGM",
+        "priceUsd": 9
+      },
+      {
+        "name": "DEPURACION DE CREATININA",
+        "priceUsd": 8
+      },
+      {
+        "name": "DEPURACION DE UREA",
+        "priceUsd": 8
+      },
+      {
+        "name": "DIMERO D",
+        "priceUsd": 20
+      },
+      {
+        "name": "DRENAJE DE ABSCESOS MEDICINA FAMILIAR",
+        "priceUsd": 180
+      },
+      {
+        "name": "DRENAJE DE ABSCESOS MEDICINA GENERAL",
+        "priceUsd": 180
+      },
+      {
+        "name": "DRENAJE DE ABSCESOS MEDICINA INTERNA",
+        "priceUsd": 180
+      },
+      {
+        "name": "ECO ABDOMINAL",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO ABDOMINO-PÉLVICO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO DE CUELLO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO GINECOLOGICO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO HEPATICO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO MAMARIO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO OSTEO-MUSCULAR",
+        "priceUsd": 30
+      },
+      {
+        "name": "ECO PARTES BLANDAS",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO PÉLVICO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO PROSTATICO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO RENAL",
+        "priceUsd": 30
+      },
+      {
+        "name": "ECO TESTICULAR",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO TIROIDEO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECO TRANSVAGINAL",
+        "priceUsd": 25
+      },
+      {
+        "name": "ECOCARDIOGRAMA",
+        "priceUsd": 85
+      },
+      {
+        "name": "ECOSONOGRAMA OBSTÉTRICO",
+        "priceUsd": 25
+      },
+      {
+        "name": "ELECTROCARDIOGRAMA",
+        "priceUsd": 20
+      },
+      {
+        "name": "ELECTROCARDIOGRAMA CARDIOLOGIA",
+        "priceUsd": 20
+      },
+      {
+        "name": "ELECTROENCEFALOGRAMA",
+        "priceUsd": 70
+      },
+      {
+        "name": "ELECTROLITOS EN ORINA PARCIAL",
+        "priceUsd": 13
+      },
+      {
+        "name": "ELECTROLITOS EN SUERO",
+        "priceUsd": 13
+      },
+      {
+        "name": "ENDOSCOPIA DIGESTIVA INFERIOR - COLONOSCOPIA",
+        "priceUsd": 420
+      },
+      {
+        "name": "ENDOSCOPIA DIGESTIVA SUPERIOR - GASTROSCOPIA",
+        "priceUsd": 390
+      },
+      {
+        "name": "EPSTEIN BARR VIRUS IGG",
+        "priceUsd": 16
+      },
+      {
+        "name": "EPSTEIN BARR VIRUS IGM",
+        "priceUsd": 16
+      },
+      {
+        "name": "ESPIROMETRIA",
+        "priceUsd": 49
+      },
+      {
+        "name": "ESTRADIOL",
+        "priceUsd": 11
+      },
+      {
+        "name": "EVALUACION CARDIOLOGICA PREOPERATORIA",
+        "priceUsd": 45
+      },
+      {
+        "name": "EVALUACION PREOPERATORIA",
+        "priceUsd": 40
+      },
+      {
+        "name": "FERRITINA",
+        "priceUsd": 12
+      },
+      {
+        "name": "FIBRINÓGENO",
+        "priceUsd": 8
+      },
+      {
+        "name": "FOSFATASA ALCALINA",
+        "priceUsd": 6
+      },
+      {
+        "name": "FOSFORO EN ORINA 24 HORAS",
+        "priceUsd": 6
+      },
+      {
+        "name": "FOSFORO EN ORINA PARCIAL",
+        "priceUsd": 6
+      },
+      {
+        "name": "FOSFORO EN SANGRE",
+        "priceUsd": 8
+      },
+      {
+        "name": "FSH",
+        "priceUsd": 16
+      },
+      {
+        "name": "GINE-OBSTETRICIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "GINE-OBSTETRICIA - PRE NATAL",
+        "priceUsd": 30
+      },
+      {
+        "name": "GLICEMIA BASAL",
+        "priceUsd": 6
+      },
+      {
+        "name": "GLICEMIA POST PANDRIAL",
+        "priceUsd": 6
+      },
+      {
+        "name": "GRUPO SANGUINEO Y FACTOR RH",
+        "priceUsd": 8
+      },
+      {
+        "name": "HCG CUALITATIVA",
+        "priceUsd": 9
+      },
+      {
+        "name": "HCG CUANTITATIVA",
+        "priceUsd": 19
+      },
+      {
+        "name": "HECES",
+        "priceUsd": 4
+      },
+      {
+        "name": "HELICOBACTER PYLORI IGG",
+        "priceUsd": 16
+      },
+      {
+        "name": "HELICOBACTER PYLORI IGM",
+        "priceUsd": 16
+      },
+      {
+        "name": "HEMATOLOGÍA COMPLETA",
+        "priceUsd": 6
+      },
+      {
+        "name": "HEMOGLOBINA GLICOSILADA",
+        "priceUsd": 18
+      },
+      {
+        "name": "HEPATITIS A IGG",
+        "priceUsd": 16
+      },
+      {
+        "name": "HEPATITIS A IGM",
+        "priceUsd": 16
+      },
+      {
+        "name": "HEPATITIS B ANTICORE IGG",
+        "priceUsd": 16
+      },
+      {
+        "name": "HEPATITIS B ANTICORE IGM",
+        "priceUsd": 16
+      },
+      {
+        "name": "HEPATITIS B ANTIGENO SUPERFICIE",
+        "priceUsd": 16
+      },
+      {
+        "name": "HEPATITIS C",
+        "priceUsd": 12
+      },
+      {
+        "name": "HERPES SIMPLEX I IGG",
+        "priceUsd": 18
+      },
+      {
+        "name": "HERPES SIMPLEX I IGM",
+        "priceUsd": 18
+      },
+      {
+        "name": "HERPES SIMPLEX II IGG",
+        "priceUsd": 18
+      },
+      {
+        "name": "HERPES SIMPLEX II IGM",
+        "priceUsd": 18
+      },
+      {
+        "name": "HIERRO SÉRICO",
+        "priceUsd": 19
+      },
+      {
+        "name": "HIV (ELISA) I/II",
+        "priceUsd": 16
+      },
+      {
+        "name": "HOLTER",
+        "priceUsd": 60
+      },
+      {
+        "name": "INMUNOGLOBULINA A",
+        "priceUsd": 12
+      },
+      {
+        "name": "INMUNOGLOBULINA E",
+        "priceUsd": 12
+      },
+      {
+        "name": "INMUNOGLOBULINA G",
+        "priceUsd": 12
+      },
+      {
+        "name": "INMUNOGLOBULINA M",
+        "priceUsd": 12
+      },
+      {
+        "name": "INSULINA BASAL",
+        "priceUsd": 12
+      },
+      {
+        "name": "INSULINA POST PANDRIAL",
+        "priceUsd": 19
+      },
+      {
+        "name": "LDH (DESHIDROGENASA LACTICA)",
+        "priceUsd": 8
+      },
+      {
+        "name": "LH",
+        "priceUsd": 12
+      },
+      {
+        "name": "LIBERACIÓN DE ADHERENCIA DE CICATRICES CON MASAJE DE CYRIAX",
+        "priceUsd": 21
+      },
+      {
+        "name": "LIMPIEZA INSTRUMENTAL DE OIDO",
+        "priceUsd": 50
+      },
+      {
+        "name": "LIPASA",
+        "priceUsd": 15
+      },
+      {
+        "name": "MAGNESIO EN SANGRE",
+        "priceUsd": 8
+      },
+      {
+        "name": "MANIPULACIONES VERTEBRALES POR SESION",
+        "priceUsd": 44
+      },
+      {
+        "name": "MAPA",
+        "priceUsd": 60
+      },
+      {
+        "name": "MARIHUANA",
+        "priceUsd": 8
+      },
+      {
+        "name": "MASAJE DE LIBERACIÓN MIOSFASCIAL",
+        "priceUsd": 21
+      },
+      {
+        "name": "MICROALBUMINURIA",
+        "priceUsd": 16
+      },
+      {
+        "name": "NEBULIZACIONES PEDIATRIA",
+        "priceUsd": 20
+      },
+      {
+        "name": "NS1 (ANTIGENO DEL DENGUE)",
+        "priceUsd": 20
+      },
+      {
+        "name": "ORINA",
+        "priceUsd": 5
+      },
+      {
+        "name": "PERFIL 20",
+        "priceUsd": 20
+      },
+      {
+        "name": "PERFIL HEPÁTICO",
+        "priceUsd": 19
+      },
+      {
+        "name": "PERFIL HORMONAL FEMENINO",
+        "priceUsd": 40
+      },
+      {
+        "name": "PERFIL LIPIDICO",
+        "priceUsd": 14
+      },
+      {
+        "name": "PERFIL PEDIATRICO",
+        "priceUsd": 16.32
+      },
+      {
+        "name": "PERFIL PRE-OPERATORIO",
+        "priceUsd": 25
+      },
+      {
+        "name": "PERFIL REUMATICO",
+        "priceUsd": 24.48
+      },
+      {
+        "name": "PERFIL TIROIDEO (T3 - T4- TSH)",
+        "priceUsd": 33
+      },
+      {
+        "name": "PROGESTERONA",
+        "priceUsd": 16
+      },
+      {
+        "name": "PROLACTINA",
+        "priceUsd": 12
+      },
+      {
+        "name": "PROTEINAS C REACTIVAS (PCR)",
+        "priceUsd": 12
+      },
+      {
+        "name": "PROTEINAS TOTALES Y FRACCIONADAS",
+        "priceUsd": 8
+      },
+      {
+        "name": "PROTENURIA EN ORINA DE 24 HORAS",
+        "priceUsd": 11
+      },
+      {
+        "name": "PRUEBA DE ESFUERZO",
+        "priceUsd": 70
+      },
+      {
+        "name": "PUNCION CON AGUJA FINA DE TIROIDES",
+        "priceUsd": 250
+      },
+      {
+        "name": "RA-TEST CUANTITATIVO",
+        "priceUsd": 13
+      },
+      {
+        "name": "RELACION CALCIO / CREATININA",
+        "priceUsd": 8
+      },
+      {
+        "name": "RETIRO DE PUNTOS DE CIRUGIA GENERAL",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX ABDOMEN AP",
+        "priceUsd": 15
+      },
+      {
+        "name": "RX ABDOMEN SIMPLE ACOSTADO Y DE PIE",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX ANTEBRAZO AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX ANTEPIE AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX ARTICULACION TEMPORO MANDIBULAR",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX BRAZO DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX BRAZO IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CADERA AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CADERA AP y OBLICUA",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CADERA AP-RANA",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CADERA AP. LAT. ROTACION",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX CALCANEO DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CALCANEO IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CARA AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CLAVICULA AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CLAVICULA AP TANG",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CODO DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CODO IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA CERVICAL AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA CERVICAL AP LAT DINAM",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COLUMNA CERVICAL AP LAT OB DINAMICA",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA CERVICAL AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COLUMNA CERVICAL DINAMICA",
+        "priceUsd": 15
+      },
+      {
+        "name": "RX COLUMNA DORSAL AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA DORSAL AP LAT DINAM",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COLUMNA DORSAL AP LAT OB DINAMICA",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA DORSAL AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COLUMNA DORSAL DINAMICA",
+        "priceUsd": 30
+      },
+      {
+        "name": "RX COLUMNA LUMBAR",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA LUMBAR AP LAT DINAM",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COLUMNA LUMBAR AP LAT OB DINAMICA",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA LUMBAR AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COLUMNA LUMBAR SACRA AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA LUMBOSACRA DINAMICA",
+        "priceUsd": 30
+      },
+      {
+        "name": "RX COLUMNA SACRA (AP Y LAT)",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA SACRO COXIS AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COLUMNA SACRO COXIS AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX COXIS AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX COXOFEMORALES",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CRANEO AP",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CRANEO AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX CUELLO AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX DE ADENOIDES",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX DE PELVIS CENTRADA EN PUBIS",
+        "priceUsd": 15
+      },
+      {
+        "name": "RX DEDO AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX EDAD OSEA",
+        "priceUsd": 15
+      },
+      {
+        "name": "RX FEMUR AP OBLIC",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX FEMUR DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX FEMUR IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX HOMBRO AP AXIAL",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX HOMBRO AP LAT AXIAL",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX HOMBRO AP LAT ROT INT.EXT",
+        "priceUsd": 35
+      },
+      {
+        "name": "RX HOMBRO DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX HOMBRO IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX HUESOS PROPIOS DE CARA",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX HUESOS PROPIOS NASALES",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX HUMERO AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX MANO AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX MANO DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX MANO DER AP OBLIC",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX MANO IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX MANO IZQ AP OBLIC",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX MEDICION MIEMBROS INFERIORES",
+        "priceUsd": 35
+      },
+      {
+        "name": "RX MUNECA DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX MUNECA IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX ORBITA",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX PELVIS AP",
+        "priceUsd": 15
+      },
+      {
+        "name": "RX PELVIS AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX PELVIS AP RANA",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX PIE AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX PIE DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX PIE IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX PIERNA AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX PIERNA DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX PIERNA IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX RINOFARINGE",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX RODILLA AP LAT AXIAL 30 60 90",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX RODILLA DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX RODILLA IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX ROTULA AXIAL 30 60 90",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX SACRO ILIACAS",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX SENOS PARANASALES",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX TIBIA DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TIBIA IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TOBILLO DER AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TOBILLO DER AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX TOBILLO DER AP OBLIC",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TOBILLO IZQ AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TOBILLO IZQ AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX TOBILLO IZQ AP OBLIC",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TORAX AP LAT",
+        "priceUsd": 20
+      },
+      {
+        "name": "RX TORAX OSEO AP LAT OBLIC",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX TORAX PA",
+        "priceUsd": 15
+      },
+      {
+        "name": "SANGRE OCULTA",
+        "priceUsd": 6
+      },
+      {
+        "name": "SESION DE FISIOTERAPIA",
+        "priceUsd": 22
+      },
+      {
+        "name": "SESIONES FISIOTERAPIA (5 SESIONES)",
+        "priceUsd": 110
+      },
+      {
+        "name": "T3 LIBRE",
+        "priceUsd": 14
+      },
+      {
+        "name": "T3 TOTAL",
+        "priceUsd": 14
+      },
+      {
+        "name": "T4 LIBRE",
+        "priceUsd": 14
+      },
+      {
+        "name": "T4 TOTAL",
+        "priceUsd": 14
+      },
+      {
+        "name": "TAC DE SENOS PARANASALES",
+        "priceUsd": 150
+      },
+      {
+        "name": "TERAPIA NEURAL POR SESION",
+        "priceUsd": 36
+      },
+      {
+        "name": "TETOSTERONA LIBRE",
+        "priceUsd": 16
+      },
+      {
+        "name": "TETOSTERONA TOTAL",
+        "priceUsd": 16
+      },
+      {
+        "name": "TIEMPO DE PROTOMBINA (PT)",
+        "priceUsd": 8
+      },
+      {
+        "name": "TIEMPO DE PROTOMBINA (PTT)",
+        "priceUsd": 8
+      },
+      {
+        "name": "TOXOPLASMA IGG",
+        "priceUsd": 12
+      },
+      {
+        "name": "TOXOPLASMA IGM",
+        "priceUsd": 12
+      },
+      {
+        "name": "TRANSAMINASA OXALACETICA (AST)",
+        "priceUsd": 6
+      },
+      {
+        "name": "TRANSAMINASA PIRUVICA (ALT)",
+        "priceUsd": 6
+      },
+      {
+        "name": "TRANSFERRINA",
+        "priceUsd": 16
+      },
+      {
+        "name": "TRIGLICERIDOS",
+        "priceUsd": 6
+      },
+      {
+        "name": "TROPONINA I",
+        "priceUsd": 18
+      },
+      {
+        "name": "TSH",
+        "priceUsd": 16
+      },
+      {
+        "name": "UREA",
+        "priceUsd": 6
+      },
+      {
+        "name": "UROCULTIVO",
+        "priceUsd": 20
+      },
+      {
+        "name": "VDRL CUALITATIVO",
+        "priceUsd": 8
+      },
+      {
+        "name": "VENDAJE NEUROMUSCULAR DE KINESIOTAPING POR REGIÓN ANATÓMICA",
+        "priceUsd": 21
+      },
+      {
+        "name": "VITAMINAS B12",
+        "priceUsd": 21
+      },
+      {
+        "name": "VSG",
+        "priceUsd": 6
+      }
+    ]
+  },
+  {
+    "name": "Seguros Pirámide",
+    "rif": null,
+    "services": [
+      {
+        "name": "ACIDO URICO EN ORINA (PARCIAL)",
+        "priceUsd": 5
+      },
+      {
+        "name": "ACIDO URICO EN SANGRE",
+        "priceUsd": 4
+      },
+      {
+        "name": "ALBUMINA",
+        "priceUsd": 6
+      },
+      {
+        "name": "ALFAFETOPROTEINAS (AFP)",
+        "priceUsd": 14
+      },
+      {
+        "name": "AMILASA",
+        "priceUsd": 8
+      },
+      {
+        "name": "AMILASA URINARIA",
+        "priceUsd": 7
+      },
+      {
+        "name": "ANDROSTENEDIONA",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI CHLAM TRACHOMATIS IGG",
+        "priceUsd": 11
+      },
+      {
+        "name": "ANTI HAV (HEPATITIS A) IGG",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI HAV (HEPATITIS A) IGM",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI HBC (ANTI CORE HEPATITIS B TOTAL)",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI HBC IGM (ANTI CORE HEPATITIS B)",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI HBE (ANTIGENO E HEPATITIS B)",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI HBS (ANTICUERPOS CONTRA EL AG DE SUPERFICIE HEPATITIS B)",
+        "priceUsd": 12
+      },
+      {
+        "name": "ANTI HBS (ANTIGENO DE SUPERFICIE HEPATITIS B)",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI HCV (HEPATITIS C)",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTI MYCOPLASMA PNEUMONIAE IGG",
+        "priceUsd": 8
+      },
+      {
+        "name": "ANTI MYCOPLASMA PNEUMONIAE IGM",
+        "priceUsd": 8
+      },
+      {
+        "name": "ANTICUERPOS ANTI DNA DOBLE CADENA (ELISA)",
+        "priceUsd": 15
+      },
+      {
+        "name": "ANTICUERPOS ANTI TOXOPLASMA IGG",
+        "priceUsd": 6
+      },
+      {
+        "name": "ANTICUERPOS ANTI TOXOPLASMA IGM",
+        "priceUsd": 6
+      },
+      {
+        "name": "ANTICUERPOS ANTITIROIDEOS MICROSOMALES",
+        "priceUsd": 12
+      },
+      {
+        "name": "ANTIGENO CARCIEMBRIONARIO (CEA)",
+        "priceUsd": 11
+      },
+      {
+        "name": "ANTIGENO PROSTATICO ESPECIFICO LIBRE (PSA)L",
+        "priceUsd": 10
+      },
+      {
+        "name": "ANTIGENO PROSTATICO ESPECIFICO TOTAL (PSA)T",
+        "priceUsd": 10
+      },
+      {
+        "name": "BETA 2 MICROGLOBULINA EN ORINA",
+        "priceUsd": 15
+      },
+      {
+        "name": "BETA 2 MICROGLOBULINA EN SANGRE",
+        "priceUsd": 12
+      },
+      {
+        "name": "BILIRRUBINA TOTAL",
+        "priceUsd": 5
+      },
+      {
+        "name": "BILIRRUBINA TOTAL Y FRACCIONADA",
+        "priceUsd": 5
+      },
+      {
+        "name": "BIOPSIA MAS COLPOSCOPIA VULVOSCOPIA",
+        "priceUsd": 120
+      },
+      {
+        "name": "BK (CULTIVO)",
+        "priceUsd": 8
+      },
+      {
+        "name": "CA 125",
+        "priceUsd": 12
+      },
+      {
+        "name": "CA 15 3",
+        "priceUsd": 12
+      },
+      {
+        "name": "CA 19 9",
+        "priceUsd": 12
+      },
+      {
+        "name": "CALCIO EN ORINA 24 HORAS",
+        "priceUsd": 6
+      },
+      {
+        "name": "CALCIO EN SANGRE",
+        "priceUsd": 6
+      },
+      {
+        "name": "CAPACIDAD DE FIJACION DE HIERRO",
+        "priceUsd": 8
+      },
+      {
+        "name": "CARDIOLIPINAS (FOSFOLIPIDOS) PRUEBA CUANTITATIVA ANTICUR TIPO IGA IGG E IGM",
+        "priceUsd": 12
+      },
+      {
+        "name": "CARDIOLOGIA CONSULTA 1A VEZ ELECTROCARDIOGRAMA",
+        "priceUsd": 50
+      },
+      {
+        "name": "CARDIOLOGIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "CITOLOGIA GINECOLOGICA",
+        "priceUsd": 25
+      },
+      {
+        "name": "CLORO EN ORINA",
+        "priceUsd": 5
+      },
+      {
+        "name": "COLESTEROL HDL",
+        "priceUsd": 4
+      },
+      {
+        "name": "COLESTEROL LDL",
+        "priceUsd": 4
+      },
+      {
+        "name": "COLESTEROL TOTAL",
+        "priceUsd": 4
+      },
+      {
+        "name": "COLESTEROL TOTAL Y FRACCIONADO HDL LDL VLDL Y TRIGLICERIDOS",
+        "priceUsd": 15
+      },
+      {
+        "name": "COLESTEROL VLDL",
+        "priceUsd": 4
+      },
+      {
+        "name": "COLPOSCOPIA (VAGINOSCOPIA)",
+        "priceUsd": 60
+      },
+      {
+        "name": "COMPLEMENTO SERICO (C 3)",
+        "priceUsd": 12
+      },
+      {
+        "name": "COMPLEMENTO SERICO (C 4)",
+        "priceUsd": 12
+      },
+      {
+        "name": "COMPLEMENTO SERICO (CH 50)",
+        "priceUsd": 15
+      },
+      {
+        "name": "CONTEO O RECUENTO MINUTADO GLOBULOS BLANCOS",
+        "priceUsd": 12
+      },
+      {
+        "name": "COPROCULTIVO",
+        "priceUsd": 20
+      },
+      {
+        "name": "CORTISOL EN SANGRE",
+        "priceUsd": 12
+      },
+      {
+        "name": "CREATININA EN ORINA PARCIAL",
+        "priceUsd": 4
+      },
+      {
+        "name": "CREATININA EN SANGRE",
+        "priceUsd": 4
+      },
+      {
+        "name": "CREATININA FOSFOQUINASA (CKMB)",
+        "priceUsd": 11
+      },
+      {
+        "name": "CREATININA FOSFOQUINASA (CPK)",
+        "priceUsd": 8
+      },
+      {
+        "name": "CURVA GLUCO INSULINA PRE Y POST CARGA (2 HORAS) 0 60 120 MIN",
+        "priceUsd": 18
+      },
+      {
+        "name": "DEHIDROEPIANDROSTERONA SULFATO DHEA SO4",
+        "priceUsd": 12
+      },
+      {
+        "name": "DENGUE IGG",
+        "priceUsd": 9
+      },
+      {
+        "name": "DENGUE IGM",
+        "priceUsd": 9
+      },
+      {
+        "name": "DEPURACION DE CREATININA",
+        "priceUsd": 5
+      },
+      {
+        "name": "DESHIDROGENASA LACTICA (LDH)",
+        "priceUsd": 4
+      },
+      {
+        "name": "DIMERO D",
+        "priceUsd": 15
+      },
+      {
+        "name": "ECOCARDIOGRAMA",
+        "priceUsd": 80
+      },
+      {
+        "name": "ECOGRAFIA CEREBRAL",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA DE MAMA",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA DOPPLER CUALQUIER ORGANO O ESTRUCTURA",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA MUSCULO ESQUELETICO O ARTICULAR",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA OBSTETRICA",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA OCULAR",
+        "priceUsd": 40
+      },
+      {
+        "name": "ECOGRAFIA PELVICA GINECOLOGICA",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA PROSTATA SIMPLE / TRANSVESICAL /TRANSRECTAL",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA SIMPLE CUALQUIER ORGANO O ESTRUCTURA",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA TEJIDOS BLANDOS",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA TESTICULAR",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA TIROIDES",
+        "priceUsd": 35
+      },
+      {
+        "name": "ECOGRAFIA TRANSVAGINAL",
+        "priceUsd": 35
+      },
+      {
+        "name": "ELECTROCARDIOGRAMA",
+        "priceUsd": 25
+      },
+      {
+        "name": "ELECTROLITOS EN ORINA 24 HORAS",
+        "priceUsd": 15
+      },
+      {
+        "name": "ELECTROLITOS EN ORINA PARCIAL",
+        "priceUsd": 15
+      },
+      {
+        "name": "ELECTROLITOS EN SANGRE",
+        "priceUsd": 15
+      },
+      {
+        "name": "EPSTEIN BARR VIRUS IGG",
+        "priceUsd": 12
+      },
+      {
+        "name": "EPSTEIN BARR VIRUS IGM",
+        "priceUsd": 12
+      },
+      {
+        "name": "ESTRADIOL",
+        "priceUsd": 12
+      },
+      {
+        "name": "ESTROGENO",
+        "priceUsd": 12
+      },
+      {
+        "name": "EXAMEN DE HECES SIMPLE",
+        "priceUsd": 5
+      },
+      {
+        "name": "EXAMEN DE ORINA SIMPLE",
+        "priceUsd": 6
+      },
+      {
+        "name": "EXTRACCION CUERPO EXTRANO CONDUCTO AUDITIVO EXTERNO SIN INCISION",
+        "priceUsd": 35
+      },
+      {
+        "name": "FERRITINA",
+        "priceUsd": 12
+      },
+      {
+        "name": "FIBRINOGENO",
+        "priceUsd": 6
+      },
+      {
+        "name": "FISIATRIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "FOSFATASA ALCALINA",
+        "priceUsd": 5.5
+      },
+      {
+        "name": "FOSFORO EN ORINA",
+        "priceUsd": 5
+      },
+      {
+        "name": "FSH (HORMONA FOLICULO ESTIMULANTE)",
+        "priceUsd": 12
+      },
+      {
+        "name": "GAMMA GLUTAMIL TRANSPEPTIDASA (GGTP)",
+        "priceUsd": 8
+      },
+      {
+        "name": "GINECOLOGIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "GINECOLOGIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "GINECOLOGIA Y OBSTETRICIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "GINECOLOGIA Y OBSTETRICIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "GLUCOSA (GLICEMIA)",
+        "priceUsd": 5
+      },
+      {
+        "name": "GLUCOSA PRE Y POST PRANDIAL",
+        "priceUsd": 15
+      },
+      {
+        "name": "GONADOTROPINA CORIONICA HCG CUALITATIVA",
+        "priceUsd": 5
+      },
+      {
+        "name": "GONADOTROPINA CORIONICA HCG CUANTITATIVA",
+        "priceUsd": 12
+      },
+      {
+        "name": "GOTA GRUESA (PALUDISMO)",
+        "priceUsd": 5
+      },
+      {
+        "name": "GRUPO SANGUINEO ABO Y FACTOR RH",
+        "priceUsd": 4
+      },
+      {
+        "name": "HELICOBACTER PYLORI ANTICUERPOS IGG IGM E IGA",
+        "priceUsd": 15
+      },
+      {
+        "name": "HEMATOLOGIA COMPLETA + PLAQUETAS",
+        "priceUsd": 5
+      },
+      {
+        "name": "HEMOGLOBINA GLICOSILADA",
+        "priceUsd": 12
+      },
+      {
+        "name": "HERPES SIMPLEX 1 IGG",
+        "priceUsd": 12
+      },
+      {
+        "name": "HERPES SIMPLEX 1 IGM",
+        "priceUsd": 15
+      },
+      {
+        "name": "HOLTER",
+        "priceUsd": 70
+      },
+      {
+        "name": "HORMONA DE CRECIMIENTO (HGH)",
+        "priceUsd": 15
+      },
+      {
+        "name": "INMUNOGLOBULINA IGA",
+        "priceUsd": 12
+      },
+      {
+        "name": "INMUNOGLOBULINA IGE",
+        "priceUsd": 12
+      },
+      {
+        "name": "INMUNOGLOBULINA IGG",
+        "priceUsd": 12
+      },
+      {
+        "name": "INMUNOGLOBULINA IGM",
+        "priceUsd": 10
+      },
+      {
+        "name": "INSULINA",
+        "priceUsd": 10
+      },
+      {
+        "name": "LAVADO DE OIDOS Y ASPIRACION UNILATERAL",
+        "priceUsd": 35
+      },
+      {
+        "name": "LH HORMONA LUTEINIZANTE",
+        "priceUsd": 12
+      },
+      {
+        "name": "LIPASA",
+        "priceUsd": 12
+      },
+      {
+        "name": "MAGNESIO EN ORINA",
+        "priceUsd": 6
+      },
+      {
+        "name": "MAGNESIO EN SANGRE",
+        "priceUsd": 6
+      },
+      {
+        "name": "MAPA MONITOREO DE TENSION ARTERIAL POR 24 HORAS",
+        "priceUsd": 75
+      },
+      {
+        "name": "MEDICINA INTERNA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "MEDICINA INTERNA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "MICROALBUMINURIA",
+        "priceUsd": 12
+      },
+      {
+        "name": "NEFROLOGIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "NEFROLOGIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "OTORRINOLARINGOLOGIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "OTORRINOLARINGOLOGIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "PEDIATRIA GENERAL CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "PEDIATRIA GENERAL CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "PEPTIDO C EN SANGRE",
+        "priceUsd": 13
+      },
+      {
+        "name": "PERFIL 20",
+        "priceUsd": 30
+      },
+      {
+        "name": "PERFIL ANEMIA",
+        "priceUsd": 30
+      },
+      {
+        "name": "PERFIL DE COAGULACION",
+        "priceUsd": 8
+      },
+      {
+        "name": "PERFIL HEPATICO",
+        "priceUsd": 20
+      },
+      {
+        "name": "PERFIL HORMONAL FEMENINO",
+        "priceUsd": 35
+      },
+      {
+        "name": "PERFIL HORMONAL MASCULINO",
+        "priceUsd": 41
+      },
+      {
+        "name": "PERFIL LIPIDICO",
+        "priceUsd": 15
+      },
+      {
+        "name": "PERFIL PRE NATAL",
+        "priceUsd": 30
+      },
+      {
+        "name": "PERFIL PRE OPERATORIO",
+        "priceUsd": 20
+      },
+      {
+        "name": "PERFIL RENAL",
+        "priceUsd": 9
+      },
+      {
+        "name": "PERFIL REUMATOLOGICO",
+        "priceUsd": 12
+      },
+      {
+        "name": "PERFIL TIROIDEO",
+        "priceUsd": 30
+      },
+      {
+        "name": "POTASIO EN ORINA PARCIAL",
+        "priceUsd": 5
+      },
+      {
+        "name": "POTASIO EN SANGRE",
+        "priceUsd": 5
+      },
+      {
+        "name": "PROCALCITONINA",
+        "priceUsd": 15
+      },
+      {
+        "name": "PROGESTERONA",
+        "priceUsd": 12
+      },
+      {
+        "name": "PROLACTINA",
+        "priceUsd": 12
+      },
+      {
+        "name": "PROTEINA C REACTIVA CUANTITATIVA",
+        "priceUsd": 6
+      },
+      {
+        "name": "PROTEINA C REACTIVA ULTRASENSIBLE",
+        "priceUsd": 6
+      },
+      {
+        "name": "PROTEINAS EN ORINA DE 24 HORAS",
+        "priceUsd": 6
+      },
+      {
+        "name": "PROTEINAS TOTALES Y FRACCIONADAS",
+        "priceUsd": 4
+      },
+      {
+        "name": "PT (TIEMPO DE PROTROMBINA)",
+        "priceUsd": 4
+      },
+      {
+        "name": "PTT (TIEMPO DE TROMBOPLASTINA)",
+        "priceUsd": 4.5
+      },
+      {
+        "name": "RELACION AC URICO CREATININA EN ORINA DE 24 HORAS",
+        "priceUsd": 7
+      },
+      {
+        "name": "RELACION AC URICO CREATININA EN ORINA PARCIAL",
+        "priceUsd": 5
+      },
+      {
+        "name": "REUMATOLOGIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "REUMATOLOGIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "RX ARTICULACION 1 PROYECCION",
+        "priceUsd": 30
+      },
+      {
+        "name": "RX ARTICULACION 2 PROYECCIONES",
+        "priceUsd": 35
+      },
+      {
+        "name": "RX ARTICULACION 3 PROYECCIONES",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX ARTICULACION 4 PROYECCIONES",
+        "priceUsd": 45
+      },
+      {
+        "name": "RX ARTICULACION 5 PROYECCIONES",
+        "priceUsd": 50
+      },
+      {
+        "name": "RX ARTICULACION 6 PROYECCIONES",
+        "priceUsd": 60
+      },
+      {
+        "name": "RX COLUMNA CERVICAL 1 PROYECCION",
+        "priceUsd": 35
+      },
+      {
+        "name": "RX COLUMNA CERVICAL 2 PROYECCIONES",
+        "priceUsd": 30
+      },
+      {
+        "name": "RX COLUMNA CERVICAL 3 PROYECCIONES",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA CERVICAL 4 PROYECCIONES",
+        "priceUsd": 45
+      },
+      {
+        "name": "RX COLUMNA CERVICAL 5 PROYECCIONES",
+        "priceUsd": 50
+      },
+      {
+        "name": "RX COLUMNA CERVICAL 6 PROYECCIONES",
+        "priceUsd": 60
+      },
+      {
+        "name": "RX COLUMNA DORSAL 3 PROYECCIONES",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA DORSAL 4 PROYECCIONES",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA LUMBAR 1 PROYECCION",
+        "priceUsd": 30
+      },
+      {
+        "name": "RX COLUMNA LUMBAR 2 PROYECCIONES",
+        "priceUsd": 35
+      },
+      {
+        "name": "RX COLUMNA LUMBAR 3 PROYECCIONES",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX COLUMNA LUMBAR 4 PROYECCIONES",
+        "priceUsd": 45
+      },
+      {
+        "name": "RX TORAX 1 PROYECCION",
+        "priceUsd": 30
+      },
+      {
+        "name": "RX TORAX 2 PROYECCIONES",
+        "priceUsd": 35
+      },
+      {
+        "name": "RX TORAX 3 PROYECCIONES",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX TORAX 4 PROYECCIONES",
+        "priceUsd": 45
+      },
+      {
+        "name": "SANGRE OCULTA EN HECES",
+        "priceUsd": 6
+      },
+      {
+        "name": "SATURACION DE TRANSFERRINA",
+        "priceUsd": 10
+      },
+      {
+        "name": "SODIO EN ORINA DE 24 HORAS",
+        "priceUsd": 5
+      },
+      {
+        "name": "SODIO EN SANGRE",
+        "priceUsd": 5
+      },
+      {
+        "name": "SODIO POTASIO",
+        "priceUsd": 10
+      },
+      {
+        "name": "T3 LIBRE",
+        "priceUsd": 10
+      },
+      {
+        "name": "T3 TOTAL",
+        "priceUsd": 10
+      },
+      {
+        "name": "T4 TOTAL",
+        "priceUsd": 10
+      },
+      {
+        "name": "TERAPIA FISICA / REHABILITACION 10 SESIONES",
+        "priceUsd": 250
+      },
+      {
+        "name": "TERAPIA FISICA / REHABILITACION 5 SESIONES",
+        "priceUsd": 125
+      },
+      {
+        "name": "TESTOSTERONA LIBRE",
+        "priceUsd": 13
+      },
+      {
+        "name": "TESTOSTERONA TOTAL",
+        "priceUsd": 10
+      },
+      {
+        "name": "TIROGLOBULINA EN SANGRE",
+        "priceUsd": 16
+      },
+      {
+        "name": "TORCH IGG E IGM / TOXOPLASMA GONDII IGG E IGM / RUBEOLA IGG E IGM / CITOMEGALOVIRUS IGG E IGM",
+        "priceUsd": 15
+      },
+      {
+        "name": "TRANSAMINASA PIRUVICA TGP SGPT (ALT)",
+        "priceUsd": 8
+      },
+      {
+        "name": "TRANSFERRINA EN SANGRE",
+        "priceUsd": 12
+      },
+      {
+        "name": "TRAUMATOLOGIA Y ORTOPEDIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "TRAUMATOLOGIA Y ORTOPEDIA CONSULTA DE CONTROL",
+        "priceUsd": 25
+      },
+      {
+        "name": "TRIGLICERIDOS",
+        "priceUsd": 4
+      },
+      {
+        "name": "TROPONINA",
+        "priceUsd": 15
+      },
+      {
+        "name": "TSH HORMONA ESTIMULANTE DE LA TIROIDES",
+        "priceUsd": 12
+      },
+      {
+        "name": "UREA EN ORINA",
+        "priceUsd": 4
+      },
+      {
+        "name": "UREA EN SANGRE",
+        "priceUsd": 4
+      },
+      {
+        "name": "UROCULTIVO Y ANTIBIOGRAMA",
+        "priceUsd": 15
+      },
+      {
+        "name": "UROLOGIA CONSULTA 1A VEZ",
+        "priceUsd": 25
+      },
+      {
+        "name": "VDRL CUALITATIVO",
+        "priceUsd": 4
+      },
+      {
+        "name": "VITAMINA B12",
+        "priceUsd": 12
+      },
+      {
+        "name": "VITAMINA D",
+        "priceUsd": 12
+      },
+      {
+        "name": "VSG (VELOCIDAD DE SEDIMENTACION GLOBULAR)",
+        "priceUsd": 4
+      }
+    ]
   }
 ];

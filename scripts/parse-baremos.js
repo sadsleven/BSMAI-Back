@@ -170,6 +170,31 @@ const CONFIGS = [
     rif: null,
     sheets: [{ name: 'BAREMO AMP 2025', nameCol: 1, priceCol: 2, startRow: 7 }],
   },
+  {
+    // "PROPUESTA DE BAREMO": precio = columna "AFMI" en todas las hojas. La
+    // segunda hoja de imágenes (sin espacio, col "Monto $") es un set distinto
+    // del seguro y se omite por decisión de negocio (mantener criterio AFMI).
+    // APS col9 = descripción del estudio (consultas → nombre de especialidad,
+    // mapeado a "CONSULTA: X" por consultaName). Actos con "NO PROCEDE POR APS"
+    // (Anatomía Patológica) quedan fuera.
+    file: 'BAREMOS UNIVERSITAS.xlsx',
+    insurance: 'Seguros Universitas',
+    rif: null,
+    sheets: [
+      { name: 'APS', nameCol: 9, priceCol: 10, startRow: 9 },
+      { name: 'LABORATORIO', nameCol: 4, priceCol: 5, startRow: 9 },
+      { name: 'IMAGENES ', nameCol: 5, priceCol: 6, startRow: 8 },
+    ],
+  },
+  {
+    // Hoja única "AFMI": col B = nombre del servicio, col D = costo USD. Los
+    // nombres traen "CONSULTA 1A VEZ / DE CONTROL" y quedan tal cual (no son
+    // consultas de especialidad simples mapeables).
+    file: 'BAREMOS PIRAMIDE.xlsx',
+    insurance: 'Seguros Pirámide',
+    rif: null,
+    sheets: [{ name: 'AFMI', nameCol: 2, priceCol: 4, startRow: 4 }],
+  },
 ];
 
 (async () => {

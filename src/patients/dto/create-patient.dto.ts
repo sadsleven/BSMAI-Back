@@ -80,10 +80,13 @@ export class CreatePatientDto {
   @IsDateString({}, { message: 'Fecha de nacimiento inválida' })
   birthDate?: string;
 
+  // Dirección opcional. Si se informa, entre 3 y 500 caracteres.
+  @IsOptional()
+  @ValidateIf((o) => o.address !== undefined && o.address !== null && o.address !== '')
   @IsString()
   @MinLength(3)
   @MaxLength(500)
-  address: string;
+  address?: string;
 
   @IsArray()
   @ArrayMaxSize(10, { message: 'Máximo 10 teléfonos por paciente' })
