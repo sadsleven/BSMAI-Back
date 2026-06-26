@@ -1,6 +1,7 @@
 import {
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -9,6 +10,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export const PROVIDER_TYPES = ['doctor', 'care_center'] as const;
 
@@ -39,13 +41,15 @@ export class OrderServiceTypeRowDto {
   quantity?: number;
 
   /**
-   * Nombre personalizado para este ST en la orden (override de serviceType.name).
-   * Aparece en Paso 1/2/4 y en el detalle. Vacío = usar el nombre original.
+   * Nombre de este ST para la orden. OBLIGATORIO. Se elige/reutiliza en el
+   * Paso 1 (selector con nombres previos del ST + alta de uno nuevo) y se muestra
+   * en Paso 2 (órdenes internas: Excel/PDF), Paso 4 (factura) y el detalle.
    */
-  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty({ message: 'El nombre para la orden es obligatorio' })
   @MaxLength(300)
-  customName?: string;
+  customName: string;
 
   @IsOptional()
   @IsUUID('4', { each: true })
