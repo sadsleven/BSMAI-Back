@@ -1032,8 +1032,7 @@ export class OrdersService implements OnModuleInit {
         careCenterId:
           r.providerType === 'care_center' ? r.careCenterId ?? null : null,
         quantity: Math.max(1, Math.trunc(r.quantity ?? 1)),
-        customName:
-          r.customName && r.customName.trim() ? r.customName.trim() : null,
+        customName: (r.customName ?? '').trim(),
         internalOrderId: iio.id,
       };
     });
@@ -1189,6 +1188,7 @@ export class OrdersService implements OnModuleInit {
         providerType: ost.providerType,
         doctorId: ost.doctorId ?? undefined,
         careCenterId: ost.careCenterId ?? undefined,
+        customName: ost.customName ?? '',
       })),
     );
     const validKeys = new Set<string>(orderProviders.map((p) => p.key));
@@ -1365,6 +1365,7 @@ export class OrdersService implements OnModuleInit {
       providerType: ost.providerType,
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
+      customName: ost.customName ?? '',
     }));
     const qtyByST = new Map(
       (order.orderServiceTypes ?? []).map((ost) => [
@@ -1597,7 +1598,7 @@ export class OrdersService implements OnModuleInit {
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
       quantity: ost.quantity ?? 1,
-      customName: ost.customName ?? undefined,
+      customName: ost.customName ?? '',
     }));
 
     const merged: CreateOrderDto = {

@@ -65,14 +65,14 @@ export class OrderServiceType {
   quantity: number;
 
   /**
-   * Nombre personalizado de este ST dentro de la orden (override de
-   * `serviceType.name`). Lo fija el usuario en el Paso 1 — útil cuando el baremo
-   * da un nombre genérico y la orden necesita uno específico (ej. "RX tórax
-   * frontal"). Null = usar `serviceType.name`. Se muestra en Paso 1/2/4 y en el
-   * detalle de la orden; el resto del sistema usa el nombre original.
+   * Nombre de este ST para la orden. OBLIGATORIO. El usuario lo elige en el
+   * Paso 1 con un selector que reutiliza nombres previos del mismo ST y permite
+   * dar de alta uno nuevo (ej. "RX tórax frontal"). Es el nombre que se muestra
+   * en el Paso 2 (órdenes internas: Excel/PDF), el Paso 4 (factura) y el detalle
+   * de la orden.
    */
-  @Column({ type: 'varchar', length: 300, nullable: true })
-  customName?: string | null;
+  @Column({ type: 'varchar', length: 300 })
+  customName: string;
 
   @Column({ type: 'uuid', nullable: true })
   doctorId?: string | null;

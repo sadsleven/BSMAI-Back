@@ -221,7 +221,41 @@ export class InsurancesService {
 
   async hardDelete(id: string): Promise<void> {
     await this.findOne(id, true);
+    await this.assertNotReferenced(id);
     await this.repo.delete(id);
+  }
+
+  /**
+   * Bloquea el hard-delete si el seguro sigue referenciado por entidades con
+   * FK RESTRICT (órdenes y cuentas por cobrar). El resto de pivots
+   * (contractor_insurances, patient_insurances, phones, service_prices) son
+   * CASCADE y se limpian solos. Devuelve 409 claro en vez de 500 crudo de la BD.
+   * Nota: cuenta también filas soft-deleted, porque la fila FK existe igual.
+   */
+  private async assertNotReferenced(id: string): Promise<void> {
+    const count = async (table: string): Promise<number> => {
+      const rows: Array<{ count: number }> = await this.repo.manager.query(
+        `SELECT COUNT(*)::int AS count FROM "${table}" WHERE "insuranceId" = $1`,
+        [id],
+      );
+      return rows[0]?.count ?? 0;
+    };
+
+    const refs: string[] = [];
+    const orderCount = await count('orders');
+    if (orderCount > 0)
+      refs.push(`${orderCount} orden(es)`);
+    const arCount = await count('accounts_receivable');
+    if (arCount > 0)
+      refs.push(`${arCount} cuenta(s) por cobrar`);
+
+    if (refs.length) {
+      throw new ConflictException(
+        `No se puede eliminar el seguro porque está referenciado por ${refs.join(
+          ' y ',
+        )}. Deshabilítalo o envíalo a la papelera en su lugar.`,
+      );
+    }
   }
 
   async restore(id: string): Promise<Insurance> {
