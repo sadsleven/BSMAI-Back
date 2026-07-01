@@ -27,11 +27,11 @@ export function uniqueCedula(): string {
   return `V-${formatted}`;
 }
 
-/** RIF venezolano J- + 8 dígitos + DV. Patrón J-XX.XXX.XXX-D. */
+/** RIF venezolano J- + 8 dígitos + DV (sin puntos). Patrón J-XXXXXXXX-D. */
 export function uniqueRif(letter: 'J' | 'V' | 'G' | 'E' = 'J'): string {
   const n = (10_000_000 + (Date.now() + counter++) % 89_999_999).toString();
   const dv = ((parseInt(n, 10) * 7) % 10).toString();
-  return `${letter}-${n.slice(0, 2)}.${n.slice(2, 5)}.${n.slice(5, 8)}-${dv}`;
+  return `${letter}-${n}-${dv}`;
 }
 
 /** Teléfono venezolano 11 dígitos comenzando en 04. */

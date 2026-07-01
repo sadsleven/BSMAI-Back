@@ -30,6 +30,7 @@ import { targetBsForOrder, targetUsdForOrder } from './ar-targets';
 // Re-export para compatibilidad con specs/consumidores existentes.
 export {
   casheaCommissionForOrder,
+  casheaFinancingForOrder,
   targetUsdForOrder,
   targetBsForOrder,
 } from './ar-targets';
@@ -171,8 +172,8 @@ export class AccountsReceivableService {
         useFixedRate: boolean;
         priceAmount: string;
         casheaFirstInstallmentAmount: string | null;
-        casheaFirstInstallmentRate: string | null;
-        casheaTotalRate: string | null;
+        casheaCommissionRate: string | null;
+        casheaFinancingRate: string | null;
         fixedRateBs: string | null;
         branchId: string;
         branchName: string | null;
@@ -183,7 +184,7 @@ export class AccountsReceivableService {
               o."insuranceId", o."holderId", i."name" AS "insuranceName",
               p."firstName", p."lastName", p."businessName", p."cedula", p."rif",
               o."useFixedRate", o."priceAmount",
-              o."casheaFirstInstallmentAmount", o."casheaFirstInstallmentRate", o."casheaTotalRate",
+              o."casheaFirstInstallmentAmount", o."casheaCommissionRate", o."casheaFinancingRate",
               fx."amountBs" AS "fixedRateBs",
               o."branchId", b."name" AS "branchName", o."createdAt"
        FROM "orders" o
@@ -202,8 +203,8 @@ export class AccountsReceivableService {
         type: r.orderType,
         priceAmount: r.priceAmount,
         casheaFirstInstallmentAmount: r.casheaFirstInstallmentAmount,
-        casheaFirstInstallmentRate: r.casheaFirstInstallmentRate,
-        casheaTotalRate: r.casheaTotalRate,
+        casheaCommissionRate: r.casheaCommissionRate,
+        casheaFinancingRate: r.casheaFinancingRate,
         useFixedRate: r.useFixedRate,
         fixedExchangeRate: r.fixedRateBs != null ? { amountBs: r.fixedRateBs } : null,
       } as unknown as Order;

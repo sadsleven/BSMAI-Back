@@ -37,7 +37,7 @@ export class ServiceTypesController {
   @RequirePermissions(PERMISSIONS.SERVICE_TYPES.LIST)
   @Get(':id')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.findOne(id, true);
+    return this.service.findOneWithPrices(id, true);
   }
 
   @RequirePermissions(PERMISSIONS.SERVICE_TYPES.CREATE)

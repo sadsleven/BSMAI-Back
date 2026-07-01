@@ -70,4 +70,12 @@ export class CreateInsuranceDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /**
+   * Seguro indexado: la cuenta por cobrar se fija en Bs a la tasa del día de la
+   * orden. Si false (no indexado), se cobra a la tasa del día del cobro.
+   */
+  @IsOptional()
+  @IsBoolean()
+  isIndexed?: boolean;
 }

@@ -444,7 +444,7 @@ export class OrdersService implements OnModuleInit {
     const provider = await this.resolveProvider(user);
     if (provider) {
       if (!this.orderHasProvider(order, provider)) {
-        throw new ForbiddenException('No tenés acceso a esta orden');
+        throw new ForbiddenException('No tienes acceso a esta orden');
       }
       return;
     }
@@ -455,7 +455,7 @@ export class OrdersService implements OnModuleInit {
     if (user.isSuperAdmin) return;
     const allowed = await this.resolveUserBranchIds(user);
     if (!allowed.includes(branchId)) {
-      throw new ForbiddenException('No tenés acceso a esta sucursal');
+      throw new ForbiddenException('No tienes acceso a esta sucursal');
     }
   }
 
@@ -542,30 +542,8 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    // Validar tasa fija — sólo en órdenes seguro y siempre acompañada de la tasa.
-    if (dto.useFixedRate) {
-      if (dto.type !== 'insurance') {
-        throw new BadRequestException(
-          'La tasa fija solo aplica para órdenes tipo seguro',
-        );
-      }
-      if (!dto.fixedExchangeRateId) {
-        throw new BadRequestException(
-          'Tasa fija activada requiere fixedExchangeRateId',
-        );
-      }
-      const rate = await this.ratesRepo.findOne({
-        where: { id: dto.fixedExchangeRateId },
-      });
-      if (!rate) throw new BadRequestException('Tasa fija no encontrada');
-      if (rate.currency !== 'USD') {
-        throw new BadRequestException('La tasa fija debe ser USD/Bs');
-      }
-    } else if (dto.fixedExchangeRateId) {
-      throw new BadRequestException(
-        'fixedExchangeRateId solo se admite cuando useFixedRate=true',
-      );
-    }
+    // La tasa fija (Bs) ya no es un checkbox por-orden: se deriva de si el
+    // seguro es indexado. Ver `resolveFixedRate`, invocada en create/update.
 
     if (dto.orderDate && dto.appointmentDate) {
       if (new Date(dto.appointmentDate) < new Date(dto.orderDate))
@@ -574,7 +552,7 @@ export class OrdersService implements OnModuleInit {
 
     const rows = dto.serviceTypes ?? [];
     if (!rows.length) {
-      throw new BadRequestException('Asigná al menos un tipo de servicio');
+      throw new BadRequestException('Asigna al menos un tipo de servicio');
     }
     const stIds = rows.map((r) => r.serviceTypeId);
     if (new Set(stIds).size !== stIds.length) {
@@ -842,20 +820,65 @@ export class OrdersService implements OnModuleInit {
       const initial = Number(casheaInitialUsd ?? 0);
       if (!(initial > 0)) {
         throw new BadRequestException(
-          'Cashea requiere una cuota inicial mayor a 0 para continuar',
+          'Cashea requiere una inicial mayor a 0 para continuar',
         );
       }
       if (Math.abs(sumUsd - initial) > TOL) {
         throw new BadRequestException(
-          `Cashea: los pagos deben cubrir la cuota inicial: pagos USD ${sumUsd.toFixed(2)} de inicial ${initial.toFixed(2)}`,
+          `Cashea: los pagos deben cubrir la inicial: pagos USD ${sumUsd.toFixed(2)} de inicial ${initial.toFixed(2)}`,
         );
       }
     }
     // credit / insurance: sin requisito de pago en el Paso 1.
   }
 
+  /** True si el seguro (por id) está marcado como indexado. */
+  private async insuranceIsIndexed(insuranceId: string): Promise<boolean> {
+    const rows = await this.dataSource.query<Array<{ isIndexed: boolean }>>(
+      `SELECT "isIndexed" FROM "insurances" WHERE id = $1 AND "deletedAt" IS NULL LIMIT 1`,
+      [insuranceId],
+    );
+    return rows[0]?.isIndexed === true;
+  }
+
+  /**
+   * Deriva el modo tasa fija de la orden a partir del seguro:
+   *  - Seguro indexado → `useFixedRate=true` y requiere `fixedExchangeRateId`
+   *    (la tasa del día de la orden, seleccionada en el Paso 1; debe ser USD/Bs).
+   *  - Seguro no indexado / no-seguro → `useFixedRate=false`, sin tasa fija.
+   */
+  private async resolveFixedRate(
+    type: 'cash' | 'credit' | 'insurance' | 'cashea',
+    insuranceId: string | null | undefined,
+    requestedRateId: string | null | undefined,
+  ): Promise<{ useFixedRate: boolean; fixedExchangeRateId: string | null }> {
+    if (type !== 'insurance' || !insuranceId) {
+      return { useFixedRate: false, fixedExchangeRateId: null };
+    }
+    const indexed = await this.insuranceIsIndexed(insuranceId);
+    if (!indexed) return { useFixedRate: false, fixedExchangeRateId: null };
+    if (!requestedRateId) {
+      throw new BadRequestException(
+        'El seguro es indexado: selecciona la tasa de la orden',
+      );
+    }
+    const rate = await this.ratesRepo.findOne({ where: { id: requestedRateId } });
+    if (!rate) throw new BadRequestException('Tasa de la orden no encontrada');
+    if (rate.currency !== 'USD') {
+      throw new BadRequestException('La tasa de la orden debe ser USD/Bs');
+    }
+    return { useFixedRate: true, fixedExchangeRateId: requestedRateId };
+  }
+
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
+
+    // Tasa fija derivada del seguro (indexado ⇒ fija en Bs a la tasa de la orden).
+    const fixed = await this.resolveFixedRate(
+      dto.type,
+      dto.insuranceId ?? null,
+      dto.fixedExchangeRateId ?? null,
+    );
 
     // Sin orders.edit-amount, el monto de órdenes no-seguro se fuerza a la suma Particular.
     let effectivePriceAmount = dto.priceAmount;
@@ -866,26 +889,26 @@ export class OrdersService implements OnModuleInit {
       effectivePriceAmount = await this.computeParticularSum(dto.serviceTypes);
     }
 
-    // Snapshot Cashea: dos tramos (primera cuota + total). El monto de la
-    // primera cuota lo ingresa el usuario; las tasas se toman de la config
-    // global vigente. Comisión = primeraCuota × firstRate + total × totalRate.
+    // Snapshot Cashea: la inicial la ingresa el usuario; las tasas (comisión
+    // sobre el total + financiamiento sobre el restante) se toman de la config
+    // global vigente. La inicial no genera comisión propia.
     let casheaFields: {
       casheaFirstInstallmentAmount: string;
-      casheaFirstInstallmentRate: string;
-      casheaTotalRate: string;
+      casheaCommissionRate: string;
+      casheaFinancingRate: string;
     } | null = null;
     if (dto.type === 'cashea') {
       const firstAmount = dto.casheaFirstInstallmentAmount ?? 0;
       if (firstAmount > effectivePriceAmount) {
         throw new BadRequestException(
-          'La primera cuota Cashea no puede superar el precio total de la orden',
+          'La inicial Cashea no puede superar el precio total de la orden',
         );
       }
       const cfg = await this.appConfig.getCasheaCommissionConfig();
       casheaFields = {
         casheaFirstInstallmentAmount: firstAmount.toFixed(2),
-        casheaFirstInstallmentRate: cfg.firstInstallmentRate.toFixed(4),
-        casheaTotalRate: cfg.totalRate.toFixed(4),
+        casheaCommissionRate: cfg.commissionRate.toFixed(4),
+        casheaFinancingRate: cfg.financingRate.toFixed(4),
       };
     }
 
@@ -922,20 +945,17 @@ export class OrdersService implements OnModuleInit {
           dto.type === 'insurance' && dto.serviceKey?.trim()
             ? dto.serviceKey.trim()
             : null,
+        isReimbursement: dto.type === 'credit' ? !!dto.isReimbursement : false,
         specialtyId: dto.specialtyId,
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
         priceAmount: effectivePriceAmount.toFixed(2),
         casheaFirstInstallmentAmount:
           casheaFields?.casheaFirstInstallmentAmount ?? null,
-        casheaFirstInstallmentRate:
-          casheaFields?.casheaFirstInstallmentRate ?? null,
-        casheaTotalRate: casheaFields?.casheaTotalRate ?? null,
-        useFixedRate: dto.type === 'insurance' && !!dto.useFixedRate,
-        fixedExchangeRateId:
-          dto.type === 'insurance' && dto.useFixedRate
-            ? dto.fixedExchangeRateId ?? null
-            : null,
+        casheaCommissionRate: casheaFields?.casheaCommissionRate ?? null,
+        casheaFinancingRate: casheaFields?.casheaFinancingRate ?? null,
+        useFixedRate: fixed.useFixedRate,
+        fixedExchangeRateId: fixed.fixedExchangeRateId,
         createdById: user.id,
       });
       const saved = await mgr.save(entity);
@@ -1204,13 +1224,13 @@ export class OrdersService implements OnModuleInit {
         // Usuario proveedor: solo su propio segmento; no toca la nota general.
         const ownKey = `${provider.type}:${provider.id}`;
         if (!validKeys.has(ownKey)) {
-          throw new ForbiddenException('No participás en esta orden');
+          throw new ForbiddenException('No participas en esta orden');
         }
         for (const r of dto.providerReports ?? []) {
           const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
           if (`${r.providerType}:${pid ?? ''}` !== ownKey) {
             throw new ForbiddenException(
-              'Solo podés editar las observaciones de tu propio informe',
+              'Solo puedes editar las observaciones de tu propio informe',
             );
           }
           await this.upsertProviderReport(
@@ -1456,6 +1476,8 @@ export class OrdersService implements OnModuleInit {
           doctorAmountSuggested: suggestedSum.toFixed(2),
           doctorAmount: totalUsd.toFixed(2),
           billingExchangeRateId: dto.billingExchangeRateId,
+          invoiceNumber: dto.invoiceNumber.trim(),
+          controlNumber: dto.controlNumber.trim(),
           status: 'finalized',
         },
       );
@@ -1617,6 +1639,10 @@ export class OrdersService implements OnModuleInit {
         dto.serviceKey !== undefined
           ? dto.serviceKey
           : existing.serviceKey ?? undefined,
+      isReimbursement:
+        dto.isReimbursement !== undefined
+          ? dto.isReimbursement
+          : existing.isReimbursement,
       specialtyId: dto.specialtyId ?? existing.specialtyId,
       serviceTypes: dto.serviceTypes ?? existingRows,
       pathologyIds: dto.pathologyIds ?? existingPathologyIds,
@@ -1629,11 +1655,17 @@ export class OrdersService implements OnModuleInit {
         (existing.casheaFirstInstallmentAmount != null
           ? Number(existing.casheaFirstInstallmentAmount)
           : undefined),
-      useFixedRate: dto.useFixedRate ?? existing.useFixedRate,
       fixedExchangeRateId:
         dto.fixedExchangeRateId ?? existing.fixedExchangeRateId ?? undefined,
     };
     await this.validateCoreReferences(merged, user);
+
+    // Tasa fija derivada del seguro (indexado ⇒ fija en Bs a la tasa de la orden).
+    const fixedUpd = await this.resolveFixedRate(
+      merged.type,
+      merged.insuranceId ?? null,
+      merged.fixedExchangeRateId ?? null,
+    );
 
     // Sin orders.edit-amount, el monto de órdenes no-seguro se fuerza a la suma Particular.
     if (
@@ -1643,15 +1675,15 @@ export class OrdersService implements OnModuleInit {
       merged.priceAmount = await this.computeParticularSum(merged.serviceTypes);
     }
 
-    // Snapshot Cashea (dos tramos): si pasa a cashea desde otro tipo, capturar
-    // tasas de la config global; si ya era cashea, preservar tasas snapshot y
-    // sólo actualizar el monto de la primera cuota; si deja de ser cashea,
-    // limpiar los tres campos. `undefined` = no tocar.
+    // Snapshot Cashea: si pasa a cashea desde otro tipo, capturar tasas de la
+    // config global; si ya era cashea, preservar tasas snapshot y sólo actualizar
+    // el monto de la inicial; si deja de ser cashea, limpiar los tres campos.
+    // `undefined` = no tocar.
     let nextCashea:
       | {
           casheaFirstInstallmentAmount: string;
-          casheaFirstInstallmentRate: string;
-          casheaTotalRate: string;
+          casheaCommissionRate: string;
+          casheaFinancingRate: string;
         }
       | null
       | undefined = undefined;
@@ -1659,27 +1691,27 @@ export class OrdersService implements OnModuleInit {
       const firstAmount = merged.casheaFirstInstallmentAmount ?? 0;
       if (firstAmount > merged.priceAmount) {
         throw new BadRequestException(
-          'La primera cuota Cashea no puede superar el precio total de la orden',
+          'La inicial Cashea no puede superar el precio total de la orden',
         );
       }
-      let firstRate: string;
-      let totalRate: string;
+      let commissionRate: string;
+      let financingRate: string;
       if (existing.type === 'cashea') {
-        // Preservar snapshot de tasas; sólo cambia el monto de la primera cuota.
+        // Preservar snapshot de tasas; sólo cambia el monto de la inicial.
         const cfg = await this.appConfig.getCasheaCommissionConfig();
-        firstRate =
-          existing.casheaFirstInstallmentRate ??
-          cfg.firstInstallmentRate.toFixed(4);
-        totalRate = existing.casheaTotalRate ?? cfg.totalRate.toFixed(4);
+        commissionRate =
+          existing.casheaCommissionRate ?? cfg.commissionRate.toFixed(4);
+        financingRate =
+          existing.casheaFinancingRate ?? cfg.financingRate.toFixed(4);
       } else {
         const cfg = await this.appConfig.getCasheaCommissionConfig();
-        firstRate = cfg.firstInstallmentRate.toFixed(4);
-        totalRate = cfg.totalRate.toFixed(4);
+        commissionRate = cfg.commissionRate.toFixed(4);
+        financingRate = cfg.financingRate.toFixed(4);
       }
       nextCashea = {
         casheaFirstInstallmentAmount: firstAmount.toFixed(2),
-        casheaFirstInstallmentRate: firstRate,
-        casheaTotalRate: totalRate,
+        casheaCommissionRate: commissionRate,
+        casheaFinancingRate: financingRate,
       };
     } else if (existing.type === 'cashea') {
       nextCashea = null;
@@ -1719,6 +1751,8 @@ export class OrdersService implements OnModuleInit {
           merged.type === 'insurance' && merged.serviceKey?.trim()
             ? merged.serviceKey.trim()
             : null,
+        isReimbursement:
+          merged.type === 'credit' ? !!merged.isReimbursement : false,
         specialtyId: merged.specialtyId,
         orderDate: merged.orderDate,
         appointmentDate: new Date(merged.appointmentDate),
@@ -1727,16 +1761,13 @@ export class OrdersService implements OnModuleInit {
           ? nextCashea === null
             ? {
                 casheaFirstInstallmentAmount: null,
-                casheaFirstInstallmentRate: null,
-                casheaTotalRate: null,
+                casheaCommissionRate: null,
+                casheaFinancingRate: null,
               }
             : nextCashea
           : {}),
-        useFixedRate: merged.type === 'insurance' && !!merged.useFixedRate,
-        fixedExchangeRateId:
-          merged.type === 'insurance' && merged.useFixedRate
-            ? merged.fixedExchangeRateId ?? null
-            : null,
+        useFixedRate: fixedUpd.useFixedRate,
+        fixedExchangeRateId: fixedUpd.fixedExchangeRateId,
       });
       await mgr.save(existing);
 

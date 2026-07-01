@@ -1,9 +1,10 @@
 import { IsNumber, Max, Min } from 'class-validator';
 
 /**
- * Comisión Cashea en dos tramos, expresada como fracciones (0..0.5):
- *  - `firstInstallmentRate`: % sobre la primera cuota (inicial). Ej. 0.04 = 4%.
- *  - `totalRate`: % sobre el total de la orden. Ej. 0.06 = 6%.
+ * Configuración Cashea, expresada como fracciones (0..0.5):
+ *  - `commissionRate`: % sobre el TOTAL de la venta (comisión). Ej. 0.0464 = 4.64%.
+ *  - `financingRate`: % sobre el RESTANTE (total − inicial) — financiamiento.
+ *    Ej. 0.062 = 6.2%.
  *
  * Tope superior 50% por tramo como guardrail anti-error.
  */
@@ -11,10 +12,10 @@ export class UpdateCasheaCommissionDto {
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(0.5)
-  firstInstallmentRate: number;
+  commissionRate: number;
 
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   @Max(0.5)
-  totalRate: number;
+  financingRate: number;
 }

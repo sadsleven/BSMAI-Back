@@ -1,5 +1,7 @@
-import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
+// El email es inmutable: no se expone en el DTO, por lo que el ValidationPipe
+// (whitelist) lo descarta aunque el cliente lo envíe.
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()
@@ -10,10 +12,6 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(120)
   lastName?: string;
-
-  @IsOptional()
-  @IsEmail({}, { message: 'Email inválido' })
-  email?: string;
 
   @IsOptional()
   @IsString()

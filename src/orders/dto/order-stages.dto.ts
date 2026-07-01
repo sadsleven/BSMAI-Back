@@ -101,6 +101,16 @@ export class BillingOrderDto {
 
   @IsUUID()
   billingExchangeRateId: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El número de factura es obligatorio' })
+  @MaxLength(50)
+  invoiceNumber: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El número de control es obligatorio' })
+  @MaxLength(50)
+  controlNumber: string;
 }
 
 /**

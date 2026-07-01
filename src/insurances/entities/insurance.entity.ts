@@ -39,6 +39,14 @@ export class Insurance {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  /**
+   * Seguro indexado. Cuando true, la cuenta por cobrar se fija en Bs a la tasa
+   * del día de la orden (se le asigna una tasa a la orden en el Paso 1). Cuando
+   * false (no indexado), se cobra a la tasa del día del cobro (USD flotante).
+   */
+  @Column({ type: 'boolean', default: false })
+  isIndexed: boolean;
+
   @OneToMany(() => InsurancePhone, (phone) => phone.insurance, {
     cascade: true,
     eager: true,

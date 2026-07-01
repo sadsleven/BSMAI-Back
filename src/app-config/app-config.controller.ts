@@ -23,8 +23,8 @@ export class AppConfigController {
     @Body() dto: UpdateCasheaCommissionDto,
   ): Promise<CasheaCommissionConfig> {
     return this.service.setCasheaCommissionConfig({
-      firstInstallmentRate: dto.firstInstallmentRate,
-      totalRate: dto.totalRate,
+      commissionRate: dto.commissionRate,
+      financingRate: dto.financingRate,
     });
   }
 }
