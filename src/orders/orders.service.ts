@@ -793,10 +793,11 @@ export class OrdersService implements OnModuleInit {
   /**
    * Regla de pago del Paso 1 según tipo de orden:
    *  - `cash` (contado): los pagos deben CUADRAR el precio total (Σ = priceUsd).
-   *  - `cashea`: la cuota inicial (`casheaFirstInstallmentAmount`) > 0 es un PAGO
-   *    real del titular en el Paso 1; los pagos deben cubrirla (Σ ≈ inicial). El
-   *    resto lo financia Cashea (queda como cuenta por cobrar). Es "como crédito"
-   *    pero con inicial cobrada de entrada.
+   *  - `cashea`: la cuota inicial (`casheaFirstInstallmentAmount`) es un PAGO
+   *    real del titular en el Paso 1; los pagos deben cubrirla (Σ ≈ inicial).
+   *    Puede ser 0 (sin pago en el Paso 1) pero SIEMPRE menor al precio total
+   *    (100% o más no permitido: Cashea debe financiar un restante > 0). El
+   *    resto lo financia Cashea (queda como cuenta por cobrar).
    *  - `credit`/`insurance`: no se exige pago en el Paso 1.
    * Precio y pagos en USD (pricing USD-only). `sumUsd` aplica a `cash` y `cashea`.
    */
@@ -818,9 +819,9 @@ export class OrdersService implements OnModuleInit {
       }
     } else if (type === 'cashea') {
       const initial = Number(casheaInitialUsd ?? 0);
-      if (!(initial > 0)) {
+      if (initial >= priceUsd) {
         throw new BadRequestException(
-          'Cashea requiere una inicial mayor a 0 para continuar',
+          'La inicial Cashea debe ser menor al precio total de la orden',
         );
       }
       if (Math.abs(sumUsd - initial) > TOL) {
@@ -899,9 +900,9 @@ export class OrdersService implements OnModuleInit {
     } | null = null;
     if (dto.type === 'cashea') {
       const firstAmount = dto.casheaFirstInstallmentAmount ?? 0;
-      if (firstAmount > effectivePriceAmount) {
+      if (firstAmount >= effectivePriceAmount) {
         throw new BadRequestException(
-          'La inicial Cashea no puede superar el precio total de la orden',
+          'La inicial Cashea debe ser menor al precio total de la orden',
         );
       }
       const cfg = await this.appConfig.getCasheaCommissionConfig();
@@ -1689,9 +1690,9 @@ export class OrdersService implements OnModuleInit {
       | undefined = undefined;
     if (merged.type === 'cashea') {
       const firstAmount = merged.casheaFirstInstallmentAmount ?? 0;
-      if (firstAmount > merged.priceAmount) {
+      if (firstAmount >= merged.priceAmount) {
         throw new BadRequestException(
-          'La inicial Cashea no puede superar el precio total de la orden',
+          'La inicial Cashea debe ser menor al precio total de la orden',
         );
       }
       let commissionRate: string;

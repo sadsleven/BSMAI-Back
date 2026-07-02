@@ -455,7 +455,7 @@ export class AccountsPayableService {
     await this.assertVisibility(batch, user);
     if (batch.status === 'paid') {
       throw new BadRequestException(
-        'No se pueden agregar órdenes a un lote pagado. Editá o quitá un pago primero.',
+        'No se pueden agregar órdenes a un lote pagado. Edita o quita un pago primero.',
       );
     }
     const providerId = batch.recipientType === 'doctor' ? batch.doctorId : batch.careCenterId;
@@ -489,7 +489,7 @@ export class AccountsPayableService {
     await this.assertVisibility(batch, user);
     if (batch.status === 'paid') {
       throw new BadRequestException(
-        'No se pueden quitar órdenes de un lote pagado. Editá o quitá un pago primero.',
+        'No se pueden quitar órdenes de un lote pagado. Edita o quita un pago primero.',
       );
     }
     const remaining = (batch.orders ?? []).filter(

@@ -451,7 +451,7 @@ export class AccountsReceivableService {
     await this.assertVisibility(batch, user);
     if (batch.status === 'collected' || batch.status === 'overcollected') {
       throw new BadRequestException(
-        'No se pueden agregar órdenes a un lote ya cobrado. Editá o quitá un cobro primero.',
+        'No se pueden agregar órdenes a un lote ya cobrado. Edita o quita un cobro primero.',
       );
     }
     const debtorType: 'insurance' | 'holder' | 'cashea' = batch.insuranceId
@@ -498,7 +498,7 @@ export class AccountsReceivableService {
     await this.assertVisibility(batch, user);
     const remaining = (batch.orders ?? []).filter((o) => !orderIds.includes(o.orderId));
     if (remaining.length === 0) {
-      throw new BadRequestException('El lote quedaría vacío. Eliminá el lote en su lugar.');
+      throw new BadRequestException('El lote quedaría vacío. Elimina el lote en su lugar.');
     }
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(

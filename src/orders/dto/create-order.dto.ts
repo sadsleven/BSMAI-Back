@@ -101,8 +101,10 @@ export class CreateOrderDto {
 
   /**
    * Monto de la inicial Cashea, en USD. Requerido sólo cuando `type='cashea'`.
-   * Debe ser ≥ 0 y ≤ priceAmount (validado en service). La cobra el comercio del
-   * titular en el Paso 1; el restante (total − inicial) lo financia Cashea.
+   * En el FE se ingresa como % del total (0 ≤ pct < 100) y el monto viaja ya
+   * derivado. Debe ser ≥ 0 y < priceAmount (validado en service; 100% o más no
+   * permitido). La cobra el comercio del titular en el Paso 1; el restante
+   * (total − inicial) lo financia Cashea.
    */
   @ValidateIf((o: CreateOrderDto) => o.type === 'cashea')
   @IsNumber({ maxDecimalPlaces: 2 })

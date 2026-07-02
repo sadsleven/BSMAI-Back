@@ -418,7 +418,7 @@ export class TaxesPayableService {
     await this.assertBatchVisibility(batch, user);
     if (batch.status === 'paid') {
       throw new BadRequestException(
-        'No se pueden agregar retenciones a un lote pagado. Editá o quitá un pago primero.',
+        'No se pueden agregar retenciones a un lote pagado. Edita o quita un pago primero.',
       );
     }
     await this.validateObligations(taxPayableIds, user);
@@ -442,14 +442,14 @@ export class TaxesPayableService {
     await this.assertBatchVisibility(batch, user);
     if (batch.status === 'paid') {
       throw new BadRequestException(
-        'No se pueden quitar retenciones de un lote pagado. Editá o quitá un pago primero.',
+        'No se pueden quitar retenciones de un lote pagado. Edita o quita un pago primero.',
       );
     }
     const remaining = (batch.obligations ?? []).filter(
       (o) => !taxPayableIds.includes(o.id),
     );
     if (remaining.length === 0) {
-      throw new BadRequestException('El lote quedaría vacío. Eliminá el lote en su lugar.');
+      throw new BadRequestException('El lote quedaría vacío. Elimina el lote en su lugar.');
     }
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(
