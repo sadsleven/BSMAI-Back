@@ -19,6 +19,19 @@ export type TaxPayableStatus = 'paid' | 'unpaid' | 'partially_paid';
 export type TaxPayableRecipientType = 'doctor' | 'care_center';
 export type TaxPayablePersonType = 'natural' | 'legal_entity';
 
+/** Fila de factura de origen de una obligación (para el comprobante ISLR). */
+export interface TaxPayableInvoiceRow {
+  orderId: string;
+  orderNumber: string;
+  internalNumber: string;
+  invoiceNumber: string | null;
+  controlNumber: string | null;
+  /** Fecha de facturación de la orden (ISO). */
+  invoiceDate: string;
+  /** Bruto del proveedor para esa orden en Bs (grossUsd × tasa facturación). */
+  grossBs: number;
+}
+
 @Entity({ name: 'taxes_payable' })
 @Index('idx_tp_status', ['status'])
 @Index('idx_tp_doctor', ['doctorId'])
@@ -122,4 +135,17 @@ export class TaxPayable {
    * retención. Lo popula el servicio al listar/ver para los comprobantes/UI.
    */
   internalNumbers?: string[];
+
+  /**
+   * Transients del ajuste de UT del lote SENIAT (NO columnas). Retención
+   * recalculada con la UT de ajuste; sólo presentes si el lote tiene ajuste.
+   */
+  adjustedTaxAmountBs?: number;
+  adjustedSubtrahendBs?: number;
+
+  /**
+   * Transient (NO columna). Facturas de las órdenes del lote AP de origen
+   * (para las filas del comprobante ISLR). Lo popula el servicio en el detalle.
+   */
+  invoices?: TaxPayableInvoiceRow[];
 }

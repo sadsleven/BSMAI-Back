@@ -1231,8 +1231,12 @@ export class ReportsService {
               p."amountCurrency", p."amountValue"::text AS "amountValue",
               p."amountInUsd"::text AS "amountInUsd", p."amountInBs"::text AS "amountInBs",
               ar."receivableNumber",
-              CASE WHEN ar."insuranceId" IS NOT NULL THEN 'insurance' ELSE 'holder' END AS "debtorType",
-              COALESCE(i."name", h."businessName", h."firstName" || ' ' || h."lastName") AS "debtorName"
+              CASE WHEN ar."insuranceId" IS NOT NULL THEN 'insurance'
+                   WHEN ar."holderId" IS NOT NULL THEN 'holder'
+                   ELSE 'cashea' END AS "debtorType",
+              COALESCE(i."name", h."businessName", h."firstName" || ' ' || h."lastName",
+                       CASE WHEN ar."insuranceId" IS NULL AND ar."holderId" IS NULL THEN 'Cashea' END
+              ) AS "debtorName"
        FROM "accounts_receivable_payments" p
        JOIN "accounts_receivable_payment_links" l ON l."paymentId" = p.id
        JOIN "accounts_receivable" ar ON ar.id = l."receivableId"

@@ -74,10 +74,14 @@ export class AccountsReceivablePaymentDto {
   amountValue: number;
 }
 
-/** Crear un lote de Cuentas por cobrar para UN deudor, con sus órdenes. */
+/**
+ * Crear un lote de Cuentas por cobrar para UN deudor, con sus órdenes.
+ * `debtorType='cashea'` no lleva insuranceId/holderId: el deudor es Cashea y
+ * el lote puede agrupar órdenes cashea de titulares distintos.
+ */
 export class CreateAccountsReceivableBatchDto {
-  @IsIn(['insurance', 'holder'])
-  debtorType: 'insurance' | 'holder';
+  @IsIn(['insurance', 'holder', 'cashea'])
+  debtorType: 'insurance' | 'holder' | 'cashea';
 
   @IsOptional()
   @IsUUID()
@@ -131,8 +135,8 @@ export class QueryPendingReceivableDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['insurance', 'holder'])
-  debtorType?: 'insurance' | 'holder';
+  @IsIn(['insurance', 'holder', 'cashea'])
+  debtorType?: 'insurance' | 'holder' | 'cashea';
 
   @IsOptional()
   @IsUUID()
@@ -175,8 +179,8 @@ export class QueryAccountsReceivableDto {
   holderId?: string;
 
   @IsOptional()
-  @IsIn(['insurance', 'holder'])
-  debtorType?: 'insurance' | 'holder';
+  @IsIn(['insurance', 'holder', 'cashea'])
+  debtorType?: 'insurance' | 'holder' | 'cashea';
 
   @IsOptional()
   @IsUUID()

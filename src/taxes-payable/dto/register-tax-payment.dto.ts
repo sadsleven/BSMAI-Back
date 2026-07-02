@@ -74,6 +74,26 @@ export class CreateTaxBatchDto {
   taxPayableIds: string[];
 }
 
+/**
+ * Ajuste de UT del lote SENIAT: `taxUnitId` nulo o ausente quita el ajuste;
+ * con UUID, el monto a pagar al fisco se recalcula con esa UT.
+ */
+export class SetTaxBatchAdjustmentDto {
+  @IsOptional()
+  @IsUUID()
+  taxUnitId?: string | null;
+}
+
+/** Guardar los datos del comprobante ISLR del lote (N° + fecha de emisión). */
+export class SetTaxBatchComprobanteDto {
+  @IsString()
+  @MaxLength(50)
+  comprobanteNumber: string;
+
+  @IsISO8601()
+  issueDate: string;
+}
+
 /** Agregar/quitar obligaciones de un lote existente. */
 export class MutateTaxBatchObligationsDto {
   @IsArray()

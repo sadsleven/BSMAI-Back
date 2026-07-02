@@ -73,12 +73,23 @@ export class CreateAccountsPayableBatchDto {
   @IsUUID()
   careCenterId?: string;
 
+  /** UT para la retención SENIAT del lote. Sin enviar = UT vigente. */
+  @IsOptional()
+  @IsUUID()
+  taxUnitId?: string;
+
   @IsArray()
   @ArrayMinSize(1, { message: 'Agregá al menos una orden interna' })
   @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   internalOrderIds: string[];
+}
+
+/** Cambiar la UT del cálculo de retención de un lote existente. */
+export class SetPayableTaxUnitDto {
+  @IsUUID()
+  taxUnitId: string;
 }
 
 /** Agregar/quitar órdenes internas de un lote existente (mismo proveedor). */

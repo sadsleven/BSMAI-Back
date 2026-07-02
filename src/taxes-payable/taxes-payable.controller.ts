@@ -17,6 +17,8 @@ import {
   QueryPendingTaxDto,
   QueryTaxesPayableDto,
   RegisterTaxPaymentDto,
+  SetTaxBatchAdjustmentDto,
+  SetTaxBatchComprobanteDto,
   TaxPayablePaymentDto,
 } from './dto/register-tax-payment.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -73,6 +75,26 @@ export class TaxesPayableController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.removeObligations(id, dto.taxPayableIds, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.UPDATE)
+  @Patch(':id/adjustment')
+  setAdjustment(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetTaxBatchAdjustmentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setAdjustment(id, dto.taxUnitId ?? null, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.UPDATE)
+  @Patch(':id/comprobante')
+  setComprobante(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetTaxBatchComprobanteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setComprobante(id, dto.comprobanteNumber, dto.issueDate, user);
   }
 
   @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.UPDATE)

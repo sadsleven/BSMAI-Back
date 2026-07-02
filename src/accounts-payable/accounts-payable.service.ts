@@ -13,6 +13,7 @@ import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
+import { TaxUnit } from '../tax-units/entities/tax-unit.entity';
 import { TaxUnitsService } from '../tax-units/tax-units.service';
 import {
   AccountsPayablePaymentDto,
@@ -197,6 +198,7 @@ export class AccountsPayableService {
       .createQueryBuilder('ap')
       .leftJoinAndSelect('ap.doctor', 'doctor')
       .leftJoinAndSelect('ap.careCenter', 'careCenter')
+      .leftJoinAndSelect('ap.taxUnit', 'taxUnit')
       .leftJoinAndSelect('ap.orders', 'apo')
       .leftJoinAndSelect('apo.internalOrder', 'iio')
       .leftJoinAndSelect('iio.order', 'order')
@@ -269,6 +271,7 @@ export class AccountsPayableService {
       relations: {
         doctor: true,
         careCenter: true,
+        taxUnit: true,
         orders: { internalOrder: { order: { branch: true, billingExchangeRate: true } } },
         payments: { exchangeRate: true },
       },
@@ -294,13 +297,25 @@ export class AccountsPayableService {
     return Number(ut.amountBs);
   }
 
+  /** UT elegida por el usuario (validada) o la vigente si no se envió. */
+  private async resolveTaxUnit(taxUnitId?: string | null): Promise<TaxUnit> {
+    if (!taxUnitId) return this.taxUnits.getCurrentOrThrow();
+    const ut = await this.taxUnits.findOne(taxUnitId);
+    if (!ut.isActive) {
+      throw new BadRequestException(
+        'La Unidad Tributaria seleccionada está deshabilitada',
+      );
+    }
+    return ut;
+  }
+
   private personTypeOf(batch: AccountsPayable): SeniatPersonType {
     if (batch.recipientType === 'care_center') return 'legal_entity';
     return batch.doctor?.isLegalEntity ? 'legal_entity' : 'natural';
   }
 
   /** Calcula y adjunta los campos transient (gross/retención/neto/pagado/pendiente). */
-  private computeFigures(batch: AccountsPayable, taxUnitBs: number): void {
+  private computeFigures(batch: AccountsPayable, fallbackTaxUnitBs: number): void {
     let grossUsd = 0;
     let grossBs = 0;
     for (const apo of batch.orders ?? []) {
@@ -313,6 +328,9 @@ export class AccountsPayableService {
     }
     grossUsd = round2(grossUsd);
     grossBs = round2(grossBs);
+    const taxUnitBs = batch.taxUnit
+      ? Number(batch.taxUnit.amountBs)
+      : fallbackTaxUnitBs;
     const retention = calcRetention({
       grossBs,
       personType: this.personTypeOf(batch),
@@ -355,7 +373,7 @@ export class AccountsPayableService {
     grossUsd = round2(grossUsd);
     grossBs = round2(grossBs);
     const personType = this.personTypeOf(batch);
-    const taxUnit = await this.taxUnits.getCurrentOrThrow();
+    const taxUnit = batch.taxUnit ?? (await this.taxUnits.getCurrentOrThrow());
     const taxUnitAmountBs = Number(taxUnit.amountBs);
     const retention = calcRetention({ grossBs, personType, taxUnitBs: taxUnitAmountBs });
     return {
@@ -395,6 +413,7 @@ export class AccountsPayableService {
         );
       }
     }
+    const taxUnit = await this.resolveTaxUnit(dto.taxUnitId);
 
     const id = await this.dataSource.transaction(async (mgr) => {
       const seq = await mgr.query<{ nextval: string }[]>(
@@ -402,13 +421,14 @@ export class AccountsPayableService {
       );
       const payableNumber = String(seq[0].nextval);
       const inserted = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "status")
-         VALUES ($1, $2, $3, $4, 'unpaid') RETURNING id`,
+        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "status")
+         VALUES ($1, $2, $3, $4, $5, 'unpaid') RETURNING id`,
         [
           payableNumber,
           dto.recipientType,
           dto.recipientType === 'doctor' ? providerId : null,
           dto.recipientType === 'care_center' ? providerId : null,
+          taxUnit.id,
         ],
       );
       const batchId = inserted[0].id;
@@ -486,6 +506,31 @@ export class AccountsPayableService {
          WHERE "payableId" = $1 AND "internalOrderId" = ANY($2)`,
         [id, internalOrderIds],
       );
+      await this.recomputeBatchStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  /**
+   * Cambia la UT del lote y recalcula neto/estado. Bloqueado si ya está pagado
+   * (editá o quitá un pago primero): el neto define el cuadre de los pagos.
+   */
+  async setTaxUnit(
+    id: string,
+    taxUnitId: string,
+    user: AuthenticatedUser,
+  ): Promise<AccountsPayable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'El lote ya está pagado. Para cambiar la Unidad Tributaria, edita o elimina un pago primero.',
+      );
+    }
+    const taxUnit = await this.resolveTaxUnit(taxUnitId);
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(AccountsPayable, id, { taxUnitId: taxUnit.id });
       await this.recomputeBatchStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
