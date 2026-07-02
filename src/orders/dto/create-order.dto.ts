@@ -60,6 +60,14 @@ export class CreateOrderDto {
   @MaxLength(30, { message: 'La clave de servicio no puede superar 30 caracteres' })
   serviceKey?: string;
 
+  /**
+   * Orden de reembolso. Sólo aplica a `type='credit'`; en otros tipos se ignora
+   * (el service lo fuerza a false). Cuando true, la orden interna muestra "R".
+   */
+  @IsOptional()
+  @IsBoolean()
+  isReimbursement?: boolean;
+
   @IsUUID()
   specialtyId: string;
 
@@ -92,9 +100,11 @@ export class CreateOrderDto {
   priceAmount: number;
 
   /**
-   * Monto de la primera cuota (inicial) Cashea, en USD. Requerido sólo cuando
-   * `type='cashea'`. Debe ser ≥ 0 y ≤ priceAmount (validado en service). Se usa
-   * para la comisión: primeraCuota × firstInstallmentRate + total × totalRate.
+   * Monto de la inicial Cashea, en USD. Requerido sólo cuando `type='cashea'`.
+   * En el FE se ingresa como % del total (0 ≤ pct < 100) y el monto viaja ya
+   * derivado. Debe ser ≥ 0 y < priceAmount (validado en service; 100% o más no
+   * permitido). La cobra el comercio del titular en el Paso 1; el restante
+   * (total − inicial) lo financia Cashea.
    */
   @ValidateIf((o: CreateOrderDto) => o.type === 'cashea')
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -102,14 +112,10 @@ export class CreateOrderDto {
   casheaFirstInstallmentAmount?: number;
 
   /**
-   * Sólo válido para `type='insurance'`. Cuando true, la cuenta por cobrar del
-   * seguro se fija en Bs usando `fixedExchangeRateId`. Requiere también que
-   * `fixedExchangeRateId` esté presente y apunte a una tasa USD/Bs.
+   * Tasa de la orden (USD/Bs) para seguros indexados. `useFixedRate` ya no se
+   * envía: el service lo deriva de si el seguro es indexado. Cuando el seguro es
+   * indexado, esta tasa (día de la orden) es obligatoria; si no, se ignora.
    */
-  @IsOptional()
-  @IsBoolean()
-  useFixedRate?: boolean;
-
   @IsOptional()
   @IsUUID()
   fixedExchangeRateId?: string;

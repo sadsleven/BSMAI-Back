@@ -1,8 +1,8 @@
 import { Order } from '../orders/entities/order.entity';
 
 /**
- * Comisión Cashea (USD) snapshot de una orden = primeraCuota × firstRate +
- * total × totalRate. 0 si la orden no es Cashea o le faltan snapshots.
+ * Comisión Cashea (USD) snapshot de una orden = total × commissionRate.
+ * 0 si la orden no es Cashea o le falta el snapshot de tasa.
  *
  * Cálculo exacto en centavos enteros (redondeo mitad-arriba) para evitar el
  * drift de punto flotante de `Number.toFixed`.
@@ -11,22 +11,37 @@ export function casheaCommissionForOrder(order: Order): number {
   if (order.type !== 'cashea') return 0;
   const price = Number(order.priceAmount);
   if (!Number.isFinite(price)) return 0;
-  const firstAmount = Number(order.casheaFirstInstallmentAmount) || 0;
-  const firstRate = Number(order.casheaFirstInstallmentRate) || 0;
-  const totalRate = Number(order.casheaTotalRate) || 0;
-  const firstCents = Math.round(firstAmount * 100);
+  const rate = Number(order.casheaCommissionRate) || 0;
   const priceCents = Math.round(price * 100);
-  const r1 = Math.round(firstRate * 10000);
-  const r2 = Math.round(totalRate * 10000);
-  const commissionCents = Math.round((firstCents * r1 + priceCents * r2) / 10000);
-  return commissionCents / 100;
+  const rc = Math.round(rate * 10000);
+  return Math.round((priceCents * rc) / 10000) / 100;
 }
 
 /**
- * Target USD que el comercio espera cobrar por una orden. Para órdenes Cashea
- * descuenta la comisión snapshot Y la cuota inicial (cobrada del titular en el
- * Paso 1 como pago real), porque la cuenta por cobrar Cashea sólo cubre el resto
- * financiado por Cashea — el inicial ya está cobrado y no se cuenta de nuevo.
+ * Financiamiento Cashea (USD) snapshot de una orden = restante × financingRate,
+ * donde restante = total − inicial. 0 si no es Cashea o le falta el snapshot.
+ *
+ * Cálculo exacto en centavos enteros (redondeo mitad-arriba).
+ */
+export function casheaFinancingForOrder(order: Order): number {
+  if (order.type !== 'cashea') return 0;
+  const price = Number(order.priceAmount);
+  if (!Number.isFinite(price)) return 0;
+  const initial = Number(order.casheaFirstInstallmentAmount) || 0;
+  const rate = Number(order.casheaFinancingRate) || 0;
+  const remainingCents = Math.max(
+    0,
+    Math.round(price * 100) - Math.round(initial * 100),
+  );
+  const rf = Math.round(rate * 10000);
+  return Math.round((remainingCents * rf) / 10000) / 100;
+}
+
+/**
+ * Target USD que el comercio espera cobrar por una orden. Para órdenes Cashea:
+ *   restante = total − inicial   (la inicial la cobró el comercio del titular en
+ *                                 el Paso 1, no entra en la cuenta por cobrar)
+ *   target   = restante − comisión − financiamiento
  * Resto de tipos esperan priceAmount. No aplica a órdenes `useFixedRate=true`.
  */
 export function targetUsdForOrder(order: Order): number {
@@ -34,7 +49,10 @@ export function targetUsdForOrder(order: Order): number {
   if (!Number.isFinite(price)) return 0;
   if (order.type === 'cashea') {
     const initial = Number(order.casheaFirstInstallmentAmount) || 0;
-    return Math.max(0, +(price - casheaCommissionForOrder(order) - initial).toFixed(2));
+    const remaining = Math.max(0, +(price - initial).toFixed(2));
+    const commission = casheaCommissionForOrder(order);
+    const financing = casheaFinancingForOrder(order);
+    return Math.max(0, +(remaining - commission - financing).toFixed(2));
   }
   return price;
 }

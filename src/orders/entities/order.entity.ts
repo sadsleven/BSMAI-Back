@@ -118,6 +118,14 @@ export class Order {
   @Column({ type: 'varchar', length: 30, nullable: true })
   serviceKey?: string | null;
 
+  /**
+   * Orden de reembolso. Sólo puede ser true cuando `type='credit'`
+   * (CHECK chk_orders_reimbursement_only_credit). Cuando true, la orden interna
+   * (Paso 2) muestra "R" en la Clave de Servicio.
+   */
+  @Column({ type: 'boolean', default: false })
+  isReimbursement: boolean;
+
   @Column({ type: 'uuid' })
   specialtyId: string;
 
@@ -157,25 +165,28 @@ export class Order {
   priceAmount: string;
 
   /**
-   * Comisión Cashea en dos tramos (snapshot al crear la orden). Sólo se setean
-   * cuando `type='cashea'` (CHECK chk_orders_cashea_fields). Preservan los
-   * valores aunque el admin cambie la config global en `app_config` después.
+   * Snapshot Cashea al crear la orden. Sólo se setean cuando `type='cashea'`
+   * (CHECK chk_orders_cashea_fields). Preservan los valores aunque el admin
+   * cambie la config global en `app_config` después.
    *
-   * Comisión = casheaFirstInstallmentAmount × casheaFirstInstallmentRate
-   *          + priceAmount × casheaTotalRate.
-   * Neto a cobrar = priceAmount − comisión.
+   * La INICIAL (`casheaFirstInstallmentAmount`) la cobra el comercio del titular
+   * en el Paso 1 y NO genera comisión propia.
+   *   restante       = priceAmount − casheaFirstInstallmentAmount
+   *   comisión       = priceAmount × casheaCommissionRate
+   *   financiamiento = restante × casheaFinancingRate
+   *   Neto a cobrar  = restante − comisión − financiamiento.
    */
-  /** Monto de la primera cuota (inicial), en USD. Ingresado por orden. */
+  /** Monto de la inicial, en USD. Ingresado por orden. */
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   casheaFirstInstallmentAmount?: string | null;
 
-  /** % sobre la primera cuota (fracción 0..1). Ej. 0.04 = 4%. */
+  /** % comisión sobre el total de la venta (fracción 0..1). Ej. 0.0464 = 4.64%. */
   @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
-  casheaFirstInstallmentRate?: string | null;
+  casheaCommissionRate?: string | null;
 
-  /** % sobre el total de la orden (fracción 0..1). Ej. 0.06 = 6%. */
+  /** % financiamiento sobre el restante (total − inicial) (fracción 0..1). Ej. 0.062 = 6.2%. */
   @Column({ type: 'numeric', precision: 5, scale: 4, nullable: true })
-  casheaTotalRate?: string | null;
+  casheaFinancingRate?: string | null;
 
   /**
    * Modo tasa fija para órdenes tipo seguro. Cuando true, la cuenta por cobrar
@@ -272,6 +283,14 @@ export class Order {
   @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'billingExchangeRateId' })
   billingExchangeRate?: ExchangeRate | null;
+
+  /** Número de factura fiscal capturado al facturar (Paso 4). */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  invoiceNumber?: string | null;
+
+  /** Número de control fiscal capturado al facturar (Paso 4). */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  controlNumber?: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

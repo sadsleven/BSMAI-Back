@@ -30,6 +30,7 @@ import { targetBsForOrder, targetUsdForOrder } from './ar-targets';
 // Re-export para compatibilidad con specs/consumidores existentes.
 export {
   casheaCommissionForOrder,
+  casheaFinancingForOrder,
   targetUsdForOrder,
   targetBsForOrder,
 } from './ar-targets';
@@ -43,7 +44,7 @@ export interface PendingReceivable {
   orderId: string;
   orderNumber: string;
   orderType: string;
-  debtorType: 'insurance' | 'holder';
+  debtorType: 'insurance' | 'holder' | 'cashea';
   insuranceId: string | null;
   holderId: string | null;
   debtorName: string;
@@ -119,7 +120,8 @@ export class AccountsReceivableService {
       where.push(`o."branchId" = ANY($${params.length})`);
     }
     if (debtorType === 'insurance') where.push(`o."type" = 'insurance'`);
-    if (debtorType === 'holder') where.push(`o."type" IN ('credit','cashea')`);
+    if (debtorType === 'holder') where.push(`o."type" = 'credit'`);
+    if (debtorType === 'cashea') where.push(`o."type" = 'cashea'`);
     if (insuranceId) {
       params.push(insuranceId);
       where.push(`o."insuranceId" = $${params.length}`);
@@ -171,8 +173,8 @@ export class AccountsReceivableService {
         useFixedRate: boolean;
         priceAmount: string;
         casheaFirstInstallmentAmount: string | null;
-        casheaFirstInstallmentRate: string | null;
-        casheaTotalRate: string | null;
+        casheaCommissionRate: string | null;
+        casheaFinancingRate: string | null;
         fixedRateBs: string | null;
         branchId: string;
         branchName: string | null;
@@ -183,7 +185,7 @@ export class AccountsReceivableService {
               o."insuranceId", o."holderId", i."name" AS "insuranceName",
               p."firstName", p."lastName", p."businessName", p."cedula", p."rif",
               o."useFixedRate", o."priceAmount",
-              o."casheaFirstInstallmentAmount", o."casheaFirstInstallmentRate", o."casheaTotalRate",
+              o."casheaFirstInstallmentAmount", o."casheaCommissionRate", o."casheaFinancingRate",
               fx."amountBs" AS "fixedRateBs",
               o."branchId", b."name" AS "branchName", o."createdAt"
        FROM "orders" o
@@ -202,13 +204,18 @@ export class AccountsReceivableService {
         type: r.orderType,
         priceAmount: r.priceAmount,
         casheaFirstInstallmentAmount: r.casheaFirstInstallmentAmount,
-        casheaFirstInstallmentRate: r.casheaFirstInstallmentRate,
-        casheaTotalRate: r.casheaTotalRate,
+        casheaCommissionRate: r.casheaCommissionRate,
+        casheaFinancingRate: r.casheaFinancingRate,
         useFixedRate: r.useFixedRate,
         fixedExchangeRate: r.fixedRateBs != null ? { amountBs: r.fixedRateBs } : null,
       } as unknown as Order;
-      const debtorType: 'insurance' | 'holder' =
-        r.orderType === 'insurance' ? 'insurance' : 'holder';
+      const debtorType: 'insurance' | 'holder' | 'cashea' =
+        r.orderType === 'insurance'
+          ? 'insurance'
+          : r.orderType === 'cashea'
+            ? 'cashea'
+            : 'holder';
+      // Cashea: el deudor es la fintech, pero mostramos el titular como referencia.
       const debtorName =
         debtorType === 'insurance'
           ? r.insuranceName ?? '—'
@@ -283,6 +290,8 @@ export class AccountsReceivableService {
     if (holderId) qb.andWhere('ar.holderId = :holderId', { holderId });
     if (debtorType === 'insurance') qb.andWhere('ar.insuranceId IS NOT NULL');
     if (debtorType === 'holder') qb.andWhere('ar.holderId IS NOT NULL');
+    if (debtorType === 'cashea')
+      qb.andWhere('ar.insuranceId IS NULL AND ar.holderId IS NULL');
     if (branchId) {
       qb.andWhere(
         `EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro3
@@ -330,7 +339,11 @@ export class AccountsReceivableService {
       relations: {
         insurance: true,
         holder: { phones: true },
-        orders: { order: { branch: true } },
+        // holder/patient/fixedExchangeRate de cada orden: los usa el estado de
+        // cuenta Excel del lote de seguro en el FE.
+        orders: {
+          order: { branch: true, holder: true, patient: true, fixedExchangeRate: true },
+        },
         payments: { exchangeRate: true },
       },
     });
@@ -380,8 +393,14 @@ export class AccountsReceivableService {
     dto: CreateAccountsReceivableBatchDto,
     user: AuthenticatedUser,
   ): Promise<AccountsReceivable> {
-    const debtorId = dto.debtorType === 'insurance' ? dto.insuranceId : dto.holderId;
-    if (!debtorId) {
+    // Cashea: el deudor es la fintech (sin insuranceId/holderId en el lote).
+    const debtorId =
+      dto.debtorType === 'insurance'
+        ? dto.insuranceId
+        : dto.debtorType === 'holder'
+          ? dto.holderId
+          : null;
+    if (dto.debtorType !== 'cashea' && !debtorId) {
       throw new BadRequestException(
         `Falta ${dto.debtorType === 'insurance' ? 'insuranceId' : 'holderId'}`,
       );
@@ -398,7 +417,7 @@ export class AccountsReceivableService {
         [
           String(seq[0].nextval),
           dto.debtorType === 'insurance' ? debtorId : null,
-          dto.debtorType === 'holder' ? debtorId : null,
+          dto.debtorType === 'holder' ? debtorId : null, // cashea → ambos NULL
         ],
       );
       const batchId = inserted[0].id;
@@ -432,10 +451,14 @@ export class AccountsReceivableService {
     await this.assertVisibility(batch, user);
     if (batch.status === 'collected' || batch.status === 'overcollected') {
       throw new BadRequestException(
-        'No se pueden agregar órdenes a un lote ya cobrado. Editá o quitá un cobro primero.',
+        'No se pueden agregar órdenes a un lote ya cobrado. Edita o quita un cobro primero.',
       );
     }
-    const debtorType: 'insurance' | 'holder' = batch.insuranceId ? 'insurance' : 'holder';
+    const debtorType: 'insurance' | 'holder' | 'cashea' = batch.insuranceId
+      ? 'insurance'
+      : batch.holderId
+        ? 'holder'
+        : 'cashea';
     const dtoLike = {
       debtorType,
       insuranceId: batch.insuranceId ?? undefined,
@@ -475,7 +498,7 @@ export class AccountsReceivableService {
     await this.assertVisibility(batch, user);
     const remaining = (batch.orders ?? []).filter((o) => !orderIds.includes(o.orderId));
     if (remaining.length === 0) {
-      throw new BadRequestException('El lote quedaría vacío. Eliminá el lote en su lugar.');
+      throw new BadRequestException('El lote quedaría vacío. Elimina el lote en su lugar.');
     }
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(
@@ -535,14 +558,23 @@ export class AccountsReceivableService {
       if (allowed && !allowed.has(o.branchId)) {
         throw new ForbiddenException('No tenés acceso a una de las órdenes');
       }
-      // Deudor uniforme.
-      const oDebtorType: 'insurance' | 'holder' =
-        o.type === 'insurance' ? 'insurance' : 'holder';
-      const oDebtorId = oDebtorType === 'insurance' ? o.insuranceId : o.holderId;
-      if (oDebtorType !== dto.debtorType || oDebtorId !== debtorId) {
+      // Deudor uniforme. Cashea: basta que la orden sea cashea (el deudor es la
+      // fintech; puede mezclar titulares distintos).
+      const oDebtorType: 'insurance' | 'holder' | 'cashea' =
+        o.type === 'insurance' ? 'insurance' : o.type === 'cashea' ? 'cashea' : 'holder';
+      if (oDebtorType !== dto.debtorType) {
         throw new BadRequestException(
-          'Todas las órdenes del lote deben ser del mismo deudor seleccionado',
+          'Todas las órdenes del lote deben ser del mismo tipo de deudor',
         );
+      }
+      if (dto.debtorType !== 'cashea') {
+        const oDebtorId =
+          oDebtorType === 'insurance' ? o.insuranceId : o.holderId;
+        if (oDebtorId !== debtorId) {
+          throw new BadRequestException(
+            'Todas las órdenes del lote deben ser del mismo deudor seleccionado',
+          );
+        }
       }
       // Modo uniforme.
       if (forcedMode && (forcedMode === 'fixed') !== o.useFixedRate) {
@@ -582,7 +614,7 @@ export class AccountsReceivableService {
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
 
-    const usdRateId = batch.orders[0]?.order?.billingExchangeRateId ?? null;
+    const usdRateId = this.batchUsdRateId(batch);
     this.computeFigures(batch); // fija batch.mode según las órdenes del lote
     const newTotal =
       batch.mode === 'fixed'
@@ -620,7 +652,7 @@ export class AccountsReceivableService {
     if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
       throw new NotFoundException('Cobro no encontrado en este lote');
     }
-    const usdRateId = batch.orders[0]?.order?.billingExchangeRateId ?? null;
+    const usdRateId = this.batchUsdRateId(batch);
     await this.dataSource.transaction(async (mgr) => {
       const payload = await this.resolvePaymentForSave(dto, usdRateId);
       await mgr.update(AccountsReceivablePayment, paymentId, payload);
@@ -701,6 +733,27 @@ export class AccountsReceivableService {
   // ---------------------------------------------------------------------------
   // Conversión de cobros (sin cambios respecto al modelo anterior).
   // ---------------------------------------------------------------------------
+  /**
+   * Tasa USD/Bs de referencia para convertir los cobros del lote:
+   *  - Modo tasa fija (seguro indexado): la tasa fija snapshot de la orden
+   *    (primera del lote que tenga una) — el cobro se convierte a la tasa
+   *    fijada en la orden, no a la del día.
+   *  - Modo USD: la tasa de facturación de la primera orden; sin ella,
+   *    `resolveUsdRate` cae a la última tasa USD.
+   */
+  private batchUsdRateId(batch: AccountsReceivable): string | null {
+    const fixed = (batch.orders ?? []).some((o) => o.useFixedRate);
+    if (fixed) {
+      const withFixed = (batch.orders ?? []).find(
+        (o) => o.order?.fixedExchangeRateId,
+      );
+      if (withFixed?.order?.fixedExchangeRateId) {
+        return withFixed.order.fixedExchangeRateId;
+      }
+    }
+    return batch.orders?.[0]?.order?.billingExchangeRateId ?? null;
+  }
+
   private async resolvePaymentForSave(
     p: AccountsReceivablePaymentDto,
     usdExchangeRateId?: string | null,

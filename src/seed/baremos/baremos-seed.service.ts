@@ -9,8 +9,22 @@ import { DoctorServicePrice } from '../../doctors/entities/doctor-service-price.
 import { Specialty } from '../../specialties/entities/specialty.entity';
 import { BAREMO_INSURANCES } from './baremos.data';
 import { BAREMO_DOCTORS } from './baremos-doctors.data';
+import {
+  STD_CANONICAL_BY_NORMKEY,
+  STD_DELETE_NORMKEYS,
+} from './standardization-map';
 
 const CHUNK = 200;
+
+/** Quita caracteres de control (0x00-0x1f y 0x7f). */
+function stripControl(s: string): string {
+  return Array.from(s)
+    .filter((ch) => {
+      const c = ch.charCodeAt(0);
+      return c > 31 && c !== 127;
+    })
+    .join('');
+}
 
 /** Quita diacríticos (NFD + remueve combinantes). */
 function stripAccents(s: string): string {
@@ -20,6 +34,25 @@ function stripAccents(s: string): string {
 /** Clave de agrupación: sin acentos, MAYÚSCULAS, sin espacios extremos. */
 function normKey(s: string): string {
   return stripAccents(s).toUpperCase().trim();
+}
+
+const STD_DELETES = new Set(STD_DELETE_NORMKEYS);
+
+/**
+ * Nombre canónico aprobado (ESTANDARIZACION-BAREMOS.md) para un nombre de baremo.
+ * Devuelve `null` si el nombre es basura aprobada para eliminar (se omite del seed).
+ * Mantiene en sincronía el seeder con la migración StandardizeServiceTypeNames:
+ * ambos salen de `standardization-map.ts` / `*.data.json` (regenerar con
+ * `node scripts/gen-baremos-standardization.cjs` si cambia el reporte).
+ */
+function canonicalName(raw: string): string | null {
+  const cleaned = stripControl(raw).trim();
+  const k = normKey(cleaned);
+  if (STD_DELETES.has(k)) return null;
+  const mapped = STD_CANONICAL_BY_NORMKEY[k];
+  if (mapped) return mapped;
+  // estudios RX sueltos (no fusionados): normaliza el prefijo "RX." -> "RX "
+  return cleaned.replace(/^RX\.\s*/, 'RX ');
 }
 
 /** True si el nombre tiene algún acento/diacrítico. */
@@ -177,12 +210,14 @@ export class BaremosSeedService {
     const union = new Map<string, { name: string; max: number }>();
     for (const ins of BAREMO_INSURANCES) {
       for (const s of ins.services) {
-        const key = normKey(s.name);
+        const cname = canonicalName(s.name); // mapea sinónimos/typos/puntuación al canónico
+        if (cname === null) continue; // basura aprobada para omitir
+        const key = normKey(cname);
         const cur = union.get(key);
-        if (!cur) union.set(key, { name: s.name, max: s.priceUsd });
+        if (!cur) union.set(key, { name: cname, max: s.priceUsd });
         else {
           if (s.priceUsd > cur.max) cur.max = s.priceUsd;
-          cur.name = preferName(cur.name, s.name);
+          cur.name = preferName(cur.name, cname);
         }
       }
     }
@@ -297,7 +332,9 @@ export class BaremosSeedService {
       const toUpdate: InsuranceServicePrice[] = [];
       const seen = new Set<string>();
       for (const s of ins.services) {
-        const serviceTypeId = stIdByKey.get(normKey(s.name));
+        const cname = canonicalName(s.name);
+        if (cname === null) continue;
+        const serviceTypeId = stIdByKey.get(normKey(cname));
         if (!serviceTypeId) continue;
         // dos variantes (acento/no) del mismo baremo colapsan al mismo ST: el
         // primero gana, evita doble insert del par (insuranceId, serviceTypeId).
@@ -387,12 +424,14 @@ export class BaremosSeedService {
         if (touched) await this.doctorRepo.save(doctor);
       }
 
-      // resuelve el ST por clave normalizada; lo crea si es exclusivo del baremo particular
-      const stKey = normKey(d.serviceTypeName);
+      // resuelve el ST por canónico; lo crea si es exclusivo del baremo particular
+      const stCanon = canonicalName(d.serviceTypeName);
+      if (stCanon === null) continue; // basura aprobada para omitir
+      const stKey = normKey(stCanon);
       let serviceTypeId = stIdByKey.get(stKey);
       if (!serviceTypeId) {
         const createdSt = await this.stRepo.save(
-          this.stRepo.create({ name: d.serviceTypeName, isActive: true }),
+          this.stRepo.create({ name: stCanon, isActive: true }),
         );
         serviceTypeId = createdSt.id;
         stIdByKey.set(stKey, serviceTypeId);

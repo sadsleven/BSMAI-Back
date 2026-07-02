@@ -23,14 +23,18 @@ export type AccountsReceivableStatus =
   | 'partially_collected'
   | 'overcollected';
 
-/** Tipo de deudor: seguro (orden type='insurance') o titular (orden type='credit'/'cashea'). */
-export type AccountsReceivableDebtorType = 'insurance' | 'holder';
+/**
+ * Tipo de deudor: seguro (orden type='insurance'), titular (type='credit') o
+ * Cashea (type='cashea', la fintech paga — el lote puede mezclar titulares).
+ */
+export type AccountsReceivableDebtorType = 'insurance' | 'holder' | 'cashea';
 
 /**
- * LOTE de Cuentas por cobrar. Creado por el usuario para UN deudor (seguro o
- * titular), agrupa N órdenes (`orders` → {@link AccountsReceivableOrder}) y
- * acumula M cobros. El target/modo (Bs tasa fija vs USD) se snapshotea por orden
- * en el pivot. Sin tope: puede quedar `overcollected`.
+ * LOTE de Cuentas por cobrar. Creado por el usuario para UN deudor (seguro,
+ * titular o Cashea), agrupa N órdenes (`orders` → {@link AccountsReceivableOrder})
+ * y acumula M cobros. El target/modo (Bs tasa fija vs USD) se snapshotea por
+ * orden en el pivot. Sin tope: puede quedar `overcollected`.
+ * Deudor Cashea = `insuranceId` y `holderId` ambos NULL.
  */
 @Entity({ name: 'accounts_receivable' })
 @Index('idx_ar_status', ['status'])
@@ -43,7 +47,7 @@ export class AccountsReceivable {
   @Column({ type: 'varchar', length: 32, unique: true })
   receivableNumber: string;
 
-  /** Seguro deudor. Excluyente con `holderId` (CHECK ck_ar_debtor_xor). */
+  /** Seguro deudor. Excluyente con `holderId` (CHECK ck_ar_debtor_xor). Ambos NULL = Cashea. */
   @Column({ type: 'uuid', nullable: true })
   insuranceId?: string | null;
 

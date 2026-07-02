@@ -18,6 +18,7 @@ import {
   QueryAccountsPayableDto,
   QueryPendingPayableDto,
   RegisterPaymentDto,
+  SetPayableTaxUnitDto,
 } from './dto/register-payment.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -82,6 +83,16 @@ export class AccountsPayableController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.removeOrders(id, dto.internalOrderIds, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
+  @Patch(':id/tax-unit')
+  setTaxUnit(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetPayableTaxUnitDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setTaxUnit(id, dto.taxUnitId, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)

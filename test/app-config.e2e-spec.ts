@@ -6,7 +6,7 @@ import { authHeader, loginAsSuperAdmin } from './helpers/auth';
 describe('AppConfigController (e2e)', () => {
   let app: INestApplication;
   let token: string;
-  let original: { firstInstallmentRate: number; totalRate: number } | null = null;
+  let original: { commissionRate: number; financingRate: number } | null = null;
 
   beforeAll(async () => {
     app = await bootstrapApp();
@@ -28,16 +28,16 @@ describe('AppConfigController (e2e)', () => {
     await request(app.getHttpServer()).get('/app-config/cashea').expect(401);
   });
 
-  it('GET /app-config/cashea → devuelve firstInstallmentRate y totalRate', async () => {
+  it('GET /app-config/cashea → devuelve commissionRate y financingRate', async () => {
     const res = await request(app.getHttpServer())
       .get('/app-config/cashea')
       .set(authHeader(token))
       .expect(200);
-    expect(typeof res.body.firstInstallmentRate).toBe('number');
-    expect(typeof res.body.totalRate).toBe('number');
+    expect(typeof res.body.commissionRate).toBe('number');
+    expect(typeof res.body.financingRate).toBe('number');
     original = {
-      firstInstallmentRate: res.body.firstInstallmentRate,
-      totalRate: res.body.totalRate,
+      commissionRate: res.body.commissionRate,
+      financingRate: res.body.financingRate,
     };
   });
 
@@ -45,17 +45,17 @@ describe('AppConfigController (e2e)', () => {
     const res = await request(app.getHttpServer())
       .put('/app-config/cashea')
       .set(authHeader(token))
-      .send({ firstInstallmentRate: 0.04, totalRate: 0.06 });
+      .send({ commissionRate: 0.0464, financingRate: 0.062 });
     expect([200, 201]).toContain(res.status);
-    expect(res.body.firstInstallmentRate).toBeCloseTo(0.04, 4);
-    expect(res.body.totalRate).toBeCloseTo(0.06, 4);
+    expect(res.body.commissionRate).toBeCloseTo(0.0464, 4);
+    expect(res.body.financingRate).toBeCloseTo(0.062, 4);
   });
 
   it('PUT /app-config/cashea → 400 con valor fuera de rango', async () => {
     const res = await request(app.getHttpServer())
       .put('/app-config/cashea')
       .set(authHeader(token))
-      .send({ firstInstallmentRate: 0.9, totalRate: 0.06 });
+      .send({ commissionRate: 0.9, financingRate: 0.062 });
     expect([400, 422]).toContain(res.status);
   });
 
@@ -63,7 +63,7 @@ describe('AppConfigController (e2e)', () => {
     const res = await request(app.getHttpServer())
       .put('/app-config/cashea')
       .set(authHeader(token))
-      .send({ firstInstallmentRate: 0.04 });
+      .send({ commissionRate: 0.0464 });
     expect([400, 422]).toContain(res.status);
   });
 });

@@ -11,6 +11,7 @@ import { CareCenter } from '../care-centers/entities/care-center.entity';
 import { AccountsPayable } from '../accounts-payable/entities/accounts-payable.entity';
 import { AccountsPayableOrder } from '../accounts-payable/entities/accounts-payable-order.entity';
 import { OrderInternalOrder } from '../orders/entities/order-internal-order.entity';
+import { TaxUnitsModule } from '../tax-units/tax-units.module';
 import { TaxesPayableService } from './taxes-payable.service';
 import { TaxesPayableController } from './taxes-payable.controller';
 
@@ -29,6 +30,7 @@ import { TaxesPayableController } from './taxes-payable.controller';
       AccountsPayableOrder,
       OrderInternalOrder,
     ]),
+    TaxUnitsModule,
   ],
   providers: [TaxesPayableService],
   controllers: [TaxesPayableController],

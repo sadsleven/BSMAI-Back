@@ -107,6 +107,7 @@ export class InsurancesService {
       fiscalAddress: dto.fiscalAddress?.trim() || null,
       rif,
       isActive: dto.isActive ?? true,
+      isIndexed: dto.isIndexed ?? false,
       phones: (dto.phones ?? []).map((p) =>
         this.phonesRepo.create(this.phonePayload(p)),
       ),
@@ -157,6 +158,7 @@ export class InsurancesService {
       }
     }
     if (dto.isActive !== undefined) insurance.isActive = dto.isActive;
+    if (dto.isIndexed !== undefined) insurance.isIndexed = dto.isIndexed;
 
     if (dto.phones) {
       await this.phonesRepo.delete({ insuranceId: insurance.id });

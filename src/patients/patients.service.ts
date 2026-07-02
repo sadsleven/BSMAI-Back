@@ -160,7 +160,7 @@ export class PatientsService {
    */
   async getAvailableInsurances(id: string): Promise<
     Array<{
-      insurance: { id: string; name: string };
+      insurance: { id: string; name: string; isIndexed: boolean };
       source: 'direct' | 'via_contractor';
       contractor: { id: string; name: string } | null;
     }>
@@ -196,7 +196,7 @@ export class PatientsService {
     if (!patient) throw new NotFoundException('Paciente no encontrado');
 
     const items: Array<{
-      insurance: { id: string; name: string };
+      insurance: { id: string; name: string; isIndexed: boolean };
       source: 'direct' | 'via_contractor';
       contractor: { id: string; name: string } | null;
     }> = [];
@@ -205,7 +205,7 @@ export class PatientsService {
     for (const ins of patient.insurances ?? []) {
       if (ins.deletedAt || !ins.isActive) continue;
       items.push({
-        insurance: { id: ins.id, name: ins.name },
+        insurance: { id: ins.id, name: ins.name, isIndexed: !!ins.isIndexed },
         source: 'direct',
         contractor: null,
       });
@@ -217,7 +217,7 @@ export class PatientsService {
       for (const ins of c.insurances ?? []) {
         if (ins.deletedAt || !ins.isActive) continue;
         items.push({
-          insurance: { id: ins.id, name: ins.name },
+          insurance: { id: ins.id, name: ins.name, isIndexed: !!ins.isIndexed },
           source: 'via_contractor',
           contractor: { id: c.id, name: c.name },
         });

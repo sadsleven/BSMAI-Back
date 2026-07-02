@@ -145,14 +145,7 @@ export class UsersService {
     if (user.isSuperAdmin && !actor.isSuperAdmin) {
       throw new ForbiddenException('No puedes modificar un Super Admin');
     }
-    if (dto.email && dto.email.toLowerCase() !== user.email) {
-      const dupe = await this.usersRepo.findOne({
-        where: { email: dto.email.toLowerCase() },
-        withDeleted: true,
-      });
-      if (dupe) throw new ConflictException('Ya existe un usuario con ese email');
-      user.email = dto.email.toLowerCase();
-    }
+    // El email es inmutable; no se modifica desde la edición de usuario.
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
     if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber ?? null;

@@ -1,0 +1,2632 @@
+{
+  "generatedFrom": "ESTANDARIZACION-BAREMOS.md",
+  "priceConflictRule": "survivor",
+  "hardDelete": true,
+  "deletes": [
+    "ST OPR 1781030358541_3",
+    "ST OPR 1781030383471_3",
+    "ST OPR 1781030540951_3",
+    "ST OPR 1781030615594_3",
+    "ST OPR 1781030633661_3",
+    "ST OPR 1781030797295_3",
+    "ST OPR 1781030950989_3",
+    "ST OPR 1781030976310_3",
+    "ST OPR 1781031019296_3",
+    "Consulta",
+    "TODAS LAS CONSULTAS (INDEPENDIENTEMENTE DE LA ESPECIALIDAD)",
+    "RX. CON CONTRASTE",
+    "TUNEL INTERCONTINEO/RODILLA TU",
+    "CARGA GLICOSILADA",
+    "RX.CON CONTRASTE",
+    "TAC RECONSTRUCCION VOLUMETRICA"
+  ],
+  "groups": [
+    {
+      "canonical": "CONSULTA: CARDIOLOGÍA",
+      "variants": [
+        "CARDIOLOGIA",
+        "CONSULTA: CARDIOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: CARDIOLOGÍA / VASCULAR PERIFÉRICO / CARDIOVASCULAR",
+      "variants": [
+        "CARDIOLOGIA / VASCULAR PERIFERICO / CARDIOVASCULAR",
+        "CONSULTA: CARDIOLOGIA / VASCULAR PERIFERICO / CARDIOVASCULAR"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: CIRUGÍA GENERAL",
+      "variants": [
+        "CIRUGIA GENERAL",
+        "CONSULTA: CIRUGIA GENERAL"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: CIRUGÍA DE MANOS",
+      "variants": [
+        "CIRUGIA DE MANOS"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: DERMATOLOGÍA",
+      "variants": [
+        "DERMATOLOGIA",
+        "CONSULTA: DERMATOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: ENDOCRINOLOGÍA",
+      "variants": [
+        "ENDOCRINOLOGIA",
+        "CONSULTA: ENDOCRINOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: GASTROENTEROLOGÍA",
+      "variants": [
+        "GASTROENTEROLOGIA",
+        "CONSULTA: GASTROENTEROLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: GASTROENTEROLOGÍA / PROCTOLOGÍA",
+      "variants": [
+        "GASTROENTEROLOGIA / PROCTOLOGIA",
+        "CONSULTA: GASTROENTEROLOGIA / PROCTOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: GINECOLOGÍA",
+      "variants": [
+        "GINECOLOGIA",
+        "CONSULTA: GINECOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: GINECOLOGÍA Y OBSTETRICIA",
+      "variants": [
+        "GINECOLOGIA OBSTETRICIA",
+        "CONSULTA: GINECOLOGIA OBSTETRICIA",
+        "GINE-OBSTETRICIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: INMUNOLOGÍA",
+      "variants": [
+        "INMUNOLOGIA",
+        "CONSULTA: INMUNOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: MASTOLOGÍA",
+      "variants": [
+        "MASTOLOGIA",
+        "CONSULTA: MASTOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: MEDICINA FAMILIAR",
+      "variants": [
+        "MEDICINA FAMILIAR",
+        "CONSULTA: MEDICINA FAMILIAR"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: MEDICINA GENERAL",
+      "variants": [
+        "MEDICINA GENERAL",
+        "CONSULTA: MEDICINA GENERAL"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: MEDICINA INTERNA",
+      "variants": [
+        "MEDICINA INTERNA",
+        "CONSULTA: MEDICINA INTERNA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NEFROLOGÍA",
+      "variants": [
+        "NEFROLOGIA",
+        "CONSULTA: NEFROLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NEUMONOLOGÍA",
+      "variants": [
+        "NEUMONOLOGIA",
+        "CONSULTA: NEUMONOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NEUMONOLOGÍA PEDIÁTRICA",
+      "variants": [
+        "NEUMONOLOGIA PEDRIATRICA",
+        "CONSULTA: NEUMONOLOGIA PEDRIATRICA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NEUROCIRUGÍA",
+      "variants": [
+        "NEUROCIRUGIA",
+        "CONSULTA: NEUROCIRUGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NEUROLOGÍA",
+      "variants": [
+        "NEUROLOGIA",
+        "CONSULTA: NEUROLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NEUROLOGÍA / NEUROCIRUGÍA",
+      "variants": [
+        "NEUROLOGIA / NEUROCIRUGIA",
+        "CONSULTA: NEUROLOGIA / NEUROCIRUGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NUTRICIÓN / DIETÉTICA",
+      "variants": [
+        "NUTRICION / DIETETICA",
+        "CONSULTA: NUTRICION / DIETETICA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: NUTRICIÓN",
+      "variants": [
+        "NUTRICIONISTA",
+        "CONSULTA: NUTRICIONISTA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: ODONTOLOGÍA",
+      "variants": [
+        "ODONTOLIGIA",
+        "CONSULTA: ODONTOLIGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: OFTALMOLOGÍA",
+      "variants": [
+        "OFTALMOLOGIA",
+        "CONSULTA: OFTALMOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: ONCOLOGÍA",
+      "variants": [
+        "ONCOLOGIA",
+        "CONSULTA: ONCOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: ONCOLOGÍA / MASTOLOGÍA",
+      "variants": [
+        "ONCOLOGIA / MASTOLOGIA",
+        "CONSULTA: ONCOLOGIA / MASTOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: OTORRINOLARINGOLOGÍA",
+      "variants": [
+        "OTORRINOLARINGOLOGIA",
+        "CONSULTA: OTORRINOLARINGOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: PEDIATRÍA",
+      "variants": [
+        "PEDIATRIA",
+        "CONSULTA: PEDIATRIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: PSIQUIATRÍA",
+      "variants": [
+        "PSIQUIATRIA",
+        "CONSULTA: PSIQUIATRIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: PSIQUIATRÍA / PSICOLOGÍA",
+      "variants": [
+        "PSIQUIATRIA / PSICOLOGIA",
+        "CONSULTA: PSIQUIATRIA / PSICOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: REUMATOLOGÍA",
+      "variants": [
+        "REUMATOLOGIA",
+        "CONSULTA: REUMATOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: TRAUMATOLOGÍA",
+      "variants": [
+        "TRAUMATOLOGIA",
+        "CONSULTA: TRAUMATOLOGIA"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: UROLOGÍA",
+      "variants": [
+        "UROLOGIA",
+        "UROLOGO",
+        "CONSULTA: UROLOGÍA",
+        "CONSULTA: UROLOGO"
+      ]
+    },
+    {
+      "canonical": "CONSULTA: FISIATRÍA",
+      "variants": [
+        "FISIATRIA",
+        "CONSULTA: FISIATRIA"
+      ]
+    },
+    {
+      "canonical": "ELECTROCARDIOGRAMA",
+      "variants": [
+        "ELECTROCARDIOGRAMA",
+        "ELECTROCARDIOGRAMA CARDIOLOGIA",
+        "ELECTROCARDIOGRAMA DE REPOSO"
+      ]
+    },
+    {
+      "canonical": "ELECTROENCEFALOGRAMA",
+      "variants": [
+        "ELECTROENCEFALOGRAMA",
+        "ELECTROENCEFALOGRAMA CONVENCIONAL"
+      ]
+    },
+    {
+      "canonical": "HOLTER DE ARRITMIA",
+      "variants": [
+        "HOLTER",
+        "HOLTER DE ARRITMIA"
+      ]
+    },
+    {
+      "canonical": "MAPA (MONITOREO DE PRESIÓN ARTERIAL 24H)",
+      "variants": [
+        "MAPA",
+        "MAPA MONITOREO DE TENSION ARTERIAL POR 24 HORAS",
+        "HOLTER DE PRESION (MAPA)",
+        "MONITOREO AMBULATORIO (HOLTER) DE LA PRESIÓN ARTERIAL ( MAPA)"
+      ]
+    },
+    {
+      "canonical": "EVALUACIÓN CARDIOVASCULAR PREOPERATORIA",
+      "variants": [
+        "EVALUACION CARDIOLOGICA PREOPERATORIA",
+        "EVALUACION CARDIOVASCULAR PRE-OPERATORIA",
+        "EVALUACION CARDIOVASCULAR PREOPERATORIA"
+      ]
+    },
+    {
+      "canonical": "CAMPIMETRÍA",
+      "variants": [
+        "CAMPIMETRIA",
+        "CAMPO VISUAL COMPUTARIZADO"
+      ]
+    },
+    {
+      "canonical": "BIOMETRÍA",
+      "variants": [
+        "BIOMETRIA",
+        "BIOMETRIA EN AMBOS OJOS"
+      ]
+    },
+    {
+      "canonical": "PAQUIMETRÍA",
+      "variants": [
+        "PAQUIMETRIA",
+        "PAQUIMETRIA DE CORNEA"
+      ]
+    },
+    {
+      "canonical": "RX COLUMNA CERVICAL DINÁMICA",
+      "variants": [
+        "RX COLUMNA CERVICAL DINAMICA",
+        "RX.COLUMNA CERVICAL DINAMICA"
+      ]
+    },
+    {
+      "canonical": "RX CISTOGRAFÍA MICCIONAL",
+      "variants": [
+        "RX CISTOGRAFIA MICCIONAL (RX CON CONTRASTE)",
+        "RX.CISTOGRAFIA MICCIONAL"
+      ]
+    },
+    {
+      "canonical": "RX URETROCISTOGRAFÍA",
+      "variants": [
+        "RX.CISTOURETROGRAFIA",
+        "RX.URETROCISTOGRAFIA"
+      ]
+    },
+    {
+      "canonical": "RX UROGRAFÍA DE ELIMINACIÓN",
+      "variants": [
+        "RX UROGRAFIA DE ELIMINACION (RX CON CONTRATE)",
+        "RX.UROGRAFIA DE ELIMINACION / INFUSION"
+      ]
+    },
+    {
+      "canonical": "RX TRÁNSITO INTESTINAL",
+      "variants": [
+        "RX TRANSITO GASTRO INTESTINAL (RX CON CONTRASTE)",
+        "RX.TRANSITO INTESTINAL"
+      ]
+    },
+    {
+      "canonical": "RX MEDICIÓN DE MIEMBROS INFERIORES",
+      "variants": [
+        "RX MEDICION MIEMBROS INFERIORES",
+        "RX.MEDICION DE MIEMBROS"
+      ]
+    },
+    {
+      "canonical": "RX CRÁNEO CALDWELL",
+      "variants": [
+        "RX.CADWELL",
+        "RX.CRANEO CADWELL"
+      ]
+    },
+    {
+      "canonical": "RX HUESOS PROPIOS NASALES",
+      "variants": [
+        "RX HUESOS PROPIOS DE LA NARIZ HASTA (02) PROYECCIONES",
+        "RX HUESOS PROPIOS NASALES"
+      ]
+    },
+    {
+      "canonical": "RX RINOFARINGE BA Y BC",
+      "variants": [
+        "RX.RINOFARINGE ADENOIDES BA BC",
+        "RX.RINOFARINGE BA Y BC"
+      ]
+    },
+    {
+      "canonical": "RX COLUMNA DORSO-LUMBAR BENDING",
+      "variants": [
+        "RX.COLUMNA BENDING",
+        "RX.COLUMNA DORSO LUMBAR BENDING"
+      ]
+    },
+    {
+      "canonical": "RX ARTICULACIÓN TEMPOROMANDIBULAR",
+      "variants": [
+        "RX ARTICULACION TEMPORO MANDIBULAR",
+        "RX DE ARTICULACION TEMPORO-MANDIBULAR HASTA (02) PROYECCIONES",
+        "RX.TEMPOMAXILAR"
+      ]
+    },
+    {
+      "canonical": "RX SENOS PARANASALES",
+      "variants": [
+        "RX SENOS PARANASALES",
+        "RX SENOS PARANASALES HASTA (03) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX ÓRBITA",
+      "variants": [
+        "RX ORBITA",
+        "RX ORBITA HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX COXIS AP LAT",
+      "variants": [
+        "RX COXIS AP LAT",
+        "RX COXIS HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX CUELLO AP LAT",
+      "variants": [
+        "RX CUELLO AP LAT",
+        "RX CUELLO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX FÉMUR DERECHO AP LAT",
+      "variants": [
+        "RX FEMUR DER AP LAT",
+        "RX FEMUR DERECHO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX FÉMUR IZQUIERDO AP LAT",
+      "variants": [
+        "RX FEMUR IZQ AP LAT",
+        "RX FEMUR IZQUIERDO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX CALCÁNEO DERECHO AP LAT",
+      "variants": [
+        "RX CALCANEO DER AP LAT",
+        "RX CALCANEO O TALON DERECHO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX CALCÁNEO IZQUIERDO AP LAT",
+      "variants": [
+        "RX CALCANEO IZQ AP LAT",
+        "RX CALCANEO O TALON IZQUIERDO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX HÚMERO DERECHO AP LAT",
+      "variants": [
+        "RX BRAZO DER AP LAT",
+        "RX HUMERO DERECHO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX HÚMERO IZQUIERDO AP LAT",
+      "variants": [
+        "RX BRAZO IZQ AP LAT",
+        "RX HUMERO IZQUIERDO HASTA (02) PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX ABDOMEN AP",
+      "variants": [
+        "RX ABDOMEN AP",
+        "RX DE ABDOMEN 1 PROYECCION"
+      ]
+    },
+    {
+      "canonical": "RX TÓRAX PA",
+      "variants": [
+        "RX TORAX PA",
+        "RX TORAX 1 PROYECCION"
+      ]
+    },
+    {
+      "canonical": "RX TÓRAX AP LAT",
+      "variants": [
+        "RX TORAX AP LAT",
+        "RX TORAX 2 PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX COLUMNA CERVICAL AP LAT",
+      "variants": [
+        "RX COLUMNA CERVICAL AP LAT",
+        "RX COLUMNA CERVICAL 2 PROYECCIONES"
+      ]
+    },
+    {
+      "canonical": "RX CUALQUIER PARTE DEL CUERPO (1 PROYECCIÓN)",
+      "variants": [
+        "RX 1 PROYECCION",
+        "RX. CUALQUIER PARTE DEL CUERPO (1 PROYECCION)"
+      ]
+    },
+    {
+      "canonical": "RX CUALQUIER PARTE DEL CUERPO (2 PROYECCIONES)",
+      "variants": [
+        "RX 2 PROYECCION",
+        "RX. CUALQUIER PARTE DEL CUERPO (2 PROYECCIONES)"
+      ]
+    },
+    {
+      "canonical": "RX CUALQUIER PARTE DEL CUERPO (3 PROYECCIONES)",
+      "variants": [
+        "RX 3 PROYECCION",
+        "RX. CUALQUIER PARTE DEL CUERPO (3 PROYECCIONES)"
+      ]
+    },
+    {
+      "canonical": "RX CUALQUIER PARTE DEL CUERPO (4 PROYECCIONES)",
+      "variants": [
+        "RX 4 PROYECCION",
+        "RX. CUALQUIER PARTE DEL CUERPO (4 PROYECCIONES)"
+      ]
+    },
+    {
+      "canonical": "RX CUALQUIER PARTE DEL CUERPO (5 PROYECCIONES)",
+      "variants": [
+        "RX 5 PROYECCION",
+        "RX. CUALQUIER PARTE DEL CUERPO (5 PROYECCIONES)"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE CRÁNEO SIN CONTRASTE",
+      "variants": [
+        "TAC DE CRÁNEO SIN CONTRASTE",
+        "TC DE CRANEO",
+        "TOMOGRAFIA DE CRANEO SIN CONTRASTE",
+        "TC CEREBRAL"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE CRÁNEO CON CONTRASTE EV.",
+      "variants": [
+        "TAC DE CRÁNEO CON CONTRASTE EV.",
+        "TOMOGRAFIA DE CRANEO CON CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE CUELLO SIN CONTRASTE",
+      "variants": [
+        "TAC DE CUELLO SIN CONTRASTE",
+        "TC DE CUELLO",
+        "TOMOGRAFIA DE CUELLO SIN CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE CUELLO CON CONTRASTE EV.",
+      "variants": [
+        "TAC DE CUELLO CON CONTRASTE EV.",
+        "TOMOGRAFIA DE CUELLO CON CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE TÓRAX SIN CONTRASTE",
+      "variants": [
+        "TAC DE TÓRAX SIN CONTRASTE",
+        "TC DE TORAX",
+        "TOMOGRAFIA DE TORAX SIN CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE TÓRAX CON CONTRASTE EV.",
+      "variants": [
+        "TAC DE TÓRAX CON CONTRASTE EV.",
+        "TOMOGRAFIA DE TORAX CON CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE ABDOMEN Y PELVIS SIN CONTRASTE",
+      "variants": [
+        "TAC DE ABDOMEN Y PELVIS SIN CONTRASTE",
+        "TC DE ABDOMEN Y PELVIS",
+        "TOMOGRAFIA ABDOMINO PELVICA SIN CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE ABDOMEN Y PELVIS CON CONTRASTE EV.",
+      "variants": [
+        "TAC DE ABDOMEN Y PELVIS CON CONTRASTE EV.",
+        "TOMOGRAFIA ABDOMINO PELVICA CON CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE ABDOMEN SIN CONTRASTE",
+      "variants": [
+        "TC DE ABDOMEN",
+        "TOMOGRAFIA DE ABDOMEN SIN CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE PELVIS SIN CONTRASTE",
+      "variants": [
+        "TC DE PELVIS",
+        "TOMOGRAFIA DE PELVIS SIN CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE COLUMNA CERVICAL SIN CONTRASTE",
+      "variants": [
+        "TAC DE COLUMNA CERVICAL SIN CONTRASTE",
+        "TC DE COLUMNA CERVICAL",
+        "TOMOGRAFIA DE COLUMNA CERVICAL"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE COLUMNA DORSAL SIN CONTRASTE",
+      "variants": [
+        "TAC DE COLUMNA DORSAL SIN CONTRASTE",
+        "TC DE COLUMNA DORSAL",
+        "TOMOGRAFIA DE COLUMNA DORSAL-"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE COLUMNA LUMBAR SIN CONTRASTE",
+      "variants": [
+        "TAC DE COLUMNA LUMBAR SIN CONTRASTE",
+        "TC DE COLUMNA LUMBAR"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE COLUMNA LUMBOSACRA",
+      "variants": [
+        "TC DE COLUMNA LUMBOSACRA",
+        "TOMOGRAFIA DE COLUMNA LUMBOSACRA"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE SENOS PARANASALES SIN CONTRASTE",
+      "variants": [
+        "TAC DE SENOS PARANASALES",
+        "TAC DE SENOS PARANASALES SIN CONTRASTE",
+        "TC DE SENOS PARANASALES",
+        "TOMOGRAFIA DE SENOS PARANASALES"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE OÍDO/MASTOIDE SIN CONTRASTE",
+      "variants": [
+        "TAC DE OÍDO/MASTOIDE SIN CONTRASTE",
+        "TC DE OIDO"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE ÓRBITAS SIN CONTRASTE",
+      "variants": [
+        "TAC DE ÓRBITAS SIN CONTRASTE",
+        "TC DE ORBITA"
+      ]
+    },
+    {
+      "canonical": "TOMOGRAFÍA DE MACIZO FACIAL SIN CONTRASTE",
+      "variants": [
+        "TAC DE MACÍZO FACIAL SIN CONTRASTE",
+        "TC MACIZO FACIAL Y/O ARTICULACION TEMPORO MANDIBULAR"
+      ]
+    },
+    {
+      "canonical": "UROTOMOGRAFÍA SIN CONTRASTE",
+      "variants": [
+        "TAC UROTAC SIN CONTRASTE",
+        "UROTAC",
+        "UROTAC SIN CONTRASTE",
+        "UROTOMOGRAFIA"
+      ]
+    },
+    {
+      "canonical": "UROTOMOGRAFÍA CON CONTRASTE EV.",
+      "variants": [
+        "TAC UROTAC CON CONTRASTE",
+        "UROTAC CON CONTRASTE EV.",
+        "UROTOMOGRAFIA CON CONTRASTE"
+      ]
+    },
+    {
+      "canonical": "ANGIOTOMOGRAFÍA DE AORTA ABDOMINAL CON CONTRASTE EV.",
+      "variants": [
+        "ANGIOTAC DE AORTA ABDOMINAL CON CONTRASTE EV.",
+        "TAC ANGIOTAC AORTICA ABDOMINAL"
+      ]
+    },
+    {
+      "canonical": "ANGIOTOMOGRAFÍA DE AORTA TORÁCICA CON CONTRASTE EV.",
+      "variants": [
+        "ANGIOTAC DE AORTA TORACICA CON CONTRASTE EV.",
+        "TAC ANGIOTAC AORTICA TORAXICA"
+      ]
+    },
+    {
+      "canonical": "ANGIOTOMOGRAFÍA DE MIEMBROS INFERIORES CON CONTRASTE EV.",
+      "variants": [
+        "ANGIOTAC DE MIEMBROS INFERIORES CON CONTRASTE EV.",
+        "TAC ANGIOTAC MIEMBROS INFERIORES"
+      ]
+    },
+    {
+      "canonical": "ANGIOTOMOGRAFÍA DE VASOS SUPRAAÓRTICOS/CUELLO CON CONTRASTE EV.",
+      "variants": [
+        "ANGIOTAC DE VASOS SUPRAORTICO, CARÓTIDA O CUELLO CON CONTRASTE EV.",
+        "TAC ANGIO-TOMOGRAFIA CUELLO"
+      ]
+    },
+    {
+      "canonical": "ECOCARDIOGRAMA",
+      "variants": [
+        "ECO CARDIOGRAMA",
+        "ECOCARDIOGRAMA"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA ABDOMINAL",
+      "variants": [
+        "ECO ABDOMINAL",
+        "ECOSONOGRAMA ABDOMEN",
+        "ULTRASONIDO ABDOMINAL",
+        "ULTRASONIDO ABDOMINAL (HEPATICO, BILIAR, PANCREATICO, RENAL…)"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA ABDOMINO-PÉLVICA",
+      "variants": [
+        "ECO ABDOMINO-PÉLVICO",
+        "ECOSONOGRAMA ABDOMINO-PELVICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA RENAL",
+      "variants": [
+        "ECO RENAL",
+        "ECOGRAFIA RENAL",
+        "ECOSONOGRAMA RENAL",
+        "ULTRASONIDO RENAL"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA TIROIDEA",
+      "variants": [
+        "ECO TIROIDEO",
+        "ECOGRAFIA TIROIDES",
+        "ECOSONOGRAMA TIROIDEO",
+        "ULTRASONIDO TIROIDEO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA TESTICULAR",
+      "variants": [
+        "ECO TESTICULAR",
+        "ECOGRAFIA TESTICULAR",
+        "ECOSONOGRAMA TESTICULAR",
+        "ULTRASONIDO TESTICULAR"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA MAMARIA",
+      "variants": [
+        "ECO MAMARIO",
+        "ECOGRAFIA DE MAMA",
+        "ECOSONOGRAMA MAMARIO",
+        "ULTRASONIDO MAMARIO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA PROSTÁTICA",
+      "variants": [
+        "ECO PROSTATICO",
+        "ULTRASONIDO PROSTÁTICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA GINECOLÓGICA",
+      "variants": [
+        "ECO GINECOLOGICO",
+        "ECOGRAFIA PELVICA GINECOLOGICA",
+        "ULTRASONIDO GINECOLOGICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA PÉLVICA",
+      "variants": [
+        "ECO PÉLVICO",
+        "ECOSONOGRAMA PELVICO",
+        "ULTRASONIDO PELVICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA TRANSVAGINAL",
+      "variants": [
+        "ECO TRANSVAGINAL",
+        "ECOGRAFIA TRANSVAGINAL",
+        "ECOSONOGRAMA TRANSVAGINAL",
+        "ULTRASONIDO TRANSVAGINAL"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA OBSTÉTRICA",
+      "variants": [
+        "ECOGRAFIA OBSTETRICA",
+        "ECOSONOGRAMA OBSTÉTRICO",
+        "ULTRASONIDO OBSTETRICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DE PARTES BLANDAS",
+      "variants": [
+        "ECO PARTES BLANDAS",
+        "ECOGRAFIA TEJIDOS BLANDOS",
+        "ECOSONOGRAMA DE PARTES BLANDAS",
+        "ULTRASONIDO DE PARTES BLANDAS",
+        "ULTRASONIDO PARTES BLANDAS"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA OSTEOMUSCULAR",
+      "variants": [
+        "ECO ARTICULAR",
+        "ECO OSTEO-MUSCULAR",
+        "ECOGRAFIA MUSCULO ESQUELETICO O ARTICULAR",
+        "ULTRASONIDO OSTEO-MUSCULAR"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA CEREBRAL",
+      "variants": [
+        "ECOGRAFIA CEREBRAL",
+        "ULTRASONIDO CEREBRAL"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DE CUELLO",
+      "variants": [
+        "ECO DE CUELLO",
+        "ULTRASONIDO DE CUELLO (TIROIDEO…)"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA PULMONAR",
+      "variants": [
+        "ECO DE PULMON",
+        "ECO PULMONAR"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA SIMPLE DE CUALQUIER ÓRGANO O ESTRUCTURA",
+      "variants": [
+        "ECOGRAFIA SIMPLE CUALQUIER ORGANO O ESTRUCTURA",
+        "ECOSONOGRAMA SIMPLE"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER DE CUALQUIER ÓRGANO O ESTRUCTURA",
+      "variants": [
+        "ECOGRAFIA DOPPLER CUALQUIER ORGANO O ESTRUCTURA",
+        "ECOSONOGRAMA DOPPLER"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER CAROTÍDEO",
+      "variants": [
+        "ECO DOPPLER CAROTIDEO",
+        "ECO-DOPPLER CAROTIDEO",
+        "ULTRASONIDO DOPPLER CAROTIDEO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER TESTICULAR",
+      "variants": [
+        "ECO DOPPLER TESTICULAR",
+        "ULTRASONIDO DOPPLER TESTICULAR"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER PROSTÁTICO",
+      "variants": [
+        "ECO DOPPLER PROSTATICO",
+        "ULTRASONIDO DOPPLER PROSTATICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER GINECOLÓGICO",
+      "variants": [
+        "ECO DOPPLER GINECOLOGICO (ENDOMETRIO, OVARIOS..)",
+        "ULTRASONIDO DOPPLER GINECOLOGICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER PÉLVICO",
+      "variants": [
+        "ECO DOPPLER DE PELVIS",
+        "ULTRASONIDO DOPPLER PELVICO"
+      ]
+    },
+    {
+      "canonical": "ECOGRAFÍA DOPPLER OBSTÉTRICO",
+      "variants": [
+        "ECO DOPPLER MATERNO FETAL",
+        "ECO DOPPLER OBSTETRICO / PERFIL HEMODINAMICO MATERNO FETAL",
+        "ULTRASONIDO DOPPLER OBSTETRICO"
+      ]
+    },
+    {
+      "canonical": "ECOCARDIOGRAMA DOPPLER",
+      "variants": [
+        "ECO DOPPLER CARDIACO",
+        "ECOCARDIOGRAMA DOPLER CARDIACO"
+      ]
+    },
+    {
+      "canonical": "DENSITOMETRÍA ÓSEA",
+      "variants": [
+        "DENSITOMETRIA",
+        "DENSITOMETRIA OSEA"
+      ]
+    },
+    {
+      "canonical": "COLPOSCOPIA",
+      "variants": [
+        "COLPOSCOPA",
+        "COLPOSCOPIA"
+      ]
+    },
+    {
+      "canonical": "LIMPIEZA INSTRUMENTAL DE OÍDO",
+      "variants": [
+        "LIMPIEZA INSTRUMENTAL DE OIDO",
+        "LIMPIEZA INTRUMENTAL DE OIDO"
+      ]
+    },
+    {
+      "canonical": "EXTRACCIÓN DE CUERPO EXTRAÑO",
+      "variants": [
+        "EXTRACCION DE CUERPO EXTRAÑO",
+        "EXTRACCION DE CUERPOS EXTRAÑOS"
+      ]
+    },
+    {
+      "canonical": "SESIÓN DE FISIOTERAPIA",
+      "variants": [
+        "SESION DE FISIOTERAPIA",
+        "SESIONES DE FISIOTERAPIA",
+        "SESIONES DE FISIOTERAPIA C/U",
+        "SESIONES DE FISIOTERAPIA CADA UNO"
+      ]
+    },
+    {
+      "canonical": "FISIOTERAPIA (5 SESIONES)",
+      "variants": [
+        "SESIONES DE FISIOTERAPIA 5 SESIONES",
+        "SESIONES FISIOTERAPIA (5 SESIONES)"
+      ]
+    },
+    {
+      "canonical": "COLONOSCOPIA CON POLIPECTOMÍA",
+      "variants": [
+        "COLONOSCOPIA CON POLIPECTOMIA",
+        "COLONOSCOPIA CON POLIPECTOMIA(EDI)"
+      ]
+    },
+    {
+      "canonical": "COLONOSCOPIA SIN POLIPECTOMÍA",
+      "variants": [
+        "COLONOSCOPIA SIN POLIPECTOMIA",
+        "COLONOSCOPIA SIN POLIPECTOMIA (EDI)"
+      ]
+    },
+    {
+      "canonical": "GASTROSCOPIA",
+      "variants": [
+        "GASTROSCOPIA",
+        "ENDOSCOPIA DIGESTIVA SUPERIOR - GASTROSCOPIA",
+        "ENDOSCOPIA DIGESTIVA SUPERIOR (EDS)"
+      ]
+    },
+    {
+      "canonical": "SESIÓN DE REHABILITACIÓN",
+      "variants": [
+        "REHABILITACION C/U",
+        "SESION DE REHABILITACION (POR SESION INDEPENDIENTEMENTE LA(S) PATOLOGIA(S)"
+      ]
+    },
+    {
+      "canonical": "DRENAJE DE ABSCESOS",
+      "variants": [
+        "DRENAJE DE ABSCESOS",
+        "DRENAJES DE ABSCESOS CON ANESTESIA LOCAL",
+        "DRENAJE DE ABSCESOS MEDICINA FAMILIAR",
+        "DRENAJE DE ABSCESOS MEDICINA GENERAL",
+        "DRENAJE DE ABSCESOS MEDICINA INTERNA"
+      ]
+    },
+    {
+      "canonical": "CURA DE HERIDAS",
+      "variants": [
+        "CURA DE HERIDAS MEDICINA FAMILIAR",
+        "CURA DE HERIDAS MEDICINA GENERAL",
+        "CURA DE HERIDAS MEDICINA INTERNA",
+        "CURA DE HERIDAS PEDIATRIA"
+      ]
+    },
+    {
+      "canonical": "NEBULIZACIONES",
+      "variants": [
+        "NEBULIZACIONES",
+        "NEBULIZACIONES PEDIATRIA"
+      ]
+    },
+    {
+      "canonical": "UROFLUJOMETRÍA",
+      "variants": [
+        "FLUJOMETRIA URINARIA",
+        "UROFLUJOMETRIA"
+      ]
+    },
+    {
+      "canonical": "TOMA DE BIOPSIA",
+      "variants": [
+        "BIOPSIA",
+        "REALIZACION DE BIOPSIA CON ANESTESIA LOCAL",
+        "TOMA DE BIOPSIA (Unidad)"
+      ]
+    },
+    {
+      "canonical": "RETIRO DE CATÉTER DOBLE J",
+      "variants": [
+        "RETIRO DE CATETER DOBLE J",
+        "RETIRO DE CATETER DOBLE J (ANESTESIA LOCAL)"
+      ]
+    },
+    {
+      "canonical": "RETIRO DE PUNTOS",
+      "variants": [
+        "RETIRO DE PUNTOS",
+        "RETIRO DE PUNTOS DE CIRUGIA GENERAL"
+      ]
+    },
+    {
+      "canonical": "DILATACIÓN URETRAL",
+      "variants": [
+        "DILATACION RIGIDA URETRAL",
+        "DILATACIONES URETRALES CON ANESTESIA LOCAL"
+      ]
+    },
+    {
+      "canonical": "EXÉRESIS CON ELECTROCAUTERIO",
+      "variants": [
+        "EXCERESIS + ELECTROCOAGULACION",
+        "EXCERESIS ELECTROCAUTERIO"
+      ]
+    },
+    {
+      "canonical": "ÁCIDO FÓLICO",
+      "variants": [
+        "ACIDO FOLICO",
+        "ACIDO FOLICO ( FOLATOS )",
+        "ACIDO FOLICO (FOLATO)",
+        "FOLATO"
+      ]
+    },
+    {
+      "canonical": "ÁCIDO ÚRICO SÉRICO",
+      "variants": [
+        "ACIDO URICO",
+        "ACIDO URICO EN SANGRE",
+        "ACIDO URICO SERICO"
+      ]
+    },
+    {
+      "canonical": "ÁCIDO ÚRICO EN ORINA PARCIAL",
+      "variants": [
+        "ACIDO URICO EN ORINA (PARCIAL)",
+        "ACIDO URICO EN ORINA PARCIAL",
+        "ACIDO URICO ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "ÁCIDO ÚRICO EN ORINA 24 HORAS",
+      "variants": [
+        "ACIDO URICO EN ORINA 24 HORAS",
+        "ACIDO URICO EN ORINA DE 24 HORAS",
+        "ACIDO URICO ORINA 24 HORAS",
+        "ACIDO URICO ORINA 24H"
+      ]
+    },
+    {
+      "canonical": "ÁCIDO VALPROICO",
+      "variants": [
+        "ACIDO VALPROICO",
+        "ACIDO VALPROICO (VALPRON)"
+      ]
+    },
+    {
+      "canonical": "ALBÚMINA SÉRICA",
+      "variants": [
+        "ALBUMINA",
+        "ALBUMINA/S"
+      ]
+    },
+    {
+      "canonical": "AMILASA SÉRICA",
+      "variants": [
+        "AMILASA",
+        "AMILASA SERICA"
+      ]
+    },
+    {
+      "canonical": "AMILASA EN ORINA PARCIAL",
+      "variants": [
+        "AMILASA EN ORINA PARCIAL",
+        "AMILASA ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "AMILASA EN ORINA",
+      "variants": [
+        "AMILASA EN ORINA",
+        "AMILASA URINARIA"
+      ]
+    },
+    {
+      "canonical": "AZÚCARES REDUCTORES EN HECES",
+      "variants": [
+        "AZUCARES REDUCTORES",
+        "AZUCARES REDUCTORES EN HECES"
+      ]
+    },
+    {
+      "canonical": "BILIRRUBINA TOTAL Y FRACCIONADA",
+      "variants": [
+        "BILIRRUBINA TOTAL Y F",
+        "BILIRRUBINA TOTAL Y FRACCIONADA"
+      ]
+    },
+    {
+      "canonical": "BUN (NITRÓGENO UREICO EN SANGRE)",
+      "variants": [
+        "BUN",
+        "BUN (NITROGENO UREICO EN SANGRE)",
+        "BUN (UREA)"
+      ]
+    },
+    {
+      "canonical": "CALCIO SÉRICO",
+      "variants": [
+        "CALCIO",
+        "CALCIO EN SANGRE",
+        "CALCIO SERICO"
+      ]
+    },
+    {
+      "canonical": "CALCIO EN ORINA PARCIAL",
+      "variants": [
+        "CALCIO EN ORINA PARCIAL",
+        "CALCIO ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "CALCIO EN ORINA 24 HORAS",
+      "variants": [
+        "CALCIO EN ORINA 24 HORAS",
+        "CALCIO EN ORINA DE 24 HORAS",
+        "CALCIO ORINA 24 HORAS"
+      ]
+    },
+    {
+      "canonical": "CAPACIDAD DE FIJACIÓN DE HIERRO",
+      "variants": [
+        "CAP. FIJACION DE HIERRO",
+        "CAPACIDAD DE FIJACION DE HIERRO",
+        "HIERRO CAPACIDAD DE FIJACIÓN"
+      ]
+    },
+    {
+      "canonical": "CLORO SÉRICO",
+      "variants": [
+        "CLORO",
+        "CLORO EN SANGRE",
+        "CLORO SERICO"
+      ]
+    },
+    {
+      "canonical": "CLORO EN ORINA PARCIAL",
+      "variants": [
+        "CLORO EN ORINA PARCIAL",
+        "CLORO ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "CLORO EN ORINA 24 HORAS",
+      "variants": [
+        "CLORO EN ORINA 24H",
+        "CLORO ORINA 24HORA"
+      ]
+    },
+    {
+      "canonical": "COCAÍNA",
+      "variants": [
+        "COCAINA",
+        "COCAINA O"
+      ]
+    },
+    {
+      "canonical": "MARIHUANA",
+      "variants": [
+        "MARIHUANA",
+        "MARIHUANA O"
+      ]
+    },
+    {
+      "canonical": "COLESTEROL TOTAL",
+      "variants": [
+        "COLESTEROL",
+        "COLESTEROL TOTAL"
+      ]
+    },
+    {
+      "canonical": "COLESTEROL HDL",
+      "variants": [
+        "COLESTEROL (HDL)",
+        "COLESTEROL HDL",
+        "H.D.L COLESTEROL",
+        "HDL COLESTEROL"
+      ]
+    },
+    {
+      "canonical": "COLESTEROL LDL",
+      "variants": [
+        "COLESTEROL (LDL)",
+        "COLESTEROL LDL",
+        "LDL COLESTEROL"
+      ]
+    },
+    {
+      "canonical": "COLESTEROL VLDL",
+      "variants": [
+        "COLESTEROL (VLDL)",
+        "COLESTEROL VLDL",
+        "VLDL COLESTEROL"
+      ]
+    },
+    {
+      "canonical": "COLESTEROL TOTAL Y FRACCIONADO",
+      "variants": [
+        "COLESTEROL TOTAL Y FRACCIONADO HDL LDL VLDL Y TRIGLICERIDOS",
+        "COLESTEROL TOTAL Y SUS FRACCIONES"
+      ]
+    },
+    {
+      "canonical": "CREATININA SÉRICA",
+      "variants": [
+        "CREATININA",
+        "CREATININA EN SANGRE",
+        "CREATININA SERICA"
+      ]
+    },
+    {
+      "canonical": "CREATININA EN ORINA 24 HORAS",
+      "variants": [
+        "CREATININA EN ORINA DE 24 HORAS",
+        "CREATININA ORINA 24 HORAS:"
+      ]
+    },
+    {
+      "canonical": "DEPURACIÓN DE CREATININA",
+      "variants": [
+        "DEPURACION DE CREATININA",
+        "DEPURACION DE CREATININA 24H"
+      ]
+    },
+    {
+      "canonical": "LDH (DESHIDROGENASA LÁCTICA)",
+      "variants": [
+        "DESHIDROGENASA DEL ACIDO LACTICO (LDH)",
+        "DESHIDROGENASA LACTICA (L.D.H)",
+        "DESHIDROGENASA LACTICA (LDH)",
+        "LDH",
+        "LDH (DESHIDROGENASA LACTICA)"
+      ]
+    },
+    {
+      "canonical": "ELECTRÓLITOS SÉRICOS",
+      "variants": [
+        "ELECTROLITOS",
+        "ELECTROLITOS EN SANGRE",
+        "ELECTROLITOS EN SUERO",
+        "ELECTROLITOS SÉRICOS (NA-K-CL). SODIO, POTASIO-CLORO",
+        "ELECTROLITOS SERICOS(k+,Na+,Cloro,Fosf,Mag)"
+      ]
+    },
+    {
+      "canonical": "FOSFATASA ÁCIDA",
+      "variants": [
+        "FOSFATASA ACIDA",
+        "FOSFATASA ACIDA TOTAL"
+      ]
+    },
+    {
+      "canonical": "FOSFATASA ALCALINA",
+      "variants": [
+        "FOSFATASA ALCALINA",
+        "FOSFATASA ALCALINA (ALP)"
+      ]
+    },
+    {
+      "canonical": "FÓSFORO SÉRICO",
+      "variants": [
+        "FOSFORO",
+        "FOSFORO EN SANGRE",
+        "FOSFORO EN SUERO",
+        "FOSFORO SERICO"
+      ]
+    },
+    {
+      "canonical": "FÓSFORO EN ORINA PARCIAL",
+      "variants": [
+        "FOSFORO EN ORINA PARCIAL",
+        "FOSFORO ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "FÓSFORO EN ORINA 24 HORAS",
+      "variants": [
+        "FOSFORO EN ORINA 24 H",
+        "FOSFORO EN ORINA 24 HORAS",
+        "FOSFORO EN ORINA 24H",
+        "FOSFORO/ORINA 24 HORA"
+      ]
+    },
+    {
+      "canonical": "FÓSFORO EN ORINA",
+      "variants": [
+        "FOSFORO EN ORINA",
+        "FOSFORO ORINA"
+      ]
+    },
+    {
+      "canonical": "GGT (GAMMA GLUTAMIL TRANSPEPTIDASA)",
+      "variants": [
+        "GAMA GLUTAMIL TRANSPEPIDASA (GGT)",
+        "GAMMA GLUTAMIL TRANSPEPTIDASA (GGTP)",
+        "GAMMA GLUTAMILTRANSFERASA (GGT)",
+        "GAMMAGLUTAMILTRANSPEPTIDASA (GGTP)"
+      ]
+    },
+    {
+      "canonical": "HIERRO SÉRICO",
+      "variants": [
+        "HIERRO",
+        "HIERRO SERICO",
+        "HIERRO SÉRICO"
+      ]
+    },
+    {
+      "canonical": "TGO / AST",
+      "variants": [
+        "SGOT",
+        "T.G.O-",
+        "TRANSAMINASA OXALACETICA (AST)",
+        "TRANSAMINASA OXALOACETICA (SGOT)",
+        "TRANSAMINASA GLUTAMICO OXALACETICA ( TGO / ALT )"
+      ]
+    },
+    {
+      "canonical": "TGP / ALT",
+      "variants": [
+        "ALT",
+        "SGPT",
+        "T.G.P.",
+        "TRANSAMINASA PIRUVICA (ALT)",
+        "TRANSAMINASA PIRUVICA TGP SGPT (ALT)",
+        "TRANSAMINASA GLUTAMICO PIRUVICA (TSGP)",
+        "TRANSAMINASA GLUTAMICO PIRUVICA ( TGP / AST )"
+      ]
+    },
+    {
+      "canonical": "MAGNESIO SÉRICO",
+      "variants": [
+        "MAGNESIO",
+        "MAGNESIO EN SANGRE",
+        "MAGNESIO EN SUERO",
+        "MAGNESIO SERICO"
+      ]
+    },
+    {
+      "canonical": "MAGNESIO EN ORINA PARCIAL",
+      "variants": [
+        "MAGNESIO EN ORINA PARCIAL",
+        "MAGNESIO ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "MAGNESIO EN ORINA 24 HORAS",
+      "variants": [
+        "MAGNESIO EN ORINA 24 H",
+        "MAGNESIO EN ORINA DE 24H",
+        "MAGNESIO ORINA 24 H"
+      ]
+    },
+    {
+      "canonical": "MICROALBUMINURIA EN ORINA PARCIAL",
+      "variants": [
+        "MICROALBUMINURIA EN ORINA PARCIAL",
+        "MICROALBUMINURIA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "MICROALBUMINURIA EN ORINA 24 HORAS",
+      "variants": [
+        "MICROALBUMINURIA 24H",
+        "MICROALBUMINURIA EN ORINA 24H"
+      ]
+    },
+    {
+      "canonical": "PÉPTIDO C EN SANGRE",
+      "variants": [
+        "PEPTIDO C",
+        "PEPTIDO C EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "POTASIO SÉRICO",
+      "variants": [
+        "POTASIO",
+        "POTASIO EN SANGRE",
+        "POTASIO EN SANGRE TOTAL",
+        "POTASIO SERICO"
+      ]
+    },
+    {
+      "canonical": "POTASIO EN ORINA PARCIAL",
+      "variants": [
+        "POTASIO EN ORINA PARCIAL",
+        "POTASIO ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "POTASIO EN ORINA 24 HORAS",
+      "variants": [
+        "POTASIO EN ORINA 24 H",
+        "POTASIO ORINA 24 H"
+      ]
+    },
+    {
+      "canonical": "PROTEÍNA C REACTIVA (PCR)",
+      "variants": [
+        "PROTEINA \"C\" REACTIVA (P.C.R)",
+        "PROTEINA C REACTIVA",
+        "PROTEINAS C REACTIVAS (PCR)"
+      ]
+    },
+    {
+      "canonical": "PROTEÍNA C REACTIVA CUANTITATIVA",
+      "variants": [
+        "PROTEINA C REACTIVA CUANTIFICADA",
+        "PROTEINA C REACTIVA CUANTITATIVA"
+      ]
+    },
+    {
+      "canonical": "PROTEINURIA EN ORINA 24 HORAS",
+      "variants": [
+        "PROTEINA EN ORINA 24 HORAS",
+        "PROTEINAS EN ORINA DE 24 HORAS",
+        "PROTEINURIA 24H",
+        "PROTEINURIA EN 24 HORAS",
+        "PROTENURIA EN ORINA DE 24 HORAS"
+      ]
+    },
+    {
+      "canonical": "SATURACIÓN DE TRANSFERRINA",
+      "variants": [
+        "SATURACION DE TRANSFERRINA",
+        "SATURACION DE TRASFERRINA"
+      ]
+    },
+    {
+      "canonical": "SODIO SÉRICO",
+      "variants": [
+        "SODIO",
+        "SODIO EN SANGRE",
+        "SODIO EN SANGRE TOTAL"
+      ]
+    },
+    {
+      "canonical": "SODIO EN ORINA 24 HORAS",
+      "variants": [
+        "SODIO EN ORINA 24H",
+        "SODIO EN ORINA DE 24 HORAS"
+      ]
+    },
+    {
+      "canonical": "TRANSFERRINA",
+      "variants": [
+        "TRANSFERRINA",
+        "TRANSFERRINA EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "UREA SÉRICA",
+      "variants": [
+        "UREA",
+        "UREA EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "UREA EN ORINA PARCIAL",
+      "variants": [
+        "UREA EN ORINA PARCIAL",
+        "UREA ORINA PARCIAL"
+      ]
+    },
+    {
+      "canonical": "UREA EN ORINA 24 HORAS",
+      "variants": [
+        "UREA EN ORINA 24H",
+        "UREA EN ORINA DE 24H",
+        "UREA/ORINA 24H"
+      ]
+    },
+    {
+      "canonical": "VITAMINA B12 (CIANOCOBALAMINA)",
+      "variants": [
+        "VB12",
+        "VITAMINA B-12",
+        "VITAMINA B12",
+        "VITAMINA B12 o CIANOCOBALAMINA",
+        "VITAMINAS B12"
+      ]
+    },
+    {
+      "canonical": "VITAMINA D TOTAL",
+      "variants": [
+        "VITAMINA D",
+        "VITAMINA D TOTAL"
+      ]
+    },
+    {
+      "canonical": "RELACIÓN CALCIO/CREATININA EN ORINA",
+      "variants": [
+        "REALCION CALCIO / CREATININA",
+        "RELACION CALCIO / CREATININA",
+        "RELACIONA CALCIO / CREATIN",
+        "INDICE CALCIO O/CREATININA O"
+      ]
+    },
+    {
+      "canonical": "RELACIÓN ÁCIDO ÚRICO/CREATININA",
+      "variants": [
+        "RELACION ACIDO U / CREATIN",
+        "RELACION ACIDO U / CREATININA",
+        "RELACION AU/CREAT"
+      ]
+    },
+    {
+      "canonical": "RELACIÓN ÁCIDO ÚRICO/CREATININA EN ORINA PARCIAL",
+      "variants": [
+        "RELACION AC URICO CREATININA EN ORINA PARCIAL",
+        "RELACION AC. URICO CREATININA O/P"
+      ]
+    },
+    {
+      "canonical": "RELACIÓN ÁCIDO ÚRICO/CREATININA EN ORINA 24 HORAS",
+      "variants": [
+        "RELACION AC URICO CREATININA EN ORINA DE 24 HORAS",
+        "RELACION AC. URICO/CREAT ORINA 24H"
+      ]
+    },
+    {
+      "canonical": "RELACIÓN UREA/CREATININA",
+      "variants": [
+        "RELACION UREA / CREATIN",
+        "RELACION UREA / CREATININA",
+        "INDICE UREA/CRETININA"
+      ]
+    },
+    {
+      "canonical": "RELACIÓN FÓSFORO/CREATININA",
+      "variants": [
+        "REALCION FOSFORO / CREATININA",
+        "RELACION FOSFORO / CREATIN",
+        "INDICE FOSFOR O/CREATININA O"
+      ]
+    },
+    {
+      "canonical": "VELOCIDAD DE SEDIMENTACIÓN GLOBULAR (VSG)",
+      "variants": [
+        "V.S.G",
+        "VELOCIDAD DE SEDIMENTACION GLOBULAR",
+        "VELOCIDAD DE SEDIMENTACION GLOBULAR ( V.S.G. )",
+        "VELOCIDAD DE SEDIMENTACION GLOBULAR (VSG)",
+        "VSG",
+        "VSG (VELOCIDAD DE SEDIMENTACION GLOBULAR)"
+      ]
+    },
+    {
+      "canonical": "CONTAJE DE RETICULOCITOS",
+      "variants": [
+        "CONTAJE DE RETICULOCITOS",
+        "RETICULOCITO",
+        "RETICULOCITOS"
+      ]
+    },
+    {
+      "canonical": "CÉLULAS LE",
+      "variants": [
+        "CELULAS L.E",
+        "CELULAS LE"
+      ]
+    },
+    {
+      "canonical": "COPROCULTIVO",
+      "variants": [
+        "COPROCULTIVO",
+        "COPROCULTIVO (CULTIVO DE LAS HECES)"
+      ]
+    },
+    {
+      "canonical": "EXAMEN DE HECES",
+      "variants": [
+        "EXAMEN DE HECES",
+        "EXAMEN DE HECES SIMPLE",
+        "HECES"
+      ]
+    },
+    {
+      "canonical": "EXAMEN DE ORINA",
+      "variants": [
+        "EXAMEN DE ORINA",
+        "EXAMEN DE ORINA SIMPLE",
+        "ORINA"
+      ]
+    },
+    {
+      "canonical": "EXAMEN SERIADO DE HECES",
+      "variants": [
+        "EXAMEN SERIADO DE HECES",
+        "HECES SERIADO"
+      ]
+    },
+    {
+      "canonical": "GRUPO SANGUÍNEO ABO Y FACTOR RH",
+      "variants": [
+        "GRUPO SANGUINEO",
+        "GRUPO SANGUINEO - FACTOR RH",
+        "GRUPO SANGUINEO ABO Y FACTOR RH"
+      ]
+    },
+    {
+      "canonical": "UROCULTIVO Y ANTIBIOGRAMA",
+      "variants": [
+        "ANTIBIOGRAMA / UROCULTIVO",
+        "ANTIBIOGRAMA CON UROCULTIVO",
+        "UROCULTIVO Y ANTIBIOGRAMA"
+      ]
+    },
+    {
+      "canonical": "CULTIVO DE SECRECIÓN",
+      "variants": [
+        "CULTIVO DE SECRECION",
+        "CULTIVO DE SECRECIONES"
+      ]
+    },
+    {
+      "canonical": "TIEMPO DE PROTROMBINA (PT)",
+      "variants": [
+        "PT (Tiempo de Protrombina)",
+        "TIEMPO DE PROTOMBINA ( TP )",
+        "TIEMPO DE PROTOMBINA (PT)",
+        "TIEMPO DE PROTOMBINA (TP)",
+        "TIEMPO DE PROTROMBINA (PT)"
+      ]
+    },
+    {
+      "canonical": "TIEMPO DE TROMBOPLASTINA PARCIAL (PTT)",
+      "variants": [
+        "PTT (TIEMPO DE TROMBOPLASTINA)",
+        "TIEMPO DE TROMBOPLASTINA PARCIAL ( PTT )",
+        "TIEMPO DE TROMBOPLASTINA PARCIAL (TTP)",
+        "TIEMPO PARCIAL TROMBOPLASTINA (PTT)",
+        "TIEMPO TROMPOPLASTINA (PTT)"
+      ]
+    },
+    {
+      "canonical": "SANGRE OCULTA EN HECES",
+      "variants": [
+        "SANGRE OCULTA",
+        "SANGRE OCULTA EN HECES"
+      ]
+    },
+    {
+      "canonical": "HEMATOLOGÍA COMPLETA + PLAQUETAS",
+      "variants": [
+        "HEMATOLOGIA COMPLETA + PLAQUETAS",
+        "HEMATOLOGIA COMPLETA/PLAQUETAS"
+      ]
+    },
+    {
+      "canonical": "CONTAJE DE EOSINÓFILOS",
+      "variants": [
+        "CONTAJE DE EOSINOFILOS",
+        "EOSINOFILOS EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "CITOGRAMA DE MOCO NASAL",
+      "variants": [
+        "CITOGRAMA DE MOCO NASAL",
+        "CITOGRAMA NASAL - EOSINOFILOS MOCO NASAL"
+      ]
+    },
+    {
+      "canonical": "CONTAJE DE CÉLULAS ENDOTELIALES",
+      "variants": [
+        "CONTAJE DE CELULAS ENDOTELIALES / BIOMICROSCOPICA",
+        "CONTAJE ENDOTELIAL EN AMBOS OJOS"
+      ]
+    },
+    {
+      "canonical": "COLORACIÓN BK / ZIEHL-NEELSEN",
+      "variants": [
+        "COLORACION BK / ZIEHL NEELSEN",
+        "COLORACION BK / ZIEHL NEELSEN (CATIA)"
+      ]
+    },
+    {
+      "canonical": "CORTISOL SÉRICO",
+      "variants": [
+        "CORTISOL",
+        "CORTISOL EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "CORTISOL AM",
+      "variants": [
+        "CORTISOL (AM)",
+        "CORTISOL TOTAL AM",
+        "CORTISOL BASAL(8 am)"
+      ]
+    },
+    {
+      "canonical": "CORTISOL PM",
+      "variants": [
+        "CORTISOL (4pm)",
+        "CORTISOL (PM)",
+        "CORTISOL PM",
+        "CORTISOL TOTAL PM"
+      ]
+    },
+    {
+      "canonical": "CORTISOL URINARIO",
+      "variants": [
+        "CORTISOL EN ORINA",
+        "CORTISOL URINARIO"
+      ]
+    },
+    {
+      "canonical": "CORTISOL LIBRE URINARIO 24 HORAS",
+      "variants": [
+        "CORTISOL ORINA 24 HORAS",
+        "CORTISOL LIBRE URINARIO 24 H"
+      ]
+    },
+    {
+      "canonical": "FSH",
+      "variants": [
+        "FSH",
+        "F.S.H.",
+        "FSH (HORMONA FOLICULO ESTIMULANTE)",
+        "HORMONA FOLICULOESTIMULANTE ( FSH )"
+      ]
+    },
+    {
+      "canonical": "LH",
+      "variants": [
+        "LH",
+        "L.H.",
+        "HORMONA LUTEINIZANTE (LH)",
+        "LH HORMONA LUTEINIZANTE"
+      ]
+    },
+    {
+      "canonical": "TSH",
+      "variants": [
+        "TSH",
+        "T.S.H",
+        "HORMONAS TIROIDEAS (TSH)",
+        "TSH HORMONA ESTIMULANTE DE LA TIROIDES"
+      ]
+    },
+    {
+      "canonical": "T3 LIBRE",
+      "variants": [
+        "T3 LIBRE",
+        "HORMONAS TIROIDEAS (T3 LIBRE)"
+      ]
+    },
+    {
+      "canonical": "T4 LIBRE",
+      "variants": [
+        "T4 LIBRE",
+        "HORMONAS TIROIDEAS (T4 LIBRE)"
+      ]
+    },
+    {
+      "canonical": "TESTOSTERONA LIBRE",
+      "variants": [
+        "TESTOSTERONA LIBRE",
+        "TESTOSTERONA LIBRE*",
+        "TETOSTERONA LIBRE"
+      ]
+    },
+    {
+      "canonical": "TESTOSTERONA TOTAL",
+      "variants": [
+        "TESTOSTERONA TOTAL",
+        "TESTOSTERONA TOTAL*",
+        "TETOSTERONA TOTAL"
+      ]
+    },
+    {
+      "canonical": "DHEA SULFATO (DHEA-S)",
+      "variants": [
+        "DHEA SULFATO (DHEA SO4)",
+        "DEHIDROEPIANDROSTERONA SULFATO DHEA SO4"
+      ]
+    },
+    {
+      "canonical": "PROLACTINA",
+      "variants": [
+        "PROLACTINA",
+        "PROLACTINA SERICA"
+      ]
+    },
+    {
+      "canonical": "HCG CUANTITATIVA (BETA-HCG)",
+      "variants": [
+        "HCG CUANTITATIVA",
+        "H.C.G CUANTITATIVA",
+        "HCG BETA (CUANTITATIVA)",
+        "GONADOTROPINA CORIONICA HCG CUANTITATIVA"
+      ]
+    },
+    {
+      "canonical": "HCG CUALITATIVA",
+      "variants": [
+        "HCG CUALITATIVA",
+        "GONADOTROPINA CORIONICA HCG CUALITATIVA",
+        "HCG BETA SUERO ( CUALITATIVA )"
+      ]
+    },
+    {
+      "canonical": "HEMOGLOBINA GLICOSILADA (HbA1C)",
+      "variants": [
+        "HEMOGLOBINA GLICOSILADA",
+        "HEMOGLOBINA GLICOSILADA (HbA1C)",
+        "HEMOGLOBINA GLICOSILADA A1C",
+        "HB GLUCOSILADA. (HEMOGLOBINA GLUCOSILADA)",
+        "HbA HEMOG GLICOSILADA TOTAL"
+      ]
+    },
+    {
+      "canonical": "GLICEMIA BASAL",
+      "variants": [
+        "GLICEMIA",
+        "GLICEMIA BASAL",
+        "GLICEMIA EN AYUNAS",
+        "GLICEMIA/GLUCOSA",
+        "GLUCOSA (GLICEMIA)"
+      ]
+    },
+    {
+      "canonical": "GLICEMIA POST-PRANDIAL",
+      "variants": [
+        "GLICEMIA POST- PANDRIAL",
+        "GLICEMIA POST PANDRIAL",
+        "GLICEMIA POST PRANDIAL"
+      ]
+    },
+    {
+      "canonical": "INSULINA BASAL",
+      "variants": [
+        "INSULINA",
+        "INSULINA BASAL",
+        "INSULINA EN AYUNAS"
+      ]
+    },
+    {
+      "canonical": "INSULINA POST-PRANDIAL",
+      "variants": [
+        "INSULINA POST- PANDRIAL",
+        "INSULINA POST PANDRIAL",
+        "INSULINA POST PRANDIAL"
+      ]
+    },
+    {
+      "canonical": "INSULINA POST CARGA 50 GRS 2 HORAS",
+      "variants": [
+        "INSULINA 120 MIN POST CARGA 50GR",
+        "INSULINA POST CARGA 50 grs 2 HORAS"
+      ]
+    },
+    {
+      "canonical": "INSULINA POST CARGA 75 GRS 2 HORAS",
+      "variants": [
+        "INSULINA 120 MIN POST CARGA 75 GR",
+        "INSULINA POST- CARGA 75 grs 2 HORAS"
+      ]
+    },
+    {
+      "canonical": "PERFIL 20",
+      "variants": [
+        "PERFIL 20",
+        "PERFIL 20 ( HC+GL+UR+CR+COL+TRIG+AU+PROT+TRANS )"
+      ]
+    },
+    {
+      "canonical": "PERFIL DE ANEMIA",
+      "variants": [
+        "PERFIL ANEMIA",
+        "PERFIL ANEMICO.",
+        "PERFIL DE ANEMIA"
+      ]
+    },
+    {
+      "canonical": "PERFIL CARDIACO",
+      "variants": [
+        "PERFIL CARDIACO",
+        "PERFIL CARDIACO (INCLUYE Hematología Completa / Orina / Glicemia / Creatinina / Ácido Úrico / Colesterol (HDL- LDL- VLDL) / Triglicéridos)"
+      ]
+    },
+    {
+      "canonical": "PERFIL HEPÁTICO",
+      "variants": [
+        "PERFIL HEPÁTICO",
+        "PERFIL HEPATICO ( HC+PT PTT+LDH+F.A.+GGT+BIL+TRANS )"
+      ]
+    },
+    {
+      "canonical": "PERFIL HORMONAL FEMENINO",
+      "variants": [
+        "PERFIL HORMONAL FEMENINO",
+        "PERFIL HORMONAL FEMENINO (FSH,LH,ESTRADIOL,PROLACTINA,PROGESTERONA,+ KIT EXTRACCION",
+        "PERFIL HORMONAL FEMENINO."
+      ]
+    },
+    {
+      "canonical": "PERFIL HORMONAL MASCULINO",
+      "variants": [
+        "PERFIL HORMONAL MASCULINO",
+        "PERFIL HORMONAL MASCULINO (TESTOSTERONA,TESTOTERONALIBRE,PROLACTINA ,SHGB,PSA)+ KIT EXTRACION"
+      ]
+    },
+    {
+      "canonical": "PERFIL LIPÍDICO",
+      "variants": [
+        "PERFIL LIPIDICO",
+        "PERFIL LIPIDICO ( TRIG + COL + HDL + LDL + VLDL )",
+        "PERFIL LIPIDICO (INCLUYE: Colesterol (HDL- LDL- VLDL) / Triglicéridos / Lípidos Totales)"
+      ]
+    },
+    {
+      "canonical": "PERFIL PEDIÁTRICO",
+      "variants": [
+        "PERFIL PEDIATRICO",
+        "PERFIL PEDIATRICO (HEMATOLOGIA COMPLETA, ORINA,HECES,GLICEMIA+KIT EXTRACCION"
+      ]
+    },
+    {
+      "canonical": "PERFIL PREOPERATORIO",
+      "variants": [
+        "PERFIL PRE-OPERATORIO",
+        "PERFIL PRE OPERATORIO",
+        "PERFIL PREOPERATORIO",
+        "PERFIL PREOPERATORIO ( HC+GL+UR+CR+HIV+VDRL+TIP+PT PTT )"
+      ]
+    },
+    {
+      "canonical": "PERFIL PRENATAL",
+      "variants": [
+        "PERFIL PRE NATAL",
+        "PERFIL PRENATAL"
+      ]
+    },
+    {
+      "canonical": "PERFIL RENAL",
+      "variants": [
+        "PERFIL RENAL",
+        "PERFIL RENAL ( HC+GL+UR+CR+PROT+ELECT+ORI+DEP CR Y PROT 24 )"
+      ]
+    },
+    {
+      "canonical": "PERFIL REUMÁTICO",
+      "variants": [
+        "PERFIL REUMATICO",
+        "PERFIL REUMATICO ( HC + VSG + PCR + RA TEST + ASTO + A.U. )"
+      ]
+    },
+    {
+      "canonical": "PERFIL TIROIDEO",
+      "variants": [
+        "PERFIL TIROIDEO",
+        "PERFIL TIROIDEO (T3 - T4- TSH)",
+        "PERFIL TIROIDEO (TSH,T3 TOTAL,Y T4 TOTAL)+KIT EXTRACCION"
+      ]
+    },
+    {
+      "canonical": "CA 125",
+      "variants": [
+        "C.A 125 OVARIO",
+        "CA-125",
+        "CA 125"
+      ]
+    },
+    {
+      "canonical": "CA 15-3",
+      "variants": [
+        "C.A. 15.3 MAMA",
+        "CA 15-3",
+        "CA 15 3"
+      ]
+    },
+    {
+      "canonical": "CA 19-9",
+      "variants": [
+        "C.A 19.9 DIGES",
+        "CA 19-9",
+        "CA 19 9"
+      ]
+    },
+    {
+      "canonical": "CEA (ANTÍGENO CARCINOEMBRIONARIO)",
+      "variants": [
+        "ANTIGENO CARCIEMBRIONARIO (CEA)",
+        "ANTIGENO CARCINOEMBRIONARIO (CEA)",
+        "C.E.A ANTÍGENO CARCIGENOEMBRIONARIO",
+        "C.E.A.",
+        "CEA",
+        "CEA ANTIGENO CARCINOEMBRIONARIO"
+      ]
+    },
+    {
+      "canonical": "ALFAFETOPROTEÍNA (AFP)",
+      "variants": [
+        "ALFA FETO PROTEINAS",
+        "ALFAFETOPROTEINA",
+        "ALFAFETOPROTEINA ( AFP )",
+        "ALFAFETOPROTEINA (AFP)",
+        "ALFAFETOPROTEINAS (AFP)"
+      ]
+    },
+    {
+      "canonical": "BETA-2 MICROGLOBULINA",
+      "variants": [
+        "BETA 2 MICROGLOBULINA",
+        "BETA 2 MICROGLOBULINA EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "TIROGLOBULINA",
+      "variants": [
+        "TIROGLOBULINA",
+        "TIROGLOBULINA EN SANGRE"
+      ]
+    },
+    {
+      "canonical": "ANTÍGENO PROSTÁTICO ESPECÍFICO TOTAL (PSA TOTAL)",
+      "variants": [
+        "ANTIG. PROSTATICO TOTAL (PSA TOTAL)",
+        "ANTIGENO PROSTATICO (PSA TOTAL)",
+        "ANTIGENO PROSTATICO (PSA) TOTAL",
+        "ANTIGENO PROSTATICO ESPECIFICO TOTAL (PSA)T"
+      ]
+    },
+    {
+      "canonical": "ANTÍGENO PROSTÁTICO ESPECÍFICO LIBRE (PSA LIBRE)",
+      "variants": [
+        "ANTIG. PROSTATICO LIBRE (PSA LIBRE)",
+        "ANTIGENO PROSTATICO (PSA LIBRE)",
+        "ANTIGENO PROSTATICO (PSA) LIBRE",
+        "ANTIGENO PROSTATICO ESPECIFICO LIBRE (PSA)L"
+      ]
+    },
+    {
+      "canonical": "TROPONINA I",
+      "variants": [
+        "TROPONINA I",
+        "TROPONINA I (cTnI)"
+      ]
+    },
+    {
+      "canonical": "CK (CREATINA FOSFOQUINASA)",
+      "variants": [
+        "CK",
+        "CK CREATININA FOSFOQUINASA"
+      ]
+    },
+    {
+      "canonical": "CKMB",
+      "variants": [
+        "C.K.M.B",
+        "CK-MB",
+        "CKMB",
+        "CKMB CREATININA FOSFOQUINASA MB",
+        "CREATININA FOSFOQUINASA (CKMB)"
+      ]
+    },
+    {
+      "canonical": "CITOMEGALOVIRUS IgG",
+      "variants": [
+        "CITOMEGALOVIRUS IG G",
+        "CITOMEGALOVIRUS IgG",
+        "CITOMEGALOVIRUS IGG"
+      ]
+    },
+    {
+      "canonical": "CITOMEGALOVIRUS IgM",
+      "variants": [
+        "CITOMEGALOVIRUS IG M",
+        "CITOMEGALOVIRUS IgM",
+        "CITOMEGALOVIRUS IGM"
+      ]
+    },
+    {
+      "canonical": "TOXOPLASMA IgG",
+      "variants": [
+        "ANTI TOXOPLASMA IGG",
+        "ANTICUERPOS ANTI TOXOPLASMA IGG",
+        "TOXOPLASMA IG G",
+        "TOXOPLASMA IGG"
+      ]
+    },
+    {
+      "canonical": "TOXOPLASMA IgM",
+      "variants": [
+        "ANTI TOXOPLASMA IGM",
+        "ANTICUERPOS ANTI TOXOPLASMA IGM",
+        "TOXOPLASMA IG M",
+        "TOXOPLASMA IGM"
+      ]
+    },
+    {
+      "canonical": "RUBÉOLA IgG",
+      "variants": [
+        "ANTI RUBEOLA IGG",
+        "RUBEOLA IG G"
+      ]
+    },
+    {
+      "canonical": "RUBÉOLA IgM",
+      "variants": [
+        "ANTI RUBEOLA IGM",
+        "RUBEOLA IG M"
+      ]
+    },
+    {
+      "canonical": "HERPES SIMPLEX I IgG",
+      "variants": [
+        "HERPES SIMPLEX 1 IGG",
+        "HERPES SIMPLEX I IGG"
+      ]
+    },
+    {
+      "canonical": "HERPES SIMPLEX I IgM",
+      "variants": [
+        "HERPES SIMPLEX 1 IGM",
+        "HERPES SIMPLEX I IGM"
+      ]
+    },
+    {
+      "canonical": "HELICOBACTER PYLORI IgG",
+      "variants": [
+        "HELICOBACTER PILORY IgG",
+        "HELICOBACTER PYLORI IGG"
+      ]
+    },
+    {
+      "canonical": "HELICOBACTER PYLORI IgM",
+      "variants": [
+        "HELICOBACTER PILORY IgM",
+        "HELICOBACTER PÍLORY IGM",
+        "HELICOBACTER PYLORI IGM"
+      ]
+    },
+    {
+      "canonical": "HELICOBACTER PYLORI EN HECES",
+      "variants": [
+        "HELICOBACTER PÍLORY EN HECES",
+        "HELICOBACTER PYLORI EN HECES"
+      ]
+    },
+    {
+      "canonical": "HELICOBACTER PYLORI (TOTAL SÉRICO)",
+      "variants": [
+        "HELICOBACTER PYLORI",
+        "HELICOBACTER PYLORI TOTAL"
+      ]
+    },
+    {
+      "canonical": "CHLAMYDIA TRACHOMATIS IgM",
+      "variants": [
+        "CHLAMYDIA TRACOMATI IGM",
+        "CLAMIDEA TRACHOMATIS IgM"
+      ]
+    },
+    {
+      "canonical": "MYCOPLASMA PNEUMONIAE IgG",
+      "variants": [
+        "ANTI MYCOPLASMA PNEUMONIAE IGG",
+        "MICOPLASMA IgG",
+        "MYCOPLASMA PNEUMONIAE IGG"
+      ]
+    },
+    {
+      "canonical": "MYCOPLASMA PNEUMONIAE IgM",
+      "variants": [
+        "ANTI MYCOPLASMA PNEUMONIAE IGM",
+        "MICOPLASMA IgM",
+        "MYCOPLASMA PNEUMONIAE IGM"
+      ]
+    },
+    {
+      "canonical": "EPSTEIN-BARR IgG",
+      "variants": [
+        "EPSTEIN BAR IgG",
+        "EPSTEIN BARR VIRUS IGG"
+      ]
+    },
+    {
+      "canonical": "EPSTEIN-BARR IgM",
+      "variants": [
+        "EPSTEIN BAR IgM",
+        "EPSTEIN BARR VIRUS IGM"
+      ]
+    },
+    {
+      "canonical": "CHAGAS (MACHADO GUERREIRO)",
+      "variants": [
+        "CHAGAS",
+        "CHAGAS - MACHADO GUERRERO",
+        "MACHADO GUERREIRO ( MAL DE CHAGAS )",
+        "MACHADO GUERREIRO(CHAGAS)"
+      ]
+    },
+    {
+      "canonical": "ANTIESTREPTOLISINA O (ASTO)",
+      "variants": [
+        "A.S.T.O. (TÍTULO DE ANTIESTREPTOLISINA)",
+        "ANTIESTREPTOLISINA (ASTO)",
+        "ASTO ANTIESTREPTOLISINA O",
+        "TITULOS DE ANTIESTREPTOLISINA (ASTO)"
+      ]
+    },
+    {
+      "canonical": "ANTÍGENOS FEBRILES (WIDAL)",
+      "variants": [
+        "ANTIGENO FEBRIL ( WIDAL )",
+        "ANTIGENOS FEBRILES"
+      ]
+    },
+    {
+      "canonical": "MONOTEST",
+      "variants": [
+        "MONO-TEST",
+        "MONOTEST"
+      ]
+    },
+    {
+      "canonical": "HIV",
+      "variants": [
+        "H.I.V.",
+        "HIV",
+        "HIV (ELISA) I/II",
+        "HIV CUALITATIVO"
+      ]
+    },
+    {
+      "canonical": "VDRL",
+      "variants": [
+        "V.D.R.L. CUALITATIVO",
+        "VDRL",
+        "VDRL CUALITATIVO"
+      ]
+    },
+    {
+      "canonical": "ANTI-HAV IgG (HEPATITIS A)",
+      "variants": [
+        "ANTI HAV (HEPATITIS A) IGG",
+        "HEPATITIS A IgG",
+        "HEPATITIS A IgG . MARCADOR PARA HEPATITIS A"
+      ]
+    },
+    {
+      "canonical": "ANTI-HAV IgM (HEPATITIS A)",
+      "variants": [
+        "ANTI HAV (HEPATITIS A) IGM",
+        "HEPATITIS A IgM",
+        "HEPATITIS A IgM. MARCADOR PARA HEPATITIS A"
+      ]
+    },
+    {
+      "canonical": "HEPATITIS A IgG + IgM",
+      "variants": [
+        "HEPATITIS A IGM/ IGG",
+        "SEROLOGIA HEPATITIS A ( IGG + IGM )"
+      ]
+    },
+    {
+      "canonical": "ANTI-HBc TOTAL (HEPATITIS B)",
+      "variants": [
+        "ANTI HBC (ANTI CORE HEPATITIS B TOTAL)",
+        "HEPATITIS \"B\" ANTI -CORE( HBcAb)",
+        "HEPATITIS B CORE Hbc.HEPATITIS B",
+        "HEPATITIS B CORE TOTAL",
+        "SEROLOGIA HEPATITIS B ANTICORE"
+      ]
+    },
+    {
+      "canonical": "ANTI-HBc IgM (HEPATITIS B)",
+      "variants": [
+        "ANTI HBC IGM (ANTI CORE HEPATITIS B)",
+        "HEPATITIS \"B\" ANTI CORE I.g.M",
+        "HEPATITIS B ANTICORE IGM",
+        "HEPATITIS B CORE IgM.HEPATITIS B",
+        "SEROLOGIA HEPATITIS B CORE IGM"
+      ]
+    },
+    {
+      "canonical": "ANTI-HBc IgG (HEPATITIS B)",
+      "variants": [
+        "HEPATITIS \"B\" ANTI CORE IgG",
+        "HEPATITIS B ANTICORE IGG",
+        "SEROLOGIA HEPATITIS B CORE IGG"
+      ]
+    },
+    {
+      "canonical": "ANTÍGENO E HEPATITIS B (HBe)",
+      "variants": [
+        "ANTI HBE (ANTIGENO E HEPATITIS B)",
+        "HEPATITIS B ANTIGENO Hbe. HEPATITIS B",
+        "SEROLOGIA HEPATITIS B HBE"
+      ]
+    },
+    {
+      "canonical": "ANTÍGENO DE SUPERFICIE HEPATITIS B (HBsAg)",
+      "variants": [
+        "ANTIGENO DE SUPERFICIE AgHBs",
+        "HEPATITIS \"B\" ANTÍGENO DE SUPERFICIE( HBsAg)",
+        "HEPATITIS B AG SUPERFICIE",
+        "HEPATITIS B ANTIGENO SUPERFICIE",
+        "HEPATITIS B HbsAg. HEPATITIS B",
+        "SEROLOGIA HEPATITIS B ANTIGENO DE SUPERFICIE"
+      ]
+    },
+    {
+      "canonical": "ANTI-HBs (ANTICUERPO ANTI-SUPERFICIE HEP. B)",
+      "variants": [
+        "ANTI HBS (ANTICUERPOS CONTRA EL AG DE SUPERFICIE HEPATITIS B)",
+        "HEPATITIS B ANTI HbsAg. MARCADOR PARA HEPATITIS B"
+      ]
+    },
+    {
+      "canonical": "ANTI-HCV (HEPATITIS C)",
+      "variants": [
+        "ANTI HCV (HEPATITIS C)",
+        "HEPATITIS \"C\"",
+        "HEPATITIS C",
+        "MARCADORES VIRALES PARA HEPATITIS C",
+        "SEROLOGIA HEPATITIS C"
+      ]
+    },
+    {
+      "canonical": "DENGUE NS1",
+      "variants": [
+        "DENGUE NS1",
+        "NS1 (ANTIGENO DEL DENGUE)"
+      ]
+    },
+    {
+      "canonical": "DENGUE IgG",
+      "variants": [
+        "DENGUE BLOT IGG",
+        "DENGUE IgG"
+      ]
+    },
+    {
+      "canonical": "DENGUE IgM",
+      "variants": [
+        "DENGUE BLOT IGM",
+        "DENGUE IgM"
+      ]
+    },
+    {
+      "canonical": "DENGUE IgG/IgM",
+      "variants": [
+        "DENGUE IgG/ IgM",
+        "SEROLOGIA PARA DENGUE BLOTT ( IGG + IGM )"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTINUCLEARES (ANA)",
+      "variants": [
+        "AC ANTINUCLEARES (ANA)",
+        "ANTI CUERPOS ANTI NUCLEARES (ANA)",
+        "ANTICUERPOS ANTI-NUCLEARES (ANA)",
+        "ANTICUERPOS ANTINUCLEARES ( ANA )"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTI-DNA",
+      "variants": [
+        "ANTI-DNA",
+        "ANTI CUERPOS ANTI DNA",
+        "ANTICUERPOS ANTI-DNA",
+        "ANTICUERPOS ANTI DNA"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTICARDIOLIPINA IgG",
+      "variants": [
+        "ANTICUERPOS ANTI-CARDIOLIPINA IGG",
+        "ANTICUERPOS ANTICARDIOLIPINAS IGG"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTICARDIOLIPINA IgM",
+      "variants": [
+        "ANTICUERPOS ANTI-CARDIOLIPINA IGM",
+        "ANTICUERPOS ANTICARDIOLIPINAS IGM"
+      ]
+    },
+    {
+      "canonical": "ANTI-BETA 2 GLICOPROTEÍNA IgG",
+      "variants": [
+        "AC ANTI-BETA 2 GLICOPROTEINA IGG",
+        "BETA 2 GLICOPROTEINA (IGG)"
+      ]
+    },
+    {
+      "canonical": "ANTI-BETA 2 GLICOPROTEÍNA IgM",
+      "variants": [
+        "AC ANTI-BETA 2 GLICOPROTEINA IGM",
+        "BETA 2 GLICOPROTEINA (IGM)"
+      ]
+    },
+    {
+      "canonical": "COMPLEMENTO C3",
+      "variants": [
+        "C3",
+        "C3 (Complemento 3)",
+        "COMPLEMENTO C3",
+        "COMPLEMENTO SERICO (C 3)"
+      ]
+    },
+    {
+      "canonical": "COMPLEMENTO C4",
+      "variants": [
+        "C4",
+        "C4 (Complemento 4)",
+        "COMPLEMENTO C4",
+        "COMPLEMENTO SERICO (C 4)"
+      ]
+    },
+    {
+      "canonical": "COMPLEMENTO CH50",
+      "variants": [
+        "CH 50",
+        "CH50 COMPLEMENTO HEMOLITICO",
+        "COMPLEMENTO CH50",
+        "COMPLEMENTO SERICO (CH 50)"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTI-PÉPTIDO CITRULINADO CÍCLICO (ANTI-CCP)",
+      "variants": [
+        "AC ANTI-PEPTIDO CITRULINADO CICLICO",
+        "ANTI CUERPOS ANTI PEPTIDOS CITRULINADOS (ANTI-CCP)",
+        "ANTI PEPTIDO CICLICO CITRULINADO",
+        "PEPTIDO CITRULINADO"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTI-TIROGLOBULINA",
+      "variants": [
+        "AC ANTI-TIROGLOBULINA",
+        "ANTI TIROGLOBULINA (ANTI TG)",
+        "ANTICUERPOS ANTITIROGLOBULINA"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTI-TPO (ANTIMICROSOMALES)",
+      "variants": [
+        "ANTICUERPOS ANTI-PEROXIDASA",
+        "ANTICUERPOS ANTIMICROSOMALES TPO ( ANTI TPO )",
+        "ANTICUERPOS ANTITIROIDEOS MICROSOMALES"
+      ]
+    },
+    {
+      "canonical": "ANTICUERPOS ANTITIROIDEOS",
+      "variants": [
+        "ANTICUERPOS ANTITIROID",
+        "ANTICUERPOS ANTITIROIDEOS"
+      ]
+    },
+    {
+      "canonical": "ANTI-TREPONEMA PALLIDUM (FTA-ABS)",
+      "variants": [
+        "ANTIC. ANTI TREPONEMA PALLIDUM",
+        "FTA-ABS"
+      ]
+    },
+    {
+      "canonical": "ANCA P (ANTI-MPO)",
+      "variants": [
+        "ACS ANTI-MPO (PANCA)",
+        "ANCA P"
+      ]
+    },
+    {
+      "canonical": "ANCA C (ANTI-PR3)",
+      "variants": [
+        "ACS ANTI-PR3 (C-ANCA)",
+        "ANCA C"
+      ]
+    },
+    {
+      "canonical": "INMUNOGLOBULINA A (IgA)",
+      "variants": [
+        "INMUNOGLOBULINA A",
+        "INMUNOGLOBULINA A ( IGA )",
+        "INMUNOGLOBULINA A (IGA)",
+        "INMUNOGLOBULINA IGA"
+      ]
+    },
+    {
+      "canonical": "INMUNOGLOBULINA A EN SALIVA",
+      "variants": [
+        "INMUNOGLOBULINA A ( SALIVA )",
+        "INMUNOGLOBULINA A SALIVA"
+      ]
+    },
+    {
+      "canonical": "INMUNOGLOBULINA E (IgE)",
+      "variants": [
+        "INMUNOGLOBULINA E",
+        "INMUNOGLOBULINA E ( IGE )",
+        "INMUNOGLOBULINA E (IGE TOTAL)",
+        "INMUNOGLOBULINA E (IGE)",
+        "INMUNOGLOBULINA IGE"
+      ]
+    },
+    {
+      "canonical": "INMUNOGLOBULINA G (IgG)",
+      "variants": [
+        "INMUNOGLOBULINA G",
+        "INMUNOGLOBULINA G (IGG)",
+        "INMUNOGLOBULINA IGG"
+      ]
+    },
+    {
+      "canonical": "INMUNOGLOBULINA M (IgM)",
+      "variants": [
+        "INMUNOGLOBULINA M",
+        "INMUNOGLOBULINA M (IGM)",
+        "INMUNOGLOBULINA IGM"
+      ]
+    },
+    {
+      "canonical": "FACTOR REUMATOIDEO (RA TEST)",
+      "variants": [
+        "FACTOR REMATOIDEO (RA TEST)",
+        "FACTOR REUMATOIDEO",
+        "R.A. TEST",
+        "RA TES",
+        "RA TEST"
+      ]
+    },
+    {
+      "canonical": "FACTOR REUMATOIDEO CUANTITATIVO",
+      "variants": [
+        "FACTOR REUMATOIDEO CUANTITATIVO",
+        "RA-TEST CUANTITATIVO"
+      ]
+    },
+    {
+      "canonical": "PERFIL TORCH",
+      "variants": [
+        "PERFIL TORCH",
+        "TORCH IGG E IGM / TOXOPLASMA GONDII IGG E IGM / RUBEOLA IGG E IGM / CITOMEGALOVIRUS IGG E IGM"
+      ]
+    },
+    {
+      "canonical": "LIQUIDO CEFALORRAQUIDEO CITOQUÍMICO",
+      "variants": [
+        "LIQUIDO CEFALORRAQUIDEO CITOQUIMIC"
+      ]
+    },
+    {
+      "canonical": "RX Torax",
+      "variants": [
+        "Rayos X Torax"
+      ]
+    },
+    {
+      "canonical": "MALARIA / PALUDISMO",
+      "variants": [
+        "MALARIA/PALUDISMO"
+      ]
+    },
+    {
+      "canonical": "SATURACIÓN DE TRANSFERRINA",
+      "variants": [
+        "% SATURACION DE TRANSFERRINA"
+      ]
+    }
+  ]
+}

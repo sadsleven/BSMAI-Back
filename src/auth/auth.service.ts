@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -139,16 +138,7 @@ export class AuthService {
       }
     }
 
-    if (dto.email && dto.email.toLowerCase() !== user.email) {
-      const dupe = await this.usersRepo.findOne({
-        where: { email: dto.email.toLowerCase() },
-        withDeleted: true,
-      });
-      if (dupe && dupe.id !== userId) {
-        throw new ConflictException('Ya existe un usuario con ese email');
-      }
-      user.email = dto.email.toLowerCase();
-    }
+    // El email es inmutable; no se modifica desde el perfil.
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
     if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber ?? null;

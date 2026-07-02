@@ -14,6 +14,7 @@ import {
 } from 'typeorm';
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
+import { TaxUnit } from '../../tax-units/entities/tax-unit.entity';
 import { AccountsPayablePayment } from './accounts-payable-payment.entity';
 import { AccountsPayableOrder } from './accounts-payable-order.entity';
 
@@ -55,6 +56,17 @@ export class AccountsPayable {
   @ManyToOne(() => CareCenter, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'careCenterId' })
   careCenter?: CareCenter | null;
+
+  /**
+   * UT elegida para el cálculo de la retención SENIAT del lote.
+   * NULL = usar la UT vigente al momento del cálculo (lotes previos).
+   */
+  @Column({ type: 'uuid', nullable: true })
+  taxUnitId?: string | null;
+
+  @ManyToOne(() => TaxUnit, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'taxUnitId' })
+  taxUnit?: TaxUnit | null;
 
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
   status: AccountsPayableStatus;

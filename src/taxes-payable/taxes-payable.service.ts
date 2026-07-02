@@ -6,12 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
-import { TaxPayable } from './entities/tax-payable.entity';
+import { TaxPayable, TaxPayableInvoiceRow } from './entities/tax-payable.entity';
 import { TaxPayablePayment } from './entities/tax-payable-payment.entity';
 import { TaxPaymentBatch } from './entities/tax-payment-batch.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
+import { TaxUnitsService } from '../tax-units/tax-units.service';
+import { calcRetention } from '../shared/utils/seniat-retention';
 import {
   CreateTaxBatchDto,
   QueryPendingTaxDto,
@@ -38,6 +40,7 @@ export class TaxesPayableService {
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
     @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
     private readonly dataSource: DataSource,
+    private readonly taxUnits: TaxUnitsService,
   ) {
     void this.paymentsRepo;
   }
@@ -152,6 +155,64 @@ export class TaxesPayableService {
     }
   }
 
+  /**
+   * Popula `invoices` en cada obligación: facturas de las órdenes del lote AP
+   * de origen (para las filas del comprobante ISLR). Bs = grossUsd × tasa de
+   * facturación de cada orden.
+   */
+  private async attachInvoiceRows(taxes: TaxPayable[]): Promise<void> {
+    const sourceIds = Array.from(
+      new Set(taxes.map((t) => t.sourcePayableId).filter(Boolean) as string[]),
+    );
+    if (!sourceIds.length) {
+      for (const t of taxes) t.invoices = [];
+      return;
+    }
+    const rows = await this.dataSource.query<
+      Array<{
+        payableId: string;
+        internalNumber: string;
+        orderId: string;
+        orderNumber: string;
+        invoiceNumber: string | null;
+        controlNumber: string | null;
+        invoiceDate: string;
+        grossUsd: number;
+        rateBs: number | null;
+      }>
+    >(
+      `SELECT apo."payableId", iio."internalNumber", o.id AS "orderId",
+              o."orderNumber", o."invoiceNumber", o."controlNumber",
+              o."updatedAt" AS "invoiceDate",
+              apo."grossUsd"::float8 AS "grossUsd",
+              er."amountBs"::float8 AS "rateBs"
+       FROM "accounts_payable_orders" apo
+       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+       JOIN "orders" o ON o.id = iio."orderId"
+       LEFT JOIN "exchange_rates" er ON er.id = o."billingExchangeRateId"
+       WHERE apo."payableId" = ANY($1)
+       ORDER BY iio."internalNumber"::int`,
+      [sourceIds],
+    );
+    const byPayable = new Map<string, TaxPayableInvoiceRow[]>();
+    for (const r of rows) {
+      const arr = byPayable.get(r.payableId) ?? [];
+      arr.push({
+        orderId: r.orderId,
+        orderNumber: r.orderNumber,
+        internalNumber: r.internalNumber,
+        invoiceNumber: r.invoiceNumber,
+        controlNumber: r.controlNumber,
+        invoiceDate: r.invoiceDate,
+        grossBs: round2((Number(r.grossUsd) || 0) * (Number(r.rateBs) || 0)),
+      });
+      byPayable.set(r.payableId, arr);
+    }
+    for (const t of taxes) {
+      t.invoices = t.sourcePayableId ? byPayable.get(t.sourcePayableId) ?? [] : [];
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Lotes SENIAT.
   // ---------------------------------------------------------------------------
@@ -173,6 +234,7 @@ export class TaxesPayableService {
 
     const qb = this.batchRepo
       .createQueryBuilder('tpb')
+      .leftJoinAndSelect('tpb.adjustmentTaxUnit', 'adjustmentTaxUnit')
       .leftJoinAndSelect('tpb.obligations', 'obl')
       .leftJoinAndSelect('obl.doctor', 'oblDoctor')
       .leftJoinAndSelect('obl.careCenter', 'oblCareCenter')
@@ -244,6 +306,7 @@ export class TaxesPayableService {
     await this.assertBatchVisibility(batch, user);
     this.computeFigures(batch);
     await this.attachInternalNumbers(batch.obligations ?? []);
+    await this.attachInvoiceRows(batch.obligations ?? []);
     return batch;
   }
 
@@ -251,6 +314,7 @@ export class TaxesPayableService {
     return mgr.findOne(TaxPaymentBatch, {
       where: { id },
       relations: {
+        adjustmentTaxUnit: true,
         obligations: { taxUnit: true, doctor: true, careCenter: true },
         payments: { exchangeRate: true },
       },
@@ -258,13 +322,34 @@ export class TaxesPayableService {
   }
 
   private computeFigures(batch: TaxPaymentBatch): void {
-    const targetBs = round2(
+    const originalTargetBs = round2(
       (batch.obligations ?? []).reduce((s, o) => s + Number(o.taxAmountBs || 0), 0),
     );
+    // Ajuste de UT: el monto a enterar al SENIAT se recalcula por obligación
+    // con la UT del ajuste; el snapshot (lo retenido al proveedor) no cambia.
+    let targetBs = originalTargetBs;
+    const adjustedUtBs = batch.adjustmentTaxUnit
+      ? Number(batch.adjustmentTaxUnit.amountBs)
+      : 0;
+    if (adjustedUtBs > 0) {
+      targetBs = 0;
+      for (const o of batch.obligations ?? []) {
+        const r = calcRetention({
+          grossBs: Number(o.grossAmountBs || 0),
+          personType: o.personType,
+          taxUnitBs: adjustedUtBs,
+        });
+        o.adjustedTaxAmountBs = r.taxAmountBs;
+        o.adjustedSubtrahendBs = r.subtrahendBs;
+        targetBs += r.taxAmountBs;
+      }
+      targetBs = round2(targetBs);
+    }
     const paidBs = round2(
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
     );
     batch.targetBs = targetBs;
+    batch.originalTargetBs = originalTargetBs;
     batch.paidBs = paidBs;
     batch.pendingBs = Math.max(0, round2(targetBs - paidBs));
   }
@@ -333,7 +418,7 @@ export class TaxesPayableService {
     await this.assertBatchVisibility(batch, user);
     if (batch.status === 'paid') {
       throw new BadRequestException(
-        'No se pueden agregar retenciones a un lote pagado. Editá o quitá un pago primero.',
+        'No se pueden agregar retenciones a un lote pagado. Edita o quita un pago primero.',
       );
     }
     await this.validateObligations(taxPayableIds, user);
@@ -357,14 +442,14 @@ export class TaxesPayableService {
     await this.assertBatchVisibility(batch, user);
     if (batch.status === 'paid') {
       throw new BadRequestException(
-        'No se pueden quitar retenciones de un lote pagado. Editá o quitá un pago primero.',
+        'No se pueden quitar retenciones de un lote pagado. Edita o quita un pago primero.',
       );
     }
     const remaining = (batch.obligations ?? []).filter(
       (o) => !taxPayableIds.includes(o.id),
     );
     if (remaining.length === 0) {
-      throw new BadRequestException('El lote quedaría vacío. Eliminá el lote en su lugar.');
+      throw new BadRequestException('El lote quedaría vacío. Elimina el lote en su lugar.');
     }
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(
@@ -373,6 +458,62 @@ export class TaxesPayableService {
         [taxPayableIds, id],
       );
       await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  /**
+   * Fija o quita el ajuste de UT del lote. El monto a pagar al SENIAT se
+   * recalcula con la UT elegida (útil si la UT subió entre pagar la cuenta por
+   * pagar — que ya no se puede modificar — y enterar la retención).
+   */
+  async setAdjustment(
+    id: string,
+    taxUnitId: string | null,
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'El lote ya está pagado. Para ajustar la Unidad Tributaria, edita o elimina un pago primero.',
+      );
+    }
+    let resolvedId: string | null = null;
+    if (taxUnitId) {
+      const ut = await this.taxUnits.findOne(taxUnitId);
+      if (!ut.isActive) {
+        throw new BadRequestException(
+          'La Unidad Tributaria seleccionada está deshabilitada',
+        );
+      }
+      resolvedId = ut.id;
+    }
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(TaxPaymentBatch, id, { adjustmentTaxUnitId: resolvedId });
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  /** Guarda los datos del comprobante ISLR del lote (documentales, sin efecto en montos). */
+  async setComprobante(
+    id: string,
+    comprobanteNumber: string,
+    issueDate: string,
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertBatchVisibility(batch, user);
+    const trimmed = comprobanteNumber.trim();
+    if (!trimmed) {
+      throw new BadRequestException('El N° de comprobante es requerido');
+    }
+    await this.batchRepo.update(id, {
+      comprobanteNumber: trimmed,
+      comprobanteIssueDate: issueDate.slice(0, 10),
     });
     return this.findOneBatch(id, user);
   }

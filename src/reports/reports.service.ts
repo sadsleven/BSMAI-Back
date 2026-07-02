@@ -502,8 +502,8 @@ export class ReportsService {
         useFixedRate: boolean;
         priceAmount: string;
         casheaFirstInstallmentAmount: string | null;
-        casheaFirstInstallmentRate: string | null;
-        casheaTotalRate: string | null;
+        casheaCommissionRate: string | null;
+        casheaFinancingRate: string | null;
         fixedRateBs: string | null;
         receivableId: string | null;
         receivableNumber: string | null;
@@ -518,8 +518,8 @@ export class ReportsService {
               p."firstName", p."lastName", p."businessName",
               o."useFixedRate", o."priceAmount"::text AS "priceAmount",
               o."casheaFirstInstallmentAmount"::text AS "casheaFirstInstallmentAmount",
-              o."casheaFirstInstallmentRate"::text AS "casheaFirstInstallmentRate",
-              o."casheaTotalRate"::text AS "casheaTotalRate",
+              o."casheaCommissionRate"::text AS "casheaCommissionRate",
+              o."casheaFinancingRate"::text AS "casheaFinancingRate",
               fx."amountBs"::text AS "fixedRateBs",
               ar.id AS "receivableId", ar."receivableNumber", ar.status AS "receivableStatus",
               aro."targetUsd"::text AS "arTargetUsd", aro."targetBs"::text AS "arTargetBs"
@@ -701,8 +701,8 @@ export class ReportsService {
     useFixedRate: boolean;
     priceAmount: string;
     casheaFirstInstallmentAmount: string | null;
-    casheaFirstInstallmentRate: string | null;
-    casheaTotalRate: string | null;
+    casheaCommissionRate: string | null;
+    casheaFinancingRate: string | null;
     fixedRateBs: string | null;
   }): { targetUsd: number | null; targetBs: number | null } {
     const price = num(r.priceAmount);
@@ -711,22 +711,27 @@ export class ReportsService {
       return { targetUsd: null, targetBs: round2(price * rateBs) };
     }
     if (r.orderType === 'cashea') {
-      // Comisión con tasas snapshot de la config de plataforma (espeja
-      // casheaCommissionForOrder). Target = precio − comisión − cuota inicial:
-      // la inicial la pagó el titular en el Paso 1, sólo resta lo financiado.
-      const firstAmount = num(r.casheaFirstInstallmentAmount);
-      const firstRate = num(r.casheaFirstInstallmentRate);
-      const totalRate = num(r.casheaTotalRate);
-      const firstCents = Math.round(firstAmount * 100);
+      // Espeja ar-targets (targetUsdForOrder). La inicial la pagó el titular en
+      // el Paso 1, no entra en la cuenta por cobrar:
+      //   restante      = total − inicial
+      //   comisión      = total × commissionRate
+      //   financiamiento= restante × financingRate
+      //   target        = restante − comisión − financiamiento
+      const initial = num(r.casheaFirstInstallmentAmount);
+      const commissionRate = num(r.casheaCommissionRate);
+      const financingRate = num(r.casheaFinancingRate);
       const priceCents = Math.round(price * 100);
-      const r1 = Math.round(firstRate * 10000);
-      const r2 = Math.round(totalRate * 10000);
-      const commissionCents = Math.round((firstCents * r1 + priceCents * r2) / 10000);
-      const commission = commissionCents / 100;
-      return {
-        targetUsd: Math.max(0, round2(price - commission - firstAmount)),
-        targetBs: null,
-      };
+      const initialCents = Math.round(initial * 100);
+      const remainingCents = Math.max(0, priceCents - initialCents);
+      const rc = Math.round(commissionRate * 10000);
+      const rf = Math.round(financingRate * 10000);
+      const commissionCents = Math.round((priceCents * rc) / 10000);
+      const financingCents = Math.round((remainingCents * rf) / 10000);
+      const netCents = Math.max(
+        0,
+        remainingCents - commissionCents - financingCents,
+      );
+      return { targetUsd: netCents / 100, targetBs: null };
     }
     return { targetUsd: round2(price), targetBs: null };
   }
@@ -1226,8 +1231,12 @@ export class ReportsService {
               p."amountCurrency", p."amountValue"::text AS "amountValue",
               p."amountInUsd"::text AS "amountInUsd", p."amountInBs"::text AS "amountInBs",
               ar."receivableNumber",
-              CASE WHEN ar."insuranceId" IS NOT NULL THEN 'insurance' ELSE 'holder' END AS "debtorType",
-              COALESCE(i."name", h."businessName", h."firstName" || ' ' || h."lastName") AS "debtorName"
+              CASE WHEN ar."insuranceId" IS NOT NULL THEN 'insurance'
+                   WHEN ar."holderId" IS NOT NULL THEN 'holder'
+                   ELSE 'cashea' END AS "debtorType",
+              COALESCE(i."name", h."businessName", h."firstName" || ' ' || h."lastName",
+                       CASE WHEN ar."insuranceId" IS NULL AND ar."holderId" IS NULL THEN 'Cashea' END
+              ) AS "debtorName"
        FROM "accounts_receivable_payments" p
        JOIN "accounts_receivable_payment_links" l ON l."paymentId" = p.id
        JOIN "accounts_receivable" ar ON ar.id = l."receivableId"

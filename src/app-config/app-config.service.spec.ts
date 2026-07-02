@@ -27,13 +27,13 @@ describe('AppConfigService', () => {
 
   describe('get', () => {
     it('devuelve el default cuando no hay fila', async () => {
-      const v = await service.get(APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE);
-      expect(v).toBe('0.04');
+      const v = await service.get(APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE);
+      expect(v).toBe('0.0464');
     });
 
     it('devuelve el valor almacenado cuando existe', async () => {
-      store.set(APP_CONFIG_KEYS.CASHEA_TOTAL_RATE, '0.0750');
-      const v = await service.get(APP_CONFIG_KEYS.CASHEA_TOTAL_RATE);
+      store.set(APP_CONFIG_KEYS.CASHEA_FINANCING_RATE, '0.0750');
+      const v = await service.get(APP_CONFIG_KEYS.CASHEA_FINANCING_RATE);
       expect(v).toBe('0.0750');
     });
 
@@ -45,43 +45,43 @@ describe('AppConfigService', () => {
   });
 
   describe('getCasheaCommissionConfig', () => {
-    it('devuelve defaults 0.04 / 0.06 sin filas', async () => {
+    it('devuelve defaults 0.0464 / 0.062 sin filas', async () => {
       const cfg = await service.getCasheaCommissionConfig();
-      expect(cfg).toEqual({ firstInstallmentRate: 0.04, totalRate: 0.06 });
+      expect(cfg).toEqual({ commissionRate: 0.0464, financingRate: 0.062 });
     });
 
     it('parsea las filas almacenadas a número', async () => {
-      store.set(APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE, '0.0300');
-      store.set(APP_CONFIG_KEYS.CASHEA_TOTAL_RATE, '0.0800');
+      store.set(APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE, '0.0300');
+      store.set(APP_CONFIG_KEYS.CASHEA_FINANCING_RATE, '0.0800');
       const cfg = await service.getCasheaCommissionConfig();
-      expect(cfg).toEqual({ firstInstallmentRate: 0.03, totalRate: 0.08 });
+      expect(cfg).toEqual({ commissionRate: 0.03, financingRate: 0.08 });
     });
 
     it('usa fallback si el valor almacenado no es numérico', async () => {
-      store.set(APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE, 'x');
+      store.set(APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE, 'x');
       const cfg = await service.getCasheaCommissionConfig();
-      expect(cfg.firstInstallmentRate).toBe(0.04);
+      expect(cfg.commissionRate).toBe(0.0464);
     });
   });
 
   describe('setCasheaCommissionConfig', () => {
     it('persiste ambas tasas con 4 decimales y las devuelve', async () => {
       const result = await service.setCasheaCommissionConfig({
-        firstInstallmentRate: 0.04,
-        totalRate: 0.06,
+        commissionRate: 0.0464,
+        financingRate: 0.062,
       });
-      expect(result).toEqual({ firstInstallmentRate: 0.04, totalRate: 0.06 });
-      expect(store.get(APP_CONFIG_KEYS.CASHEA_FIRST_INSTALLMENT_RATE)).toBe('0.0400');
-      expect(store.get(APP_CONFIG_KEYS.CASHEA_TOTAL_RATE)).toBe('0.0600');
+      expect(result).toEqual({ commissionRate: 0.0464, financingRate: 0.062 });
+      expect(store.get(APP_CONFIG_KEYS.CASHEA_COMMISSION_RATE)).toBe('0.0464');
+      expect(store.get(APP_CONFIG_KEYS.CASHEA_FINANCING_RATE)).toBe('0.0620');
     });
 
     it('round-trip: set luego getCasheaCommissionConfig', async () => {
       await service.setCasheaCommissionConfig({
-        firstInstallmentRate: 0.05,
-        totalRate: 0.07,
+        commissionRate: 0.05,
+        financingRate: 0.07,
       });
       const cfg = await service.getCasheaCommissionConfig();
-      expect(cfg).toEqual({ firstInstallmentRate: 0.05, totalRate: 0.07 });
+      expect(cfg).toEqual({ commissionRate: 0.05, financingRate: 0.07 });
     });
   });
 });
