@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -50,6 +51,15 @@ export class OrderServiceTypeRowDto {
   @IsNotEmpty({ message: 'El nombre para la orden es obligatorio' })
   @MaxLength(300)
   customName: string;
+
+  /**
+   * ST indexado (se cobra a la tasa del día del cobro). Sólo aplica cuando la
+   * orden es de seguro no indexado (`useFixedRate=true`); en cualquier otro
+   * caso el service lo fuerza a false.
+   */
+  @IsOptional()
+  @IsBoolean()
+  isIndexed?: boolean;
 
   @IsOptional()
   @IsUUID('4', { each: true })

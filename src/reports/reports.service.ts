@@ -505,6 +505,8 @@ export class ReportsService {
         casheaCommissionRate: string | null;
         casheaFinancingRate: string | null;
         fixedRateBs: string | null;
+        portion: 'full' | 'fixed' | 'indexed';
+        indexedUsd: string;
         receivableId: string | null;
         receivableNumber: string | null;
         receivableStatus: string | null;
@@ -512,6 +514,10 @@ export class ReportsService {
         arTargetBs: string | null;
       }>
     >(
+      // Expansión por porciones (espeja el listado de Pendientes de AR): una
+      // orden mixta (tasa fija + STs indexados) emite 2 filas — porción fija
+      // (Bs a la tasa de la orden) y porción indexada (USD, tasa del cobro) —
+      // cada una ligada a SU lote (si lo tiene) vía aro.portion.
       `SELECT o.id AS "orderId", o."orderNumber", o."type" AS "orderType", o."orderDate",
               o."branchId", b."name" AS "branchName",
               o."insuranceId", o."holderId", i."name" AS "insuranceName",
@@ -521,6 +527,7 @@ export class ReportsService {
               o."casheaCommissionRate"::text AS "casheaCommissionRate",
               o."casheaFinancingRate"::text AS "casheaFinancingRate",
               fx."amountBs"::text AS "fixedRateBs",
+              pt.portion AS "portion", ix."indexedUsd"::text AS "indexedUsd",
               ar.id AS "receivableId", ar."receivableNumber", ar.status AS "receivableStatus",
               aro."targetUsd"::text AS "arTargetUsd", aro."targetBs"::text AS "arTargetBs"
        FROM "orders" o
@@ -528,10 +535,27 @@ export class ReportsService {
        LEFT JOIN "insurances" i ON i.id = o."insuranceId"
        LEFT JOIN "patients" p ON p.id = o."holderId"
        LEFT JOIN "exchange_rates" fx ON fx.id = o."fixedExchangeRateId"
-       LEFT JOIN "accounts_receivable_orders" aro ON aro."orderId" = o.id
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(SUM(ROUND(osp."priceUsd" * ost."quantity", 2)), 0) AS "indexedUsd"
+         FROM "order_service_types" ost
+         JOIN "order_service_pricing" osp
+           ON osp."orderId" = ost."orderId"
+          AND osp."serviceTypeId" = ost."serviceTypeId"
+          AND osp."kind" = 'insurance'
+         WHERE ost."orderId" = o.id AND ost."isIndexed" = true
+       ) ix
+       CROSS JOIN LATERAL (VALUES ('full'), ('fixed'), ('indexed')) pt(portion)
+       LEFT JOIN "accounts_receivable_orders" aro
+         ON aro."orderId" = o.id AND aro."portion" = pt.portion
        LEFT JOIN "accounts_receivable" ar ON ar.id = aro."receivableId"
        WHERE ${where.join(' AND ')}
-       ORDER BY o."orderNumber"::int DESC`,
+         AND (
+           (pt.portion = 'full' AND (o."useFixedRate" = false OR ix."indexedUsd" <= 0))
+           OR (pt.portion = 'indexed' AND o."useFixedRate" = true AND ix."indexedUsd" > 0)
+           OR (pt.portion = 'fixed' AND o."useFixedRate" = true AND ix."indexedUsd" > 0
+               AND ix."indexedUsd" < o."priceAmount")
+         )
+       ORDER BY o."orderNumber"::int DESC, pt.portion`,
       params,
     );
 
@@ -546,10 +570,14 @@ export class ReportsService {
     const loteTargetUsd = new Map<string, number>();
     const loteTargetBs = new Map<string, number>();
     const loteStatus = new Map<string, string | null>();
+    // Modo efectivo de la fila: la porción manda sobre el flag de la orden
+    // (porción indexada de una orden tasa fija = modo USD).
+    const rowFixed = (r: { portion: string; useFixedRate: boolean }): boolean =>
+      r.portion === 'fixed' ? true : r.portion === 'indexed' ? false : r.useFixedRate;
     for (const r of orders) {
       if (!r.receivableId) continue;
       loteStatus.set(r.receivableId, r.receivableStatus);
-      const isFixed = r.useFixedRate;
+      const isFixed = rowFixed(r);
       const prior = loteMode.get(r.receivableId);
       loteMode.set(r.receivableId, prior === 'fixed' || isFixed ? 'fixed' : 'usd');
       loteTargetUsd.set(
@@ -568,7 +596,23 @@ export class ReportsService {
         debtorType === 'insurance'
           ? r.insuranceName ?? '—'
           : r.businessName ?? (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
-      const { targetUsd, targetBs } = this.orderTarget(r);
+      // Target por porción: 'full' replica ar-targets; 'fixed'/'indexed'
+      // reparten el priceAmount según los STs indexados de la orden.
+      let targetUsd: number | null;
+      let targetBs: number | null;
+      if (r.portion === 'full') {
+        ({ targetUsd, targetBs } = this.orderTarget(r));
+      } else {
+        const price = num(r.priceAmount);
+        const indexedUsd = Math.min(num(r.indexedUsd), price);
+        if (r.portion === 'indexed') {
+          targetUsd = round2(indexedUsd);
+          targetBs = null;
+        } else {
+          targetUsd = null;
+          targetBs = round2(Math.max(0, price - indexedUsd) * num(r.fixedRateBs));
+        }
+      }
       const state: string = r.receivableId ? (r.receivableStatus ?? 'uncollected') : 'sin_lote';
       return {
         orderId: r.orderId,
@@ -580,7 +624,8 @@ export class ReportsService {
         debtorType,
         debtorId: debtorType === 'insurance' ? r.insuranceId : r.holderId,
         debtorName,
-        useFixedRate: r.useFixedRate,
+        useFixedRate: rowFixed(r),
+        portion: r.portion,
         targetUsd,
         targetBs,
         receivableId: r.receivableId,

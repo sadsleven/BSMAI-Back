@@ -2,11 +2,21 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typ
 import { AccountsReceivable } from './accounts-receivable.entity';
 import { Order } from '../../orders/entities/order.entity';
 
+/** Porción de la orden cubierta por la fila del pivot. */
+export type AroPortion = 'full' | 'fixed' | 'indexed';
+
 /**
  * Pivot lote ↔ orden. PK compuesta (receivableId, orderId). Snapshot al agregar:
  * `useFixedRate` fija el modo de cobro (Bs tasa fija vs USD) y `targetUsd`/
  * `targetBs` el monto objetivo. Todas las órdenes de un lote comparten deudor y
- * modo. Una orden está a lo sumo en un lote activo (`uq_aro_order`).
+ * modo.
+ *
+ * `portion`: una orden de seguro no indexado con STs indexados se parte en dos
+ * deudas — `fixed` (STs no indexados, Bs a la tasa de la orden) e `indexed`
+ * (STs indexados, USD a la tasa del día del cobro) — que viven en lotes de
+ * modos distintos. `full` = orden completa (caso sin mezcla). Exclusividad:
+ * UNIQUE(orderId, portion) (`uq_aro_order_portion`); `full` excluye a las
+ * porciones y viceversa (invariante del service).
  */
 @Entity({ name: 'accounts_receivable_orders' })
 @Index('idx_aro_receivable', ['receivableId'])
@@ -16,6 +26,9 @@ export class AccountsReceivableOrder {
 
   @PrimaryColumn({ type: 'uuid' })
   orderId: string;
+
+  @Column({ type: 'varchar', length: 8, default: 'full' })
+  portion: AroPortion;
 
   @Column({ type: 'boolean', default: false })
   useFixedRate: boolean;

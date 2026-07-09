@@ -68,3 +68,57 @@ export function targetBsForOrder(order: Order): number | null {
   if (!Number.isFinite(price) || !Number.isFinite(rateBs)) return null;
   return +(price * rateBs).toFixed(2);
 }
+
+/**
+ * Porción indexada (USD) de una orden en modo tasa fija: Σ precio snapshot
+ * (`order_service_pricing`, kind='insurance') × cantidad de los STs marcados
+ * `isIndexed`. Requiere `orderServiceTypes` y `servicePricing` cargados; 0 si
+ * faltan o la orden no es tasa fija. Cap al `priceAmount` de la orden.
+ */
+export function indexedPortionUsd(order: Order): number {
+  if (!order.useFixedRate) return 0;
+  const unitBySt = new Map<string, number>();
+  for (const p of order.servicePricing ?? []) {
+    if (p.kind !== 'insurance') continue;
+    const n = Number(p.priceUsd);
+    if (Number.isFinite(n)) unitBySt.set(p.serviceTypeId, n);
+  }
+  let cents = 0;
+  for (const ost of order.orderServiceTypes ?? []) {
+    if (!ost.isIndexed) continue;
+    const unit = unitBySt.get(ost.serviceTypeId);
+    if (unit == null) continue;
+    const qty = Math.max(1, Math.trunc(ost.quantity ?? 1));
+    cents += Math.round(unit * 100) * qty;
+  }
+  const price = Number(order.priceAmount);
+  const priceCents = Number.isFinite(price) ? Math.round(price * 100) : cents;
+  return Math.min(cents, Math.max(0, priceCents)) / 100;
+}
+
+/**
+ * Split de una orden tasa fija en porción fija (STs no indexados, cobra en Bs
+ * a la tasa de la orden) + porción indexada (STs indexados, cobra en USD a la
+ * tasa del día del cobro). `fixedUsd + indexedUsd = priceAmount` exacto (la
+ * porción fija absorbe el redondeo).
+ */
+export function splitOrderPortionsUsd(order: Order): {
+  fixedUsd: number;
+  indexedUsd: number;
+} {
+  const price = Number(order.priceAmount) || 0;
+  const indexedUsd = indexedPortionUsd(order);
+  const fixedUsd = Math.max(0, +(price - indexedUsd).toFixed(2));
+  return { fixedUsd, indexedUsd };
+}
+
+/**
+ * Target Bs de una porción (USD × tasa fija de la orden). Null si la orden no
+ * está en modo tasa fija o no tiene tasa snapshot.
+ */
+export function targetBsForPortion(order: Order, portionUsd: number): number | null {
+  if (!order.useFixedRate || !order.fixedExchangeRate) return null;
+  const rateBs = Number(order.fixedExchangeRate.amountBs);
+  if (!Number.isFinite(rateBs) || !Number.isFinite(portionUsd)) return null;
+  return +(portionUsd * rateBs).toFixed(2);
+}

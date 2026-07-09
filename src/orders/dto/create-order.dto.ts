@@ -77,7 +77,7 @@ export class CreateOrderDto {
    * doctor/care_center según `providerType`.
    */
   @IsArray()
-  @ArrayMinSize(1, { message: 'Asigná al menos un tipo de servicio' })
+  @ArrayMinSize(1, { message: 'Asigna al menos un tipo de servicio' })
   @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => OrderServiceTypeRowDto)
@@ -112,9 +112,10 @@ export class CreateOrderDto {
   casheaFirstInstallmentAmount?: number;
 
   /**
-   * Tasa de la orden (USD/Bs) para seguros indexados. `useFixedRate` ya no se
-   * envía: el service lo deriva de si el seguro es indexado. Cuando el seguro es
-   * indexado, esta tasa (día de la orden) es obligatoria; si no, se ignora.
+   * Tasa de la orden (USD/Bs) para seguros `isIndexed=true` (UI: "No indexado").
+   * `useFixedRate` ya no se envía: el service lo deriva del flag del seguro.
+   * Cuando el flag es true, esta tasa (día de la orden) es obligatoria; si no,
+   * se ignora.
    */
   @IsOptional()
   @IsUUID()

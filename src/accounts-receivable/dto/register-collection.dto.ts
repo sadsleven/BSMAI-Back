@@ -92,11 +92,21 @@ export class CreateAccountsReceivableBatchDto {
   holderId?: string;
 
   @IsArray()
-  @ArrayMinSize(1, { message: 'Agregá al menos una orden' })
+  @ArrayMinSize(1, { message: 'Agrega al menos una orden' })
   @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   orderIds: string[];
+
+  /**
+   * Modo del lote (tasa fija Bs vs USD). Necesario para resolver qué porción de
+   * una orden mixta (seguro no indexado + STs indexados) entra al lote: modo
+   * `fixed` → porción fija; `usd` → porción indexada. Si se omite, se infiere
+   * de las órdenes no mixtas; con sólo órdenes mixtas es obligatorio.
+   */
+  @IsOptional()
+  @IsIn(['usd', 'fixed'])
+  mode?: 'usd' | 'fixed';
 }
 
 /** Agregar/quitar órdenes de un lote existente (mismo deudor y modo). */
@@ -112,7 +122,7 @@ export class MutateAccountsReceivableOrdersDto {
 /** Registrar uno o más cobros sobre un lote (id por path). */
 export class RegisterCollectionDto {
   @IsArray()
-  @ArrayMinSize(1, { message: 'Registrá al menos un cobro' })
+  @ArrayMinSize(1, { message: 'Registra al menos un cobro' })
   @ArrayMaxSize(20)
   @ValidateNested({ each: true })
   @Type(() => AccountsReceivablePaymentDto)

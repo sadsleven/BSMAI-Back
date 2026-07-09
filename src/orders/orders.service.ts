@@ -542,8 +542,9 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    // La tasa fija (Bs) ya no es un checkbox por-orden: se deriva de si el
-    // seguro es indexado. Ver `resolveFixedRate`, invocada en create/update.
+    // La tasa fija (Bs) ya no es un checkbox por-orden: se deriva del flag
+    // `isIndexed` del seguro (UI: "No indexado"). Ver `resolveFixedRate`,
+    // invocada en create/update.
 
     if (dto.orderDate && dto.appointmentDate) {
       if (new Date(dto.appointmentDate) < new Date(dto.orderDate))
@@ -833,7 +834,7 @@ export class OrdersService implements OnModuleInit {
     // credit / insurance: sin requisito de pago en el Paso 1.
   }
 
-  /** True si el seguro (por id) está marcado como indexado. */
+  /** True si el seguro (por id) tiene `isIndexed=true` (UI: "No indexado" → tasa fija de la orden). */
   private async insuranceIsIndexed(insuranceId: string): Promise<boolean> {
     const rows = await this.dataSource.query<Array<{ isIndexed: boolean }>>(
       `SELECT "isIndexed" FROM "insurances" WHERE id = $1 AND "deletedAt" IS NULL LIMIT 1`,
@@ -844,9 +845,11 @@ export class OrdersService implements OnModuleInit {
 
   /**
    * Deriva el modo tasa fija de la orden a partir del seguro:
-   *  - Seguro indexado → `useFixedRate=true` y requiere `fixedExchangeRateId`
-   *    (la tasa del día de la orden, seleccionada en el Paso 1; debe ser USD/Bs).
-   *  - Seguro no indexado / no-seguro → `useFixedRate=false`, sin tasa fija.
+   *  - Seguro `isIndexed=true` (UI: "No indexado") → `useFixedRate=true` y requiere
+   *    `fixedExchangeRateId` (la tasa del día de la orden, seleccionada en el
+   *    Paso 1; debe ser USD/Bs).
+   *  - Seguro `isIndexed=false` (UI: "Indexado") / no-seguro → `useFixedRate=false`,
+   *    sin tasa fija (se cobra a la tasa del día del cobro).
    */
   private async resolveFixedRate(
     type: 'cash' | 'credit' | 'insurance' | 'cashea',
@@ -860,7 +863,7 @@ export class OrdersService implements OnModuleInit {
     if (!indexed) return { useFixedRate: false, fixedExchangeRateId: null };
     if (!requestedRateId) {
       throw new BadRequestException(
-        'El seguro es indexado: selecciona la tasa de la orden',
+        'Seguro no indexado: selecciona la tasa de la orden',
       );
     }
     const rate = await this.ratesRepo.findOne({ where: { id: requestedRateId } });
@@ -874,7 +877,7 @@ export class OrdersService implements OnModuleInit {
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
 
-    // Tasa fija derivada del seguro (indexado ⇒ fija en Bs a la tasa de la orden).
+    // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado" ⇒ fija en Bs a la tasa de la orden).
     const fixed = await this.resolveFixedRate(
       dto.type,
       dto.insuranceId ?? null,
@@ -984,7 +987,13 @@ export class OrdersService implements OnModuleInit {
       }
 
       // Insertar filas OST (ligadas a su orden interna).
-      await this.persistOrderServiceTypes(mgr, saved.id, dto.serviceTypes, iioByKey);
+      await this.persistOrderServiceTypes(
+        mgr,
+        saved.id,
+        dto.serviceTypes,
+        iioByKey,
+        fixed.useFixedRate,
+      );
 
       const pIds = Array.from(new Set(dto.pathologyIds ?? []));
       if (pIds.length) {
@@ -1034,6 +1043,7 @@ export class OrdersService implements OnModuleInit {
     orderId: string,
     rows: OrderServiceTypeRowDto[],
     iioByKey: Map<ProviderKey, { id: string; internalNumber: string }>,
+    allowIndexedRows: boolean,
   ): Promise<void> {
     if (!rows.length) return;
     // Todo ST tiene cantidad (≥1, default 1).
@@ -1054,6 +1064,9 @@ export class OrdersService implements OnModuleInit {
           r.providerType === 'care_center' ? r.careCenterId ?? null : null,
         quantity: Math.max(1, Math.trunc(r.quantity ?? 1)),
         customName: (r.customName ?? '').trim(),
+        // ST indexado sólo tiene sentido con seguro no indexado (orden en modo
+        // tasa fija); en cualquier otro caso se fuerza false.
+        isIndexed: allowIndexedRows ? !!r.isIndexed : false,
         internalOrderId: iio.id,
       };
     });
@@ -1661,7 +1674,7 @@ export class OrdersService implements OnModuleInit {
     };
     await this.validateCoreReferences(merged, user);
 
-    // Tasa fija derivada del seguro (indexado ⇒ fija en Bs a la tasa de la orden).
+    // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado" ⇒ fija en Bs a la tasa de la orden).
     const fixedUpd = await this.resolveFixedRate(
       merged.type,
       merged.insuranceId ?? null,
@@ -1739,7 +1752,11 @@ export class OrdersService implements OnModuleInit {
     );
 
     await this.dataSource.transaction(async (mgr) => {
-      Object.assign(existing, {
+      // Importante: NO usar `Object.assign(existing, …)` + `mgr.save(existing)`
+      // — la orden viene con las relaciones cargadas (patient/holder/branch/…)
+      // y TypeORM deriva las columnas FK del objeto relación, ignorando los IDs
+      // reasignados (el cambio de paciente/titular/etc. se perdía en silencio).
+      await mgr.update(Order, existing.id, {
         branchId: merged.branchId,
         type: merged.type,
         holderId: merged.holderId,
@@ -1770,7 +1787,6 @@ export class OrdersService implements OnModuleInit {
         useFixedRate: fixedUpd.useFixedRate,
         fixedExchangeRateId: fixedUpd.fixedExchangeRateId,
       });
-      await mgr.save(existing);
 
       // Reconciliar OST + órdenes internas. Orden FK-safe (OST→interna es CASCADE):
       //   1) borrar todas las OST (libera las referencias a las internas),
@@ -1788,6 +1804,7 @@ export class OrdersService implements OnModuleInit {
         existing.id,
         merged.serviceTypes,
         iioByKey,
+        fixedUpd.useFixedRate,
       );
 
       // Pathologies replace.

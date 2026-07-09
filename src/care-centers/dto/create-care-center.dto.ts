@@ -29,9 +29,12 @@ export class CreateCareCenterDto {
   @MaxLength(200)
   businessName: string;
 
+  /** Opcional; requerido sólo para habilitar el acceso (password). `''`→null. */
+  @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email: string;
+  email?: string;
 
   @IsOptional()
   @ValidateIf((o) => o.rif !== undefined && o.rif !== null && o.rif !== '')

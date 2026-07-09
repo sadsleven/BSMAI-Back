@@ -324,7 +324,7 @@ export class DoctorsService {
     if (!doctor.userId) {
       if (!doctor.email) {
         throw new BadRequestException(
-          'El email es requerido para habilitar el acceso del doctor. Asigná un email desde la edición.',
+          'El email es requerido para habilitar el acceso del doctor. Asigna un email desde la edición.',
         );
       }
       const userId = await this.providerAccounts.provisionOrUpdateAccount({

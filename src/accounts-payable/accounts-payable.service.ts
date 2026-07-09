@@ -627,7 +627,15 @@ export class AccountsPayableService {
     const priorPaidBs = round2(
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
     );
-    const newPaymentsBs = await this.computePaymentsTotalBs(payments, usdRateId);
+    // Resolver primero: valida cada pago y fija su tasa efectiva; el cuadre se
+    // hace sobre los mismos montos que se van a persistir.
+    const payloads: Partial<AccountsPayablePayment>[] = [];
+    for (const p of payments) {
+      payloads.push(await this.resolvePaymentForSave(p, usdRateId));
+    }
+    const newPaymentsBs = round2(
+      payloads.reduce((s, pl) => s + Number(pl.amountInBs ?? 0), 0),
+    );
     if (newPaymentsBs <= 0) {
       throw new BadRequestException('El monto de los pagos debe ser mayor a 0');
     }
@@ -639,8 +647,7 @@ export class AccountsPayableService {
     }
 
     await this.dataSource.transaction(async (mgr) => {
-      for (const p of payments) {
-        const payload = await this.resolvePaymentForSave(p, usdRateId);
+      for (const payload of payloads) {
         const saved = await mgr.save(mgr.create(AccountsPayablePayment, payload));
         await mgr.query(
           `INSERT INTO "accounts_payable_payment_links" ("payableId", "paymentId")
@@ -835,7 +842,9 @@ export class AccountsPayableService {
   }
 
   // ---------------------------------------------------------------------------
-  // Conversión de pagos (sin cambios respecto al modelo anterior).
+  // Conversión de pagos. La tasa USD/Bs del propio pago (si viene) manda sobre
+  // la tasa de facturación del lote: permite registrar pagos hechos otro día
+  // a la tasa de ese día. Sin tasa propia, cae a la de facturación.
   // ---------------------------------------------------------------------------
   private async resolvePaymentForSave(
     p: AccountsPayablePaymentDto,
@@ -852,6 +861,7 @@ export class AccountsPayableService {
       amountValue: p.amountValue.toFixed(2),
       amountInUsd: '0',
     };
+    let usdCtxId = usdExchangeRateId ?? null;
 
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
       if (!p.bankCode) throw new BadRequestException('bankCode requerido');
@@ -866,6 +876,7 @@ export class AccountsPayableService {
         throw new BadRequestException('Pago en BS requiere tasa USD/Bs');
       out.bankCode = p.bankCode;
       out.exchangeRateId = p.exchangeRateId;
+      usdCtxId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
@@ -873,9 +884,16 @@ export class AccountsPayableService {
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+      usdCtxId = p.exchangeRateId;
     } else if (p.type === 'cash_usd') {
       if (p.amountCurrency !== 'USD')
         throw new BadRequestException('cash_usd debe ser en USD');
+      if (p.exchangeRateId) {
+        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        if (!rate || rate.currency !== 'USD')
+          throw new BadRequestException('cash_usd requiere tasa USD/Bs');
+        usdCtxId = p.exchangeRateId;
+      }
       out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_eur') {
       if (p.amountCurrency !== 'EUR')
@@ -890,6 +908,13 @@ export class AccountsPayableService {
       if (p.amountCurrency !== 'USD')
         throw new BadRequestException('other: amountCurrency debe ser USD');
       out.accountNumber = p.accountNumber ?? null;
+      if (p.exchangeRateId) {
+        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        if (!rate || rate.currency !== 'USD')
+          throw new BadRequestException('other requiere tasa USD/Bs');
+        out.exchangeRateId = p.exchangeRateId;
+        usdCtxId = p.exchangeRateId;
+      }
     }
 
     const usdAmount = await computeAmountInUsd(
@@ -899,7 +924,7 @@ export class AccountsPayableService {
         exchangeRateId: p.exchangeRateId ?? null,
       },
       this.ratesRepo,
-      { usdExchangeRateId: usdExchangeRateId ?? null },
+      { usdExchangeRateId: usdCtxId },
     );
     out.amountInUsd = usdAmount.toFixed(2);
     const bsAmount = await computeAmountInBs(
@@ -909,29 +934,10 @@ export class AccountsPayableService {
         exchangeRateId: p.exchangeRateId ?? null,
       },
       this.ratesRepo,
-      { usdExchangeRateId: usdExchangeRateId ?? null },
+      { usdExchangeRateId: usdCtxId },
     );
     out.amountInBs = bsAmount.toFixed(2);
     return out;
-  }
-
-  private async computePaymentsTotalBs(
-    payments: AccountsPayablePaymentDto[],
-    usdExchangeRateId: string | null,
-  ): Promise<number> {
-    let total = 0;
-    for (const p of payments) {
-      total += await computeAmountInBs(
-        {
-          amountValue: p.amountValue,
-          amountCurrency: p.amountCurrency,
-          exchangeRateId: p.exchangeRateId ?? null,
-        },
-        this.ratesRepo,
-        { usdExchangeRateId },
-      );
-    }
-    return round2(total);
   }
 }
 

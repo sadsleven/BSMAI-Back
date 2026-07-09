@@ -74,6 +74,15 @@ export class OrderServiceType {
   @Column({ type: 'varchar', length: 300 })
   customName: string;
 
+  /**
+   * ST indexado dentro de una orden con seguro no indexado (`useFixedRate=true`):
+   * este ST se cobra a la tasa del día del cobro, NO a la tasa fija de la orden.
+   * Sólo aplica en órdenes en modo tasa fija; el service lo fuerza a false en
+   * cualquier otro caso.
+   */
+  @Column({ type: 'boolean', default: false })
+  isIndexed: boolean;
+
   @Column({ type: 'uuid', nullable: true })
   doctorId?: string | null;
 
