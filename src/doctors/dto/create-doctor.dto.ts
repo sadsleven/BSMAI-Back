@@ -32,9 +32,12 @@ export class CreateDoctorDto {
   @Matches(CEDULA_PATTERN, { message: CEDULA_MESSAGE })
   cedula: string;
 
+  /** Opcional; requerido sólo para habilitar el acceso (password). `''`→null. */
+  @IsOptional()
+  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
-  email: string;
+  email?: string;
 
   @IsString()
   @MinLength(1)

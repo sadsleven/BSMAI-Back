@@ -40,9 +40,11 @@ export class Insurance {
   isActive: boolean;
 
   /**
-   * Seguro indexado. Cuando true, la cuenta por cobrar se fija en Bs a la tasa
-   * del día de la orden (se le asigna una tasa a la orden en el Paso 1). Cuando
-   * false (no indexado), se cobra a la tasa del día del cobro (USD flotante).
+   * Cuando true (UI: "No indexado"), la cuenta por cobrar se fija en Bs a la
+   * tasa del día de la orden (se le asigna una tasa a la orden en el Paso 1).
+   * Cuando false (UI: "Indexado"), se cobra a la tasa del día del cobro (USD
+   * flotante). Nota: la nomenclatura de negocio quedó invertida respecto al
+   * nombre de la columna; la columna se conserva por compatibilidad.
    */
   @Column({ type: 'boolean', default: false })
   isIndexed: boolean;

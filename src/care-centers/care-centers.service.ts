@@ -283,7 +283,7 @@ export class CareCentersService {
     if (!center.userId) {
       if (!center.email) {
         throw new BadRequestException(
-          'El email es requerido para habilitar el acceso del centro. Asigná un email desde la edición.',
+          'El email es requerido para habilitar el acceso del centro. Asigna un email desde la edición.',
         );
       }
       const userId = await this.providerAccounts.provisionOrUpdateAccount({

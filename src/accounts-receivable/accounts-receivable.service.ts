@@ -25,7 +25,13 @@ import {
 } from '../shared/utils/payment-conversion';
 import { Order } from '../orders/entities/order.entity';
 import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service';
-import { targetBsForOrder, targetUsdForOrder } from './ar-targets';
+import {
+  splitOrderPortionsUsd,
+  targetBsForOrder,
+  targetBsForPortion,
+  targetUsdForOrder,
+} from './ar-targets';
+import type { AroPortion } from './entities/accounts-receivable-order.entity';
 
 // Re-export para compatibilidad con specs/consumidores existentes.
 export {
@@ -39,11 +45,17 @@ const TOLERANCE_USD = 0.01;
 const TOLERANCE_BS = 0.01;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
-/** Orden finalizada con deudor, disponible para armar un lote (Pendiente). */
+/**
+ * Orden finalizada con deudor, disponible para armar un lote (Pendiente).
+ * Una orden mixta (seguro no indexado + STs indexados) genera 2 pendientes:
+ * `portion='fixed'` (Bs tasa fija) y `portion='indexed'` (USD, tasa del cobro);
+ * `useFixedRate` refleja el modo de la PORCIÓN, no el de la orden.
+ */
 export interface PendingReceivable {
   orderId: string;
   orderNumber: string;
   orderType: string;
+  portion: AroPortion;
   debtorType: 'insurance' | 'holder' | 'cashea';
   insuranceId: string | null;
   holderId: string | null;
@@ -55,6 +67,31 @@ export interface PendingReceivable {
   branchName: string | null;
   createdAt: string;
 }
+
+/**
+ * Condiciones SQL de expansión por porciones. Emite por orden:
+ *  - `full` si no es tasa fija o no tiene STs indexados (caso normal),
+ *  - `indexed` si es tasa fija con STs indexados,
+ *  - `fixed` además si la porción indexada no cubre el total.
+ */
+const PORTION_EMIT_SQL = `(
+  (pt.portion = 'full' AND (o."useFixedRate" = false OR ix."indexedUsd" <= 0))
+  OR (pt.portion = 'indexed' AND o."useFixedRate" = true AND ix."indexedUsd" > 0)
+  OR (pt.portion = 'fixed' AND o."useFixedRate" = true AND ix."indexedUsd" > 0
+      AND ix."indexedUsd" < o."priceAmount")
+)`;
+
+/** LATERAL: porción indexada (USD) = Σ precio snapshot seguro × cantidad de STs indexados. */
+const INDEXED_USD_LATERAL_SQL = `CROSS JOIN LATERAL (
+  SELECT COALESCE(SUM(ROUND(osp."priceUsd" * ost."quantity", 2)), 0) AS "indexedUsd"
+  FROM "order_service_types" ost
+  JOIN "order_service_pricing" osp
+    ON osp."orderId" = ost."orderId"
+   AND osp."serviceTypeId" = ost."serviceTypeId"
+   AND osp."kind" = 'insurance'
+  WHERE ost."orderId" = o.id AND ost."isIndexed" = true
+) ix
+CROSS JOIN LATERAL (VALUES ('full'), ('fixed'), ('indexed')) pt(portion)`;
 
 @Injectable()
 export class AccountsReceivableService {
@@ -109,7 +146,11 @@ export class AccountsReceivableService {
       `o."deletedAt" IS NULL`,
       `((o."type" = 'insurance' AND o."insuranceId" IS NOT NULL)
         OR (o."type" IN ('credit','cashea') AND o."holderId" IS NOT NULL))`,
-      `NOT EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro WHERE aro."orderId" = o.id)`,
+      PORTION_EMIT_SQL,
+      // Exclusión por porción: 'full' bloquea todo; una porción bloquea su igual.
+      `NOT EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro
+        WHERE aro."orderId" = o.id
+          AND (aro."portion" = pt.portion OR aro."portion" = 'full' OR pt.portion = 'full'))`,
     ];
 
     if (!user.isSuperAdmin) {
@@ -151,6 +192,7 @@ export class AccountsReceivableService {
       `SELECT count(*)::int AS c FROM "orders" o
        LEFT JOIN "insurances" i ON i.id = o."insuranceId"
        LEFT JOIN "patients" p ON p.id = o."holderId"
+       ${INDEXED_USD_LATERAL_SQL}
        WHERE ${whereSql}`,
       params,
     );
@@ -176,6 +218,8 @@ export class AccountsReceivableService {
         casheaCommissionRate: string | null;
         casheaFinancingRate: string | null;
         fixedRateBs: string | null;
+        portion: AroPortion;
+        indexedUsd: string;
         branchId: string;
         branchName: string | null;
         createdAt: string;
@@ -187,14 +231,16 @@ export class AccountsReceivableService {
               o."useFixedRate", o."priceAmount",
               o."casheaFirstInstallmentAmount", o."casheaCommissionRate", o."casheaFinancingRate",
               fx."amountBs" AS "fixedRateBs",
+              pt.portion AS "portion", ix."indexedUsd"::text AS "indexedUsd",
               o."branchId", b."name" AS "branchName", o."createdAt"
        FROM "orders" o
        LEFT JOIN "insurances" i ON i.id = o."insuranceId"
        LEFT JOIN "patients" p ON p.id = o."holderId"
        LEFT JOIN "branches" b ON b.id = o."branchId"
        LEFT JOIN "exchange_rates" fx ON fx.id = o."fixedExchangeRateId"
+       ${INDEXED_USD_LATERAL_SQL}
        WHERE ${whereSql}
-       ORDER BY o."orderNumber"::int DESC
+       ORDER BY o."orderNumber"::int DESC, pt.portion
        LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
       dataParams,
     );
@@ -220,17 +266,37 @@ export class AccountsReceivableService {
         debtorType === 'insurance'
           ? r.insuranceName ?? '—'
           : r.businessName ?? (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
+      // Targets por porción: 'full' = orden completa; 'fixed' = resto no
+      // indexado en Bs a la tasa de la orden; 'indexed' = STs indexados en USD.
+      const price = Number(r.priceAmount) || 0;
+      const indexedUsd = Math.min(Number(r.indexedUsd) || 0, price);
+      const fixedUsd = Math.max(0, round2(price - indexedUsd));
+      const rateBs = Number(r.fixedRateBs);
+      let rowUseFixedRate = r.useFixedRate;
+      let targetUsd: number | null = null;
+      let targetBs: number | null = null;
+      if (r.portion === 'indexed') {
+        rowUseFixedRate = false;
+        targetUsd = indexedUsd;
+      } else if (r.portion === 'fixed') {
+        rowUseFixedRate = true;
+        targetBs = Number.isFinite(rateBs) ? round2(fixedUsd * rateBs) : null;
+      } else {
+        targetUsd = r.useFixedRate ? null : targetUsdForOrder(orderLike);
+        targetBs = r.useFixedRate ? targetBsForOrder(orderLike) : null;
+      }
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
         orderType: r.orderType,
+        portion: r.portion,
         debtorType,
         insuranceId: r.insuranceId,
         holderId: r.holderId,
         debtorName,
-        useFixedRate: r.useFixedRate,
-        targetUsd: r.useFixedRate ? null : targetUsdForOrder(orderLike),
-        targetBs: r.useFixedRate ? targetBsForOrder(orderLike) : null,
+        useFixedRate: rowUseFixedRate,
+        targetUsd,
+        targetBs,
         branchId: r.branchId,
         branchName: r.branchName,
         createdAt: r.createdAt,
@@ -359,7 +425,7 @@ export class AccountsReceivableService {
       .map((o) => o.order?.branchId)
       .filter(Boolean) as string[];
     if (branchIds.length === 0 || branchIds.some((b) => !allowed.has(b))) {
-      throw new ForbiddenException('No tenés acceso a este lote');
+      throw new ForbiddenException('No tienes acceso a este lote');
     }
   }
 
@@ -424,11 +490,12 @@ export class AccountsReceivableService {
       for (const r of rows) {
         await mgr.query(
           `INSERT INTO "accounts_receivable_orders"
-             ("receivableId", "orderId", "useFixedRate", "targetUsd", "targetBs")
-           VALUES ($1, $2, $3, $4, $5)`,
+             ("receivableId", "orderId", "portion", "useFixedRate", "targetUsd", "targetBs")
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             batchId,
             r.orderId,
+            r.portion,
             r.useFixedRate,
             r.targetUsd != null ? r.targetUsd.toFixed(2) : null,
             r.targetBs != null ? r.targetBs.toFixed(2) : null,
@@ -472,11 +539,12 @@ export class AccountsReceivableService {
       for (const r of rows) {
         await mgr.query(
           `INSERT INTO "accounts_receivable_orders"
-             ("receivableId", "orderId", "useFixedRate", "targetUsd", "targetBs")
-           VALUES ($1, $2, $3, $4, $5)`,
+             ("receivableId", "orderId", "portion", "useFixedRate", "targetUsd", "targetBs")
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             id,
             r.orderId,
+            r.portion,
             r.useFixedRate,
             r.targetUsd != null ? r.targetUsd.toFixed(2) : null,
             r.targetBs != null ? r.targetBs.toFixed(2) : null,
@@ -510,7 +578,12 @@ export class AccountsReceivableService {
     return this.findOneBatch(id, user);
   }
 
-  /** Valida órdenes pendientes: existencia, finalizada, deudor uniforme, modo uniforme, sin lote, visible. */
+  /**
+   * Valida órdenes pendientes: existencia, finalizada, deudor uniforme, modo
+   * uniforme, sin lote (por porción), visible. Una orden mixta (tasa fija +
+   * STs indexados) aporta la porción que corresponde al modo del lote: `fixed`
+   * → porción fija (Bs), `usd` → porción indexada (USD).
+   */
   private async validatePendingOrders(
     orderIds: string[],
     dto: CreateAccountsReceivableBatchDto,
@@ -519,6 +592,7 @@ export class AccountsReceivableService {
   ): Promise<
     Array<{
       orderId: string;
+      portion: AroPortion;
       useFixedRate: boolean;
       targetUsd: number | null;
       targetBs: number | null;
@@ -526,22 +600,66 @@ export class AccountsReceivableService {
   > {
     const orders = await this.ordersRepo.find({
       where: { id: In(orderIds) },
-      relations: { fixedExchangeRate: true },
+      relations: {
+        fixedExchangeRate: true,
+        orderServiceTypes: true,
+        servicePricing: true,
+      },
     });
     if (orders.length !== orderIds.length) {
       throw new BadRequestException('Alguna orden no existe');
     }
-    const inBatch = await this.dataSource.query<{ orderId: string }[]>(
-      `SELECT "orderId" FROM "accounts_receivable_orders" WHERE "orderId" = ANY($1)`,
+    const inBatch = await this.dataSource.query<
+      { orderId: string; portion: AroPortion }[]
+    >(
+      `SELECT "orderId", "portion" FROM "accounts_receivable_orders" WHERE "orderId" = ANY($1)`,
       [orderIds],
     );
-    const inBatchSet = new Set(inBatch.map((r) => r.orderId));
+    const portionsInBatch = new Map<string, Set<AroPortion>>();
+    for (const r of inBatch) {
+      const set = portionsInBatch.get(r.orderId) ?? new Set<AroPortion>();
+      set.add(r.portion);
+      portionsInBatch.set(r.orderId, set);
+    }
     let allowed: Set<string> | null = null;
     if (!user.isSuperAdmin) allowed = new Set(await this.resolveUserBranchIds(user));
+
+    // Porción natural de cada orden ('full' si no hay mezcla; null = mixta,
+    // depende del modo del lote).
+    const naturalPortion = (o: Order): AroPortion | null => {
+      if (!o.useFixedRate) return 'full';
+      const { fixedUsd, indexedUsd } = splitOrderPortionsUsd(o);
+      if (indexedUsd <= 0) return 'full';
+      if (fixedUsd <= 0) return 'indexed'; // toda la orden indexada → USD
+      return null; // mixta
+    };
+
+    // Modo del lote: forzado (add), pedido en el DTO (create) o inferido de la
+    // primera orden no mixta. Con sólo órdenes mixtas es obligatorio indicarlo.
+    let mode: 'usd' | 'fixed' | undefined = forcedMode ?? dto.mode;
+    if (!mode) {
+      for (const o of orders) {
+        const p = naturalPortion(o);
+        if (p === 'full') {
+          mode = o.useFixedRate ? 'fixed' : 'usd';
+          break;
+        }
+        if (p === 'indexed') {
+          mode = 'usd';
+          break;
+        }
+      }
+    }
+    if (!mode) {
+      throw new BadRequestException(
+        'Indica el modo del lote (tasa fija o USD) para órdenes con servicios indexados',
+      );
+    }
 
     const debtorId = dto.debtorType === 'insurance' ? dto.insuranceId : dto.holderId;
     const out: Array<{
       orderId: string;
+      portion: AroPortion;
       useFixedRate: boolean;
       targetUsd: number | null;
       targetBs: number | null;
@@ -550,13 +668,8 @@ export class AccountsReceivableService {
       if (o.status !== 'finalized') {
         throw new BadRequestException('Sólo se pueden cobrar órdenes finalizadas');
       }
-      if (inBatchSet.has(o.id)) {
-        throw new BadRequestException(
-          'Una orden ya está en otro lote. Quitala de ese lote primero.',
-        );
-      }
       if (allowed && !allowed.has(o.branchId)) {
-        throw new ForbiddenException('No tenés acceso a una de las órdenes');
+        throw new ForbiddenException('No tienes acceso a una de las órdenes');
       }
       // Deudor uniforme. Cashea: basta que la orden sea cashea (el deudor es la
       // fintech; puede mezclar titulares distintos).
@@ -576,25 +689,54 @@ export class AccountsReceivableService {
           );
         }
       }
-      // Modo uniforme.
-      if (forcedMode && (forcedMode === 'fixed') !== o.useFixedRate) {
+
+      // Porción que entra al lote + fila snapshot.
+      const natural = naturalPortion(o);
+      const portion: AroPortion = natural ?? (mode === 'fixed' ? 'fixed' : 'indexed');
+      const rowFixed = portion === 'full' ? o.useFixedRate : portion === 'fixed';
+      // Modo uniforme (la porción debe calzar con el modo del lote).
+      if ((mode === 'fixed') !== rowFixed) {
         throw new BadRequestException(
           'No se puede mezclar órdenes con tasa fija (Bs) y en USD en un mismo lote',
         );
       }
-      out.push({
-        orderId: o.id,
-        useFixedRate: o.useFixedRate,
-        targetUsd: o.useFixedRate ? null : targetUsdForOrder(o),
-        targetBs: o.useFixedRate ? targetBsForOrder(o) : null,
-      });
-    }
-    // Modo uniforme dentro del propio set.
-    const fixed = out.filter((r) => r.useFixedRate).length;
-    if (fixed > 0 && fixed < out.length) {
-      throw new BadRequestException(
-        'No se puede mezclar órdenes con tasa fija (Bs) y en USD en un mismo lote',
-      );
+      // Exclusividad por porción ('full' choca con todo).
+      const taken = portionsInBatch.get(o.id);
+      if (taken && (taken.has('full') || taken.has(portion) || portion === 'full')) {
+        throw new BadRequestException(
+          'Una orden (o su porción) ya está en otro lote. Quítala de ese lote primero.',
+        );
+      }
+
+      const { fixedUsd, indexedUsd } = splitOrderPortionsUsd(o);
+      if (portion === 'indexed') {
+        out.push({
+          orderId: o.id,
+          portion,
+          useFixedRate: false,
+          targetUsd: indexedUsd > 0 ? indexedUsd : Number(o.priceAmount) || 0,
+          targetBs: null,
+        });
+      } else if (portion === 'fixed') {
+        out.push({
+          orderId: o.id,
+          portion,
+          useFixedRate: true,
+          // targetUsd de porciones fijas = snapshot USD (estado de cuenta).
+          targetUsd: fixedUsd,
+          targetBs: targetBsForPortion(o, fixedUsd),
+        });
+      } else {
+        out.push({
+          orderId: o.id,
+          portion: 'full',
+          useFixedRate: o.useFixedRate,
+          targetUsd: o.useFixedRate
+            ? Number(o.priceAmount) || 0
+            : targetUsdForOrder(o),
+          targetBs: o.useFixedRate ? targetBsForOrder(o) : null,
+        });
+      }
     }
     if (out.some((r) => r.useFixedRate && r.targetBs == null)) {
       throw new BadRequestException('Una orden con tasa fija no tiene tasa snapshot');
@@ -735,7 +877,7 @@ export class AccountsReceivableService {
   // ---------------------------------------------------------------------------
   /**
    * Tasa USD/Bs de referencia para convertir los cobros del lote:
-   *  - Modo tasa fija (seguro indexado): la tasa fija snapshot de la orden
+   *  - Modo tasa fija (seguro "No indexado", isIndexed=true): la tasa fija snapshot de la orden
    *    (primera del lote que tenga una) — el cobro se convierte a la tasa
    *    fijada en la orden, no a la del día.
    *  - Modo USD: la tasa de facturación de la primera orden; sin ella,

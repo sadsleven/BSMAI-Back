@@ -87,7 +87,9 @@ export class SetTaxBatchAdjustmentDto {
 /** Guardar los datos del comprobante ISLR del lote (N° + fecha de emisión). */
 export class SetTaxBatchComprobanteDto {
   @IsString()
-  @MaxLength(50)
+  @Matches(/^\d{1,14}$/, {
+    message: 'El N° de comprobante debe ser numérico (máximo 14 dígitos)',
+  })
   comprobanteNumber: string;
 
   @IsISO8601()
