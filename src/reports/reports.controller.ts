@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import {
+  QueryArcReportDto,
   QueryPayablesReportDto,
   QueryReceivablesReportDto,
   QueryReportsDto,
@@ -48,6 +49,16 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.taxesRetained(query, user);
+  }
+
+  /**
+   * ARC — Comprobante de Agente de Retención (Decreto 1.808). Agrupa las
+   * retenciones por beneficiario dentro del ejercicio fiscal (`year` o from/to).
+   */
+  @RequirePermissions(PERMISSIONS.REPORTS.TAXES_RETAINED_LIST)
+  @Get('arc')
+  arc(@Query() query: QueryArcReportDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.arc(query, user);
   }
 
   /** Pagos emitidos a proveedores (dinero que salió). Filtra por paymentDate. */

@@ -57,3 +57,15 @@ export class QueryReceivablesReportDto extends QueryReportsDto {
   @IsIn(['insurance', 'holder'])
   groupBy?: 'insurance' | 'holder';
 }
+
+/**
+ * Filtros del comprobante ARC (Agente de Retención, Decreto 1.808). El período
+ * fiscal se resuelve así: `year` → 01-01 a 31-12 de ese año; sino `from`/`to`;
+ * sino el año calendario actual. Filtra por la fecha de abono (pago al proveedor).
+ */
+export class QueryArcReportDto extends QueryReportsDto {
+  /** Año fiscal (YYYY). Tiene prioridad sobre from/to. */
+  @IsOptional()
+  @IsString()
+  year?: string;
+}

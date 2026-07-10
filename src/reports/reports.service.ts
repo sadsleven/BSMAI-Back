@@ -157,7 +157,7 @@ export class ReportsService {
     }
 
     // Una fila por obligación (order_internal_orders facturada). Trae estado del lote.
-    const obligations = await this.dataSource.query<
+    const allObligations = await this.dataSource.query<
       Array<{
         internalOrderId: string;
         orderId: string;
@@ -171,6 +171,10 @@ export class ReportsService {
         careCenterId: string | null;
         doctorIsLegal: boolean | null;
         providerName: string | null;
+        patientName: string | null;
+        insuranceName: string | null;
+        procedure: string | null;
+        facturacionUsd: string | null;
         grossUsd: string;
         billingRateBs: string | null;
         payableId: string | null;
@@ -183,6 +187,18 @@ export class ReportsService {
               iio."providerType", iio."doctorId", iio."careCenterId",
               d."isLegalEntity" AS "doctorIsLegal",
               COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName",
+              COALESCE(pac."businessName", NULLIF(TRIM(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')), '')) AS "patientName",
+              i."name" AS "insuranceName",
+              (SELECT string_agg(DISTINCT ost."customName", ', ')
+                 FROM "order_service_types" ost
+                 WHERE ost."internalOrderId" = iio.id) AS "procedure",
+              (SELECT COALESCE(SUM(osp."priceUsd" * ost."quantity"), 0)
+                 FROM "order_service_types" ost
+                 JOIN "order_service_pricing" osp
+                   ON osp."orderId" = ost."orderId"
+                  AND osp."serviceTypeId" = ost."serviceTypeId"
+                  AND osp."kind" IN ('particular', 'insurance')
+                 WHERE ost."internalOrderId" = iio.id)::text AS "facturacionUsd",
               iio."providerAmountUsd"::text AS "grossUsd",
               fx."amountBs"::text AS "billingRateBs",
               ap.id AS "payableId", ap."payableNumber", ap.status AS "payableStatus"
@@ -191,6 +207,8 @@ export class ReportsService {
        LEFT JOIN "branches" b ON b.id = o."branchId"
        LEFT JOIN "doctors" d ON d.id = iio."doctorId"
        LEFT JOIN "care_centers" cc ON cc.id = iio."careCenterId"
+       LEFT JOIN "patients" pac ON pac.id = o."patientId"
+       LEFT JOIN "insurances" i ON i.id = o."insuranceId"
        LEFT JOIN "exchange_rates" fx ON fx.id = o."billingExchangeRateId"
        LEFT JOIN "accounts_payable_orders" apo ON apo."internalOrderId" = iio.id
        LEFT JOIN "accounts_payable" ap ON ap.id = apo."payableId"
@@ -199,11 +217,24 @@ export class ReportsService {
       params,
     );
 
+    // Filtro de estado: se aplica sobre el estado derivado (lote o sin_lote).
+    // El FE etiqueta `sin_lote` igual que `unpaid` ("Por pagar"), así que
+    // `status=unpaid` incluye ambas. Filtrar aquí (y no después) garantiza que
+    // filas, lotes y summary se calculen sobre el mismo conjunto.
+    const obligations = query.status
+      ? allObligations.filter((r) => {
+          const state = r.payableId ? (r.payableStatus ?? 'unpaid') : 'sin_lote';
+          if (query.status === 'unpaid') return state === 'unpaid' || state === 'sin_lote';
+          return state === query.status;
+        })
+      : allObligations;
+
     // Pagos por lote (amountInBs) — los lotes relevantes son los que aparecen arriba.
     const payableIds = Array.from(
       new Set(obligations.map((r) => r.payableId).filter(Boolean) as string[]),
     );
     const paidByPayable = await this.paidBsByPayable(payableIds);
+    const paymentMetaByPayable = await this.paymentMetaByPayable(payableIds);
 
     // TotalBs por lote (Σ obligaciones × tasa de facturación de cada orden) y
     // su persona fiscal (todas las órdenes de un lote son del mismo proveedor).
@@ -240,6 +271,7 @@ export class ReportsService {
       );
       const netBs = round2(grossBs - retentionBs);
       const state: string = r.payableId ? (r.payableStatus ?? 'unpaid') : 'sin_lote';
+      const meta = r.payableId ? paymentMetaByPayable.get(r.payableId) : undefined;
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
@@ -250,6 +282,10 @@ export class ReportsService {
         providerType: r.providerType,
         providerId: r.providerType === 'doctor' ? r.doctorId : r.careCenterId,
         providerName: r.providerName ?? '—',
+        patientName: r.patientName ?? '—',
+        insuranceName: r.insuranceName,
+        procedure: r.procedure,
+        facturacionUsd: round2(num(r.facturacionUsd)),
         personType,
         grossUsd: round2(num(r.grossUsd)),
         billingRateBs: round2(rateBs),
@@ -258,6 +294,8 @@ export class ReportsService {
         netBs,
         payableId: r.payableId,
         payableNumber: r.payableNumber,
+        paymentDate: meta?.date ?? null,
+        paymentReference: meta?.ref ?? null,
         state,
       };
     });
@@ -390,6 +428,28 @@ export class ReportsService {
     return out;
   }
 
+  /** Fecha (última) y referencias de pago por lote AP, para el edo. de cuenta. */
+  private async paymentMetaByPayable(
+    payableIds: string[],
+  ): Promise<Map<string, { date: string | null; ref: string | null }>> {
+    const out = new Map<string, { date: string | null; ref: string | null }>();
+    if (payableIds.length === 0) return out;
+    const rows = await this.dataSource.query<
+      Array<{ payableId: string; date: string | null; ref: string | null }>
+    >(
+      `SELECT l."payableId",
+              MAX(p."paymentDate")::text AS date,
+              string_agg(DISTINCT NULLIF(p."referenceNumber", ''), ', ') AS ref
+       FROM "accounts_payable_payment_links" l
+       JOIN "accounts_payable_payments" p ON p.id = l."paymentId"
+       WHERE l."payableId" = ANY($1) AND p."deletedAt" IS NULL
+       GROUP BY l."payableId"`,
+      [payableIds],
+    );
+    for (const r of rows) out.set(r.payableId, { date: r.date, ref: r.ref });
+    return out;
+  }
+
   private emptyPayableSummary(): Record<string, number> {
     return { count: 0, grossUsd: 0, grossBs: 0, netBs: 0, paidBs: 0, pendingBs: 0 };
   }
@@ -406,34 +466,35 @@ export class ReportsService {
   ): Record<string, number> {
     let grossUsd = 0;
     let grossBs = 0;
-    let netBs = 0;
     for (const row of ctx.perObligationRows) {
       grossUsd += row.grossUsd;
       grossBs += row.grossBs;
-      netBs += row.netBs;
     }
     // paidBs = Σ pagos de todos los lotes que matchean.
     let paidBs = 0;
     for (const [, v] of ctx.paidByPayable) paidBs += v;
 
+    // netBs con la retención REAL del lote (sobre el bruto agregado, una sola
+    // vez) + estimado por fila sólo para sin-lote — igual que groupBy=provider.
+    // Sumar los estimados por fila aplicaría el sustraendo/umbral PNR una vez
+    // por obligación y el neto no cuadraría con los pagos registrados.
     // pendingBs = Σ lotes no-pagados de max(0, loteNet − lotePaid) + Σ sin-lote de netBs.
+    let netBs = 0;
     let pendingBs = 0;
     const seenLote = new Set<string>();
-    const loteStatus = new Map<string, string | null>();
-    for (const r of obligations) {
-      if (r.payableId) loteStatus.set(r.payableId, r.payableStatus);
-    }
     for (let i = 0; i < obligations.length; i++) {
       const r = obligations[i];
       if (r.payableId) {
         if (seenLote.has(r.payableId)) continue;
         seenLote.add(r.payableId);
+        const net = round2(ctx.loteNetBs.get(r.payableId) ?? 0);
+        netBs += net;
         if (r.payableStatus !== 'paid') {
-          const net = round2(ctx.loteNetBs.get(r.payableId) ?? 0);
           const paid = round2(ctx.paidByPayable.get(r.payableId) ?? 0);
           pendingBs += Math.max(0, round2(net - paid));
         }
       } else {
+        netBs += ctx.perObligationRows[i].netBs;
         pendingBs += ctx.perObligationRows[i].netBs;
       }
     }
@@ -499,6 +560,14 @@ export class ReportsService {
         firstName: string | null;
         lastName: string | null;
         businessName: string | null;
+        holderIdDisplay: string | null;
+        patientName: string | null;
+        patientIdDisplay: string | null;
+        doctorName: string | null;
+        serviceKey: string | null;
+        invoiceNumber: string | null;
+        controlNumber: string | null;
+        costoUsd: string | null;
         useFixedRate: boolean;
         priceAmount: string;
         casheaFirstInstallmentAmount: string | null;
@@ -522,6 +591,17 @@ export class ReportsService {
               o."branchId", b."name" AS "branchName",
               o."insuranceId", o."holderId", i."name" AS "insuranceName",
               p."firstName", p."lastName", p."businessName",
+              COALESCE(p."cedula", p."rif") AS "holderIdDisplay",
+              COALESCE(pac."businessName", NULLIF(TRIM(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')), '')) AS "patientName",
+              COALESCE(pac."cedula", pac."rif") AS "patientIdDisplay",
+              o."serviceKey", o."invoiceNumber", o."controlNumber",
+              (SELECT string_agg(DISTINCT TRIM(COALESCE(doc."firstName", '') || ' ' || COALESCE(doc."lastName", '')), ', ')
+                 FROM "order_service_types" ost2
+                 JOIN "doctors" doc ON doc.id = ost2."doctorId"
+                 WHERE ost2."orderId" = o.id) AS "doctorName",
+              (SELECT COALESCE(SUM(iio2."providerAmountUsd"), 0)
+                 FROM "order_internal_orders" iio2
+                 WHERE iio2."orderId" = o.id)::text AS "costoUsd",
               o."useFixedRate", o."priceAmount"::text AS "priceAmount",
               o."casheaFirstInstallmentAmount"::text AS "casheaFirstInstallmentAmount",
               o."casheaCommissionRate"::text AS "casheaCommissionRate",
@@ -534,6 +614,7 @@ export class ReportsService {
        LEFT JOIN "branches" b ON b.id = o."branchId"
        LEFT JOIN "insurances" i ON i.id = o."insuranceId"
        LEFT JOIN "patients" p ON p.id = o."holderId"
+       LEFT JOIN "patients" pac ON pac.id = o."patientId"
        LEFT JOIN "exchange_rates" fx ON fx.id = o."fixedExchangeRateId"
        CROSS JOIN LATERAL (
          SELECT COALESCE(SUM(ROUND(osp."priceUsd" * ost."quantity", 2)), 0) AS "indexedUsd"
@@ -569,14 +650,12 @@ export class ReportsService {
     const loteMode = new Map<string, 'usd' | 'fixed'>();
     const loteTargetUsd = new Map<string, number>();
     const loteTargetBs = new Map<string, number>();
-    const loteStatus = new Map<string, string | null>();
     // Modo efectivo de la fila: la porción manda sobre el flag de la orden
     // (porción indexada de una orden tasa fija = modo USD).
     const rowFixed = (r: { portion: string; useFixedRate: boolean }): boolean =>
       r.portion === 'fixed' ? true : r.portion === 'indexed' ? false : r.useFixedRate;
     for (const r of orders) {
       if (!r.receivableId) continue;
-      loteStatus.set(r.receivableId, r.receivableStatus);
       const isFixed = rowFixed(r);
       const prior = loteMode.get(r.receivableId);
       loteMode.set(r.receivableId, prior === 'fixed' || isFixed ? 'fixed' : 'usd');
@@ -614,6 +693,9 @@ export class ReportsService {
         }
       }
       const state: string = r.receivableId ? (r.receivableStatus ?? 'uncollected') : 'sin_lote';
+      const holderName =
+        r.businessName ?? (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
+      const isFixedRow = rowFixed(r);
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
@@ -624,7 +706,17 @@ export class ReportsService {
         debtorType,
         debtorId: debtorType === 'insurance' ? r.insuranceId : r.holderId,
         debtorName,
-        useFixedRate: rowFixed(r),
+        holderName,
+        holderId: r.holderIdDisplay ?? '',
+        patientName: r.patientName ?? holderName,
+        patientId: r.patientIdDisplay ?? '',
+        doctorName: r.doctorName ?? '',
+        serviceKey: r.serviceKey ?? '',
+        invoiceNumber: r.invoiceNumber ?? '',
+        controlNumber: r.controlNumber ?? '',
+        costoUsd: round2(num(r.costoUsd)),
+        useFixedRate: isFixedRow,
+        rateBs: isFixedRow ? round2(num(r.fixedRateBs)) : null,
         portion: r.portion,
         targetUsd,
         targetBs,
@@ -818,7 +910,12 @@ export class ReportsService {
   }
 
   private computeReceivableSummary(
-    orders: Array<{ receivableId: string | null; receivableStatus: string | null; useFixedRate: boolean }>,
+    orders: Array<{
+      orderId: string;
+      receivableId: string | null;
+      receivableStatus: string | null;
+      useFixedRate: boolean;
+    }>,
     perOrderRows: Array<{ targetUsd: number | null; targetBs: number | null; useFixedRate: boolean }>,
     ctx: {
       collectedUsd: Map<string, number>;
@@ -874,7 +971,9 @@ export class ReportsService {
     void collectedUsd;
     void collectedBs;
     return {
-      count: perOrderRows.length,
+      // Órdenes distintas: una orden mixta emite 2 filas (porción fija+indexada)
+      // y el FE muestra este valor como "Cantidad de órdenes".
+      count: new Set(orders.map((r) => r.orderId)).size,
       targetUsd: round2(targetUsd),
       targetBs: round2(targetBs),
       collectedUsd: round2(collUsd),
@@ -929,22 +1028,24 @@ export class ReportsService {
       params.push(query.status);
       where.push(`tp.status = $${params.length}`);
     }
-    if (query.from) {
-      params.push(query.from);
+    // Un solo EXISTS con ambas cotas sobre la MISMA orden: con dos EXISTS
+    // independientes, una orden ≥ from y OTRA distinta ≤ to bastaban para
+    // colar la retención al rango aunque ninguna orden cayera dentro de él.
+    if (query.from || query.to) {
+      const conds: string[] = [];
+      if (query.from) {
+        params.push(query.from);
+        conds.push(`o_r."orderDate" >= $${params.length}`);
+      }
+      if (query.to) {
+        params.push(query.to);
+        conds.push(`o_r."orderDate" <= $${params.length}`);
+      }
       where.push(
-        `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_f
-                 JOIN "order_internal_orders" iio_f ON iio_f.id = apo_f."internalOrderId"
-                 JOIN "orders" o_f ON o_f.id = iio_f."orderId"
-                 WHERE apo_f."payableId" = tp."sourcePayableId" AND o_f."orderDate" >= $${params.length})`,
-      );
-    }
-    if (query.to) {
-      params.push(query.to);
-      where.push(
-        `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_t
-                 JOIN "order_internal_orders" iio_t ON iio_t.id = apo_t."internalOrderId"
-                 JOIN "orders" o_t ON o_t.id = iio_t."orderId"
-                 WHERE apo_t."payableId" = tp."sourcePayableId" AND o_t."orderDate" <= $${params.length})`,
+        `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_r
+                 JOIN "order_internal_orders" iio_r ON iio_r.id = apo_r."internalOrderId"
+                 JOIN "orders" o_r ON o_r.id = iio_r."orderId"
+                 WHERE apo_r."payableId" = tp."sourcePayableId" AND ${conds.join(' AND ')})`,
       );
     }
     if (query.search && query.search.trim()) {
@@ -1006,11 +1107,21 @@ export class ReportsService {
     const paidByBatch = await this.paidBsByTaxBatch(batchIds);
     // Target Bs por lote SENIAT = Σ taxAmountBs de sus obligaciones (de la query).
     const batchTarget = new Map<string, number>();
-    const batchStatus = new Map<string, string>();
     for (const t of taxes) {
       if (!t.taxBatchId) continue;
       batchTarget.set(t.taxBatchId, (batchTarget.get(t.taxBatchId) ?? 0) + num(t.taxAmountBs));
-      batchStatus.set(t.taxBatchId, t.status);
+    }
+    // Target TOTAL del lote (todas sus obligaciones, sin filtro): si un filtro
+    // (search/from/to) deja fuera parte de las obligaciones, los pagos del lote
+    // se prorratean por la fracción filtrada — sin esto, "Pagado al SENIAT"
+    // sumaba el pago íntegro contra un retenido parcial (avance >100%).
+    const batchFullTarget = await this.fullTargetByTaxBatch(batchIds);
+    const paidShareByBatch = new Map<string, number>();
+    for (const [batchId, paid] of paidByBatch) {
+      const filteredTarget = batchTarget.get(batchId) ?? 0;
+      const fullTarget = batchFullTarget.get(batchId) ?? 0;
+      const share = fullTarget > 0 ? Math.min(1, filteredTarget / fullTarget) : 1;
+      paidShareByBatch.set(batchId, round2(paid * share));
     }
 
     const rows = taxes.map((t) => ({
@@ -1029,11 +1140,11 @@ export class ReportsService {
       state: t.taxBatchId ? t.status : 'sin_lote',
     }));
 
-    // Summary.
+    // Summary (pagos prorrateados a la fracción de obligaciones filtradas).
     let taxAmountBs = 0;
     for (const r of rows) taxAmountBs += r.taxAmountBs;
     let paidBs = 0;
-    for (const [, v] of paidByBatch) paidBs += v;
+    for (const [, v] of paidShareByBatch) paidBs += v;
     let pendingBs = 0;
     const seenBatch = new Set<string>();
     for (const t of taxes) {
@@ -1042,7 +1153,7 @@ export class ReportsService {
         seenBatch.add(t.taxBatchId);
         if (t.status !== 'paid') {
           const target = round2(batchTarget.get(t.taxBatchId) ?? 0);
-          const paid = round2(paidByBatch.get(t.taxBatchId) ?? 0);
+          const paid = round2(paidShareByBatch.get(t.taxBatchId) ?? 0);
           pendingBs += Math.max(0, round2(target - paid));
         }
       } else {
@@ -1095,6 +1206,222 @@ export class ReportsService {
     );
     for (const r of rows) out.set(r.batchId, num(r.paid));
     return out;
+  }
+
+  /** Σ taxAmountBs de TODAS las obligaciones de cada lote SENIAT (sin filtro). */
+  private async fullTargetByTaxBatch(ids: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (ids.length === 0) return out;
+    const rows = await this.dataSource.query<Array<{ batchId: string; total: string }>>(
+      `SELECT tp."taxPaymentBatchId" AS "batchId",
+              COALESCE(SUM(tp."taxAmountBs"), 0)::text AS total
+       FROM "taxes_payable" tp
+       WHERE tp."taxPaymentBatchId" = ANY($1) AND tp."deletedAt" IS NULL
+       GROUP BY tp."taxPaymentBatchId"`,
+      [ids],
+    );
+    for (const r of rows) out.set(r.batchId, num(r.total));
+    return out;
+  }
+
+  // ===========================================================================
+  // 3b. ARC — Comprobante de Agente de Retención (Decreto 1.808)
+  // Agrupa las retenciones por beneficiario (proveedor) dentro del ejercicio
+  // fiscal, con la fecha de abono (pago al proveedor) y lo enterado al SENIAT.
+  // ===========================================================================
+  async arc(
+    query: QueryReportsDto & { year?: string },
+    user: AuthenticatedUser,
+  ): Promise<{
+    period: { from: string; to: string; year: number };
+    beneficiaries: Array<{
+      providerType: 'doctor' | 'care_center';
+      providerId: string | null;
+      name: string;
+      personType: SeniatPersonType;
+      cedula: string | null;
+      rif: string | null;
+      address: string | null;
+      phone: string | null;
+      lines: Array<{
+        paymentDate: string | null;
+        baseBs: number;
+        ratePct: number;
+        retainedBs: number;
+        accBaseBs: number;
+        accRetainedBs: number;
+        enteradoDate: string | null;
+        enteradoBank: string | null;
+      }>;
+      totalBaseBs: number;
+      totalRetainedBs: number;
+    }>;
+  }> {
+    // Período fiscal: year > from/to > año actual (01-01 a 31-12).
+    let year: number;
+    let from: string;
+    let to: string;
+    if (query.year && /^\d{4}$/.test(query.year)) {
+      year = Number(query.year);
+      from = `${year}-01-01`;
+      to = `${year}-12-31`;
+    } else if (query.from && query.to) {
+      from = query.from;
+      to = query.to;
+      year = Number(from.slice(0, 4)) || new Date().getFullYear();
+    } else {
+      year = new Date().getFullYear();
+      from = `${year}-01-01`;
+      to = `${year}-12-31`;
+    }
+
+    const empty = { period: { from, to, year }, beneficiaries: [] };
+    const allowed = await this.resolveUserBranchIds(user);
+    if (!user.isSuperAdmin && allowed.length === 0) return empty;
+
+    const where: string[] = ['tp."deletedAt" IS NULL'];
+    const params: unknown[] = [];
+    // Scope de sucursal: la retención cuelga de su lote AP → órdenes → branch.
+    if (!user.isSuperAdmin) {
+      params.push(allowed);
+      where.push(
+        `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_s
+                 JOIN "order_internal_orders" iio_s ON iio_s.id = apo_s."internalOrderId"
+                 JOIN "orders" o_s ON o_s.id = iio_s."orderId"
+                 WHERE apo_s."payableId" = tp."sourcePayableId" AND o_s."branchId" = ANY($${params.length}))`,
+      );
+    }
+    if (query.branchId) {
+      params.push(query.branchId);
+      where.push(
+        `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_b
+                 JOIN "order_internal_orders" iio_b ON iio_b.id = apo_b."internalOrderId"
+                 JOIN "orders" o_b ON o_b.id = iio_b."orderId"
+                 WHERE apo_b."payableId" = tp."sourcePayableId" AND o_b."branchId" = $${params.length})`,
+      );
+    }
+    if (query.doctorId) {
+      params.push(query.doctorId);
+      where.push(`tp."doctorId" = $${params.length}`);
+    }
+    if (query.careCenterId) {
+      params.push(query.careCenterId);
+      where.push(`tp."careCenterId" = $${params.length}`);
+    }
+    params.push(from);
+    const pFrom = params.length;
+    params.push(to);
+    const pTo = params.length;
+    where.push(
+      `COALESCE(ab.abono::date, tp."createdAt"::date) >= $${pFrom}
+       AND COALESCE(ab.abono::date, tp."createdAt"::date) <= $${pTo}`,
+    );
+
+    const rows = await this.dataSource.query<
+      Array<{
+        providerType: 'doctor' | 'care_center';
+        providerId: string | null;
+        name: string | null;
+        personType: SeniatPersonType;
+        cedula: string | null;
+        rif: string | null;
+        address: string | null;
+        phone: string | null;
+        baseBs: string;
+        taxRate: string;
+        retainedBs: string;
+        abono: string | null;
+        createdAt: string;
+        enteradoDate: string | null;
+        enteradoBank: string | null;
+      }>
+    >(
+      `SELECT tp."recipientType" AS "providerType",
+              COALESCE(tp."doctorId", tp."careCenterId") AS "providerId",
+              COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "name",
+              tp."personType",
+              CASE WHEN tp."recipientType" = 'doctor' AND d."isLegalEntity" = false
+                   THEN d."cedula" ELSE NULL END AS "cedula",
+              CASE WHEN tp."recipientType" = 'doctor'
+                   THEN CASE WHEN d."isLegalEntity" THEN d."rif" ELSE NULL END
+                   ELSE cc."rif" END AS "rif",
+              COALESCE(d."centerAddress", cc."centerAddress") AS "address",
+              COALESCE(
+                (SELECT dp."number" FROM "doctor_phones" dp
+                  WHERE dp."doctorId" = tp."doctorId"
+                  ORDER BY dp."createdAt" LIMIT 1),
+                (SELECT cp."number" FROM "care_center_phones" cp
+                  WHERE cp."careCenterId" = tp."careCenterId"
+                  ORDER BY cp."createdAt" LIMIT 1)
+              ) AS "phone",
+              tp."grossAmountBs"::text AS "baseBs",
+              tp."taxRate"::text AS "taxRate",
+              tp."taxAmountBs"::text AS "retainedBs",
+              ab.abono::text AS "abono",
+              tp."createdAt"::text AS "createdAt",
+              en.enterado::text AS "enteradoDate",
+              en.bank AS "enteradoBank"
+       FROM "taxes_payable" tp
+       LEFT JOIN "doctors" d ON d.id = tp."doctorId"
+       LEFT JOIN "care_centers" cc ON cc.id = tp."careCenterId"
+       LEFT JOIN LATERAL (
+         SELECT MAX(app."paymentDate") AS abono
+         FROM "accounts_payable_payment_links" apl
+         JOIN "accounts_payable_payments" app ON app.id = apl."paymentId"
+         WHERE apl."payableId" = tp."sourcePayableId" AND app."deletedAt" IS NULL
+       ) ab ON true
+       LEFT JOIN LATERAL (
+         SELECT MAX(tpp."paymentDate") AS enterado,
+                string_agg(DISTINCT NULLIF(COALESCE(bk."name", tpp."bankCode", tpp."referenceNumber"), ''), ', ') AS bank
+         FROM "tax_payment_batch_payment_links" tbl
+         JOIN "taxes_payable_payments" tpp ON tpp.id = tbl."paymentId"
+         LEFT JOIN "banks" bk ON bk."code" = tpp."bankCode"
+         WHERE tbl."batchId" = tp."taxPaymentBatchId" AND tpp."deletedAt" IS NULL
+       ) en ON true
+       WHERE ${where.join(' AND ')}
+       ORDER BY "name", COALESCE(ab.abono, tp."createdAt"), tp."createdAt"`,
+      params,
+    );
+
+    // Agrupar por beneficiario y acumular.
+    type Bene = (typeof empty.beneficiaries)[number];
+    const map = new Map<string, Bene>();
+    for (const r of rows) {
+      const key = `${r.providerType}:${r.providerId}`;
+      let b = map.get(key);
+      if (!b) {
+        b = {
+          providerType: r.providerType,
+          providerId: r.providerId,
+          name: r.name ?? '—',
+          personType: r.personType,
+          cedula: r.cedula,
+          rif: r.rif,
+          address: r.address,
+          phone: r.phone,
+          lines: [],
+          totalBaseBs: 0,
+          totalRetainedBs: 0,
+        };
+        map.set(key, b);
+      }
+      const baseBs = round2(num(r.baseBs));
+      const retainedBs = round2(num(r.retainedBs));
+      b.totalBaseBs = round2(b.totalBaseBs + baseBs);
+      b.totalRetainedBs = round2(b.totalRetainedBs + retainedBs);
+      b.lines.push({
+        paymentDate: r.abono ?? r.createdAt ?? null,
+        baseBs,
+        ratePct: round2(num(r.taxRate) * 100),
+        retainedBs,
+        accBaseBs: b.totalBaseBs,
+        accRetainedBs: b.totalRetainedBs,
+        enteradoDate: r.enteradoDate,
+        enteradoBank: r.enteradoBank,
+      });
+    }
+
+    return { period: { from, to, year }, beneficiaries: Array.from(map.values()) };
   }
 
   // ===========================================================================
@@ -1333,11 +1660,17 @@ export class ReportsService {
     const receivablesRes = await this.receivables({ ...query, groupBy: undefined }, user);
 
     const fallbackRateBs = await this.fallbackUsdRateBs();
-    const today = new Date();
-    const bucketOf = (orderDate: string): '0-30' | '31-60' | '61-90' | '90+' => {
-      const d = new Date(orderDate);
-      if (!Number.isFinite(d.getTime())) return '0-30';
-      const days = Math.max(0, Math.floor((today.getTime() - d.getTime()) / 86_400_000));
+    // Edad en días CALENDARIO: fecha-solo vs fecha-solo (ambas ancladas a
+    // medianoche UTC). Comparar contra el instante actual corría el bucket +1
+    // durante las últimas horas del día según la TZ del servidor.
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const bucketOf = (orderDate: string | Date): '0-30' | '31-60' | '61-90' | '90+' => {
+      const iso =
+        orderDate instanceof Date ? orderDate.toISOString() : String(orderDate);
+      const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+      if (!y || !m || !d) return '0-30';
+      const days = Math.max(0, Math.round((todayUtc - Date.UTC(y, m - 1, d)) / 86_400_000));
       if (days <= 30) return '0-30';
       if (days <= 60) return '31-60';
       if (days <= 90) return '61-90';
