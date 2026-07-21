@@ -14,6 +14,10 @@ import { OrderPayment } from './entities/order-payment.entity';
 import { OrderServiceType } from './entities/order-service-type.entity';
 import { OrderProviderReport } from './entities/order-provider-report.entity';
 import { OrderInternalOrder } from './entities/order-internal-order.entity';
+import {
+  OrderChangeAction,
+  OrderChangeLog,
+} from './entities/order-change-log.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrderServiceTypeRowDto } from './dto/order-service-type.dto';
@@ -67,6 +71,28 @@ void ALLOWED_TRANSITIONS;
 
 type ProviderKey = `doctor:${string}` | `care_center:${string}`;
 
+/** Etiquetas ES de tipos de pago para el historial de cambios. Espejo del FE. */
+const PAYMENT_TYPE_LABEL_ES: Record<string, string> = {
+  mobile_payment: 'Pago móvil',
+  bank_transfer: 'Transferencia',
+  bank_transfer_usd: 'Transferencia en dólares',
+  card: 'Punto (tarjeta)',
+  cash_usd: 'Efectivo dólares',
+  cash_eur: 'Efectivo euros',
+  cash_bs: 'Efectivo bolívares',
+  other: 'Otro',
+};
+
+/** Resumen legible de un pago para el historial ("Pago móvil · 100.00 BS"). */
+function paymentSummary(p: {
+  type: string;
+  amountValue: string | number;
+  amountCurrency: string;
+}): string {
+  const label = PAYMENT_TYPE_LABEL_ES[p.type] ?? p.type;
+  return `${label} · ${Number(p.amountValue).toFixed(2)} ${p.amountCurrency}`;
+}
+
 @Injectable()
 export class OrdersService implements OnModuleInit {
   private readonly logger = new Logger(OrdersService.name);
@@ -94,6 +120,8 @@ export class OrdersService implements OnModuleInit {
     private readonly orderPricingRepo: Repository<OrderServicePricing>,
     @InjectRepository(OrderProviderReport)
     private readonly providerReportsRepo: Repository<OrderProviderReport>,
+    @InjectRepository(OrderChangeLog)
+    private readonly changeLogsRepo: Repository<OrderChangeLog>,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
     private readonly authService: AuthService,
@@ -118,6 +146,55 @@ export class OrdersService implements OnModuleInit {
   private userHasPermission(user: AuthenticatedUser, perm: string): boolean {
     if (user.isSuperAdmin) return true;
     return (user.permissions ?? []).includes(perm);
+  }
+
+  // ----- Historial de cambios por usuario -----
+
+  /**
+   * Registra una acción en el historial de la orden. Con `mgr` participa en la
+   * transacción del caller; sin él inserta directo. Nunca lanza: un fallo de
+   * bitácora no debe tumbar la operación principal.
+   */
+  private async logChange(
+    mgr: EntityManager | null,
+    orderId: string,
+    userId: string,
+    action: OrderChangeAction,
+    changes?: Record<string, { from?: unknown; to?: unknown }> | null,
+  ): Promise<void> {
+    try {
+      const row = { orderId, userId, action, changes: changes ?? null };
+      if (mgr) await mgr.insert(OrderChangeLog, row);
+      else await this.changeLogsRepo.insert(row);
+    } catch (e) {
+      this.logger.warn(
+        `No se pudo registrar el historial (${action}, orden ${orderId}): ${(e as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * El Paso 1 (datos de la orden, monto y pagos) solo lo modifica el usuario
+   * que creó la orden. Super Admin siempre pasa. Los demás pasos (atención,
+   * informe, facturación) no tienen esta restricción.
+   */
+  private assertStep1Editable(order: Order, user: AuthenticatedUser): void {
+    if (user.isSuperAdmin) return;
+    if (order.createdById !== user.id) {
+      throw new ForbiddenException(
+        'Solo el usuario que creó la orden puede modificar el Paso 1',
+      );
+    }
+  }
+
+  /** Historial de cambios de la orden (más reciente primero). */
+  async history(id: string, user: AuthenticatedUser): Promise<OrderChangeLog[]> {
+    await this.findOne(id, user, true);
+    return this.changeLogsRepo.find({
+      where: { orderId: id },
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   /**
@@ -292,6 +369,8 @@ export class OrdersService implements OnModuleInit {
       .leftJoinAndSelect('insurance.phones', 'insurancePhones')
       // Órdenes internas (números por proveedor) para mostrar todos en el listado.
       .leftJoinAndSelect('o.internalOrders', 'orderInternalOrders')
+      // Creador de la orden (columna "Creado por" del listado).
+      .leftJoinAndSelect('o.createdBy', 'createdBy')
       .orderBy(`o.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
@@ -1025,6 +1104,8 @@ export class OrdersService implements OnModuleInit {
       // proveedor se persiste en `order_internal_orders.providerAmountUsd` al
       // facturar (Paso 4); las órdenes con deudor quedan como pendientes de cobro.
 
+      await this.logChange(mgr, saved.id, user.id, 'create');
+
       return saved.id;
     });
 
@@ -1201,6 +1282,11 @@ export class OrdersService implements OnModuleInit {
       { id: order.id },
       { attended: dto.attended, attendedAt, status },
     );
+    if (order.attended !== dto.attended) {
+      await this.logChange(null, order.id, user.id, 'attend', {
+        attended: { from: order.attended, to: dto.attended },
+      });
+    }
     return this.findOne(id, user);
   }
 
@@ -1284,6 +1370,8 @@ export class OrdersService implements OnModuleInit {
       if (Object.keys(patch).length) {
         await mgr.update(Order, { id: order.id }, patch);
       }
+
+      await this.logChange(mgr, order.id, user.id, 'report');
     });
 
     return this.findOne(id, user);
@@ -1345,6 +1433,7 @@ export class OrdersService implements OnModuleInit {
     if (order.type === 'insurance') {
       throw new BadRequestException('El monto de las órdenes de seguro es fijo');
     }
+    this.assertStep1Editable(order, user);
 
     const validator = await this.authService.verifyValidator(
       dto.validatorEmail,
@@ -1369,6 +1458,9 @@ export class OrdersService implements OnModuleInit {
         amountAuthorizationNote: dto.observation.trim(),
       },
     );
+    await this.logChange(null, order.id, user.id, 'authorize_amount', {
+      priceAmount: { from: Number(order.priceAmount), to: +dto.priceAmount.toFixed(2) },
+    });
     return this.findOne(id, user);
   }
 
@@ -1521,6 +1613,15 @@ export class OrdersService implements OnModuleInit {
           [p.amount.toFixed(2), order.id, p.providerType, providerId],
         );
       }
+
+      await this.logChange(mgr, order.id, user.id, 'billing', {
+        doctorAmount: {
+          from: order.doctorAmount != null ? Number(order.doctorAmount) : null,
+          to: +totalUsd.toFixed(2),
+        },
+        invoiceNumber: { to: dto.invoiceNumber.trim() },
+        controlNumber: { to: dto.controlNumber.trim() },
+      });
     });
     return this.findOne(id, user);
   }
@@ -1620,10 +1721,138 @@ export class OrdersService implements OnModuleInit {
     return { suggested: +suggested.toFixed(2), snapshotRows };
   }
 
+  /**
+   * Diff campo a campo para el historial de cambios de una edición del Paso 1.
+   * Compara la orden existente contra los valores EFECTIVOS que se escriben en
+   * la transacción (post-normalización: serviceKey trim/null, reembolso solo
+   * crédito, cashea/tasa fija derivados). Las relaciones to-many (STs,
+   * patologías, pagos) se comparan normalizadas y se reportan como conteos.
+   */
+  private diffUpdateChanges(
+    existing: Order,
+    merged: CreateOrderDto,
+    fin: {
+      insuranceSource: string | null;
+      serviceKey: string | null;
+      isReimbursement: boolean;
+      /** Valor efectivo post-normalización ("123.00" | null). */
+      casheaFirstInstallmentAmount: string | null;
+      useFixedRate: boolean;
+      fixedExchangeRateId: string | null;
+      dtoPayments?: CreateOrderPaymentDto[];
+    },
+  ): Record<string, { from?: unknown; to?: unknown }> {
+    const out: Record<string, { from?: unknown; to?: unknown }> = {};
+    const put = (k: string, from: unknown, to: unknown) => {
+      if (from !== to) out[k] = { from, to };
+    };
+
+    put('branchId', existing.branchId, merged.branchId);
+    put('type', existing.type, merged.type);
+    put('holderId', existing.holderId, merged.holderId);
+    put('patientId', existing.patientId, merged.patientId);
+    put('contractorId', existing.contractorId ?? null, merged.contractorId ?? null);
+    put('insuranceId', existing.insuranceId ?? null, merged.insuranceId ?? null);
+    put('insuranceSource', existing.insuranceSource ?? null, fin.insuranceSource);
+    put('serviceKey', existing.serviceKey ?? null, fin.serviceKey);
+    put('isReimbursement', existing.isReimbursement, fin.isReimbursement);
+    put('specialtyId', existing.specialtyId, merged.specialtyId);
+    put(
+      'orderDate',
+      String(existing.orderDate).slice(0, 10),
+      String(merged.orderDate).slice(0, 10),
+    );
+    put(
+      'appointmentDate',
+      existing.appointmentDate.toISOString(),
+      new Date(merged.appointmentDate).toISOString(),
+    );
+    put('priceAmount', Number(existing.priceAmount), +merged.priceAmount.toFixed(2));
+    put(
+      'casheaFirstInstallmentAmount',
+      existing.casheaFirstInstallmentAmount != null
+        ? Number(existing.casheaFirstInstallmentAmount)
+        : null,
+      fin.casheaFirstInstallmentAmount != null
+        ? Number(fin.casheaFirstInstallmentAmount)
+        : null,
+    );
+    put('useFixedRate', existing.useFixedRate, fin.useFixedRate);
+    put(
+      'fixedExchangeRateId',
+      existing.fixedExchangeRateId ?? null,
+      fin.fixedExchangeRateId,
+    );
+
+    // Filas ST normalizadas (id|proveedor|cantidad|nombre|indexado); orden irrelevante.
+    const normRow = (r: {
+      serviceTypeId: string;
+      providerType: 'doctor' | 'care_center';
+      doctorId?: string | null;
+      careCenterId?: string | null;
+      quantity?: number | null;
+      customName?: string | null;
+      isIndexed?: boolean | null;
+    }) =>
+      [
+        r.serviceTypeId,
+        r.providerType,
+        r.providerType === 'doctor' ? r.doctorId ?? '' : r.careCenterId ?? '',
+        Math.max(1, Math.trunc(r.quantity ?? 1)),
+        (r.customName ?? '').trim(),
+        r.isIndexed ? '1' : '0',
+      ].join('|');
+    const fromRows = (existing.orderServiceTypes ?? []).map(normRow).sort();
+    const toRows = merged.serviceTypes
+      .map((r) =>
+        normRow({ ...r, isIndexed: fin.useFixedRate ? !!r.isIndexed : false }),
+      )
+      .sort();
+    if (fromRows.join(';') !== toRows.join(';')) {
+      out.serviceTypes = { from: fromRows.length, to: toRows.length };
+    }
+
+    const fromPath = (existing.pathologies ?? []).map((p) => p.id).sort();
+    const toPath = Array.from(new Set(merged.pathologyIds ?? [])).sort();
+    if (fromPath.join(';') !== toPath.join(';')) {
+      out.pathologies = { from: fromPath.length, to: toPath.length };
+    }
+
+    // Pagos: replace-all cuando el dto los trae; si el tipo deja de admitirlos
+    // (crédito/seguro) se limpian aunque no vengan en el dto.
+    const paysAllowed = merged.type === 'cash' || merged.type === 'cashea';
+    const normPay = (p: {
+      type: string;
+      paymentDate: string | Date;
+      amountCurrency: string;
+      amountValue: string | number;
+      referenceNumber?: string | null;
+    }) =>
+      [
+        p.type,
+        String(p.paymentDate).slice(0, 10),
+        p.amountCurrency,
+        Number(p.amountValue).toFixed(2),
+        p.referenceNumber ?? '',
+      ].join('|');
+    const fromPays = (existing.payments ?? []).map(normPay).sort();
+    if (fin.dtoPayments !== undefined) {
+      const toPays = (paysAllowed ? fin.dtoPayments : []).map(normPay).sort();
+      if (fromPays.join(';') !== toPays.join(';')) {
+        out.payments = { from: fromPays.length, to: toPays.length };
+      }
+    } else if (!paysAllowed && fromPays.length > 0) {
+      out.payments = { from: fromPays.length, to: 0 };
+    }
+
+    return out;
+  }
+
   async update(id: string, dto: UpdateOrderDto, user: AuthenticatedUser): Promise<Order> {
     const existing = await this.findOne(id, user);
     if (existing.status !== 'draft')
       throw new BadRequestException('Solo se puede editar órdenes en borrador');
+    this.assertStep1Editable(existing, user);
 
     const existingPathologyIds = (existing.pathologies ?? []).map((p) => p.id);
     const existingRows: OrderServiceTypeRowDto[] = (
@@ -1751,6 +1980,27 @@ export class OrdersService implements OnModuleInit {
       merged.casheaFirstInstallmentAmount,
     );
 
+    // Diff para el historial de cambios (valores efectivos post-normalización,
+    // los mismos que se escriben abajo en la transacción).
+    const changes = this.diffUpdateChanges(existing, merged, {
+      insuranceSource:
+        merged.type === 'insurance' ? merged.insuranceSource ?? null : null,
+      serviceKey:
+        merged.type === 'insurance' && merged.serviceKey?.trim()
+          ? merged.serviceKey.trim()
+          : null,
+      isReimbursement: merged.type === 'credit' ? !!merged.isReimbursement : false,
+      casheaFirstInstallmentAmount:
+        nextCashea !== undefined
+          ? nextCashea === null
+            ? null
+            : nextCashea.casheaFirstInstallmentAmount
+          : existing.casheaFirstInstallmentAmount ?? null,
+      useFixedRate: fixedUpd.useFixedRate,
+      fixedExchangeRateId: fixedUpd.fixedExchangeRateId,
+      dtoPayments: dto.payments,
+    });
+
     await this.dataSource.transaction(async (mgr) => {
       // Importante: NO usar `Object.assign(existing, …)` + `mgr.save(existing)`
       // — la orden viene con las relaciones cargadas (patient/holder/branch/…)
@@ -1846,6 +2096,10 @@ export class OrdersService implements OnModuleInit {
       // orden que reconciliar. La edición sólo ocurre en borrador y los montos a
       // proveedor (pendientes) se escriben al facturar; un borrador nunca tiene
       // órdenes internas dentro de un lote.
+
+      if (Object.keys(changes).length) {
+        await this.logChange(mgr, existing.id, user.id, 'update', changes);
+      }
     });
 
     return this.findOne(existing.id, user);
@@ -1862,6 +2116,7 @@ export class OrdersService implements OnModuleInit {
     await this.findOne(id, user);
     await this.assertNotInBatch(id);
     await this.repo.update({ id }, { deletedAt: new Date() });
+    await this.logChange(null, id, user.id, 'soft_delete');
   }
 
   /** Lanza si la orden participa en un lote de cuentas por pagar/cobrar. */
@@ -1896,6 +2151,7 @@ export class OrdersService implements OnModuleInit {
     await this.assertBranchVisibility(order.branchId, user);
     if (!order.deletedAt) return this.findOne(id, user);
     await this.repo.update({ id }, { deletedAt: null });
+    await this.logChange(null, id, user.id, 'restore');
     return this.findOne(id, user);
   }
 
@@ -1911,12 +2167,17 @@ export class OrdersService implements OnModuleInit {
       throw new BadRequestException('Solo se permiten pagos en órdenes en borrador');
     if (order.type !== 'cash')
       throw new BadRequestException('Solo se admiten pagos para órdenes de tipo Contado');
+    this.assertStep1Editable(order, user);
     const payload = await this.resolvePaymentForSave(
       dto,
       order.billingExchangeRateId ?? null,
     );
     const entity = this.paymentsRepo.create({ ...payload, orderId });
-    return this.paymentsRepo.save(entity);
+    const saved = await this.paymentsRepo.save(entity);
+    await this.logChange(null, orderId, user.id, 'payment_add', {
+      payment: { to: paymentSummary(dto) },
+    });
+    return saved;
   }
 
   async updatePayment(
@@ -1928,8 +2189,10 @@ export class OrdersService implements OnModuleInit {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
       throw new BadRequestException('Solo se permiten pagos en órdenes en borrador');
+    this.assertStep1Editable(order, user);
     const payment = await this.paymentsRepo.findOne({ where: { id: paymentId, orderId } });
     if (!payment) throw new NotFoundException('Pago no encontrado');
+    const before = paymentSummary(payment);
     const merged: CreateOrderPaymentDto = {
       type: (dto.type ?? payment.type) as CreateOrderPaymentDto['type'],
       paymentDate: dto.paymentDate ?? payment.paymentDate,
@@ -1946,7 +2209,14 @@ export class OrdersService implements OnModuleInit {
       order.billingExchangeRateId ?? null,
     );
     Object.assign(payment, payload);
-    return this.paymentsRepo.save(payment);
+    const saved = await this.paymentsRepo.save(payment);
+    const after = paymentSummary(saved);
+    if (before !== after) {
+      await this.logChange(null, orderId, user.id, 'payment_update', {
+        payment: { from: before, to: after },
+      });
+    }
+    return saved;
   }
 
   async removePayment(
@@ -1957,9 +2227,13 @@ export class OrdersService implements OnModuleInit {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
       throw new BadRequestException('Solo se permiten cambios de pagos en borrador');
+    this.assertStep1Editable(order, user);
     const payment = await this.paymentsRepo.findOne({ where: { id: paymentId, orderId } });
     if (!payment) throw new NotFoundException('Pago no encontrado');
     await this.paymentsRepo.delete(paymentId);
+    await this.logChange(null, orderId, user.id, 'payment_remove', {
+      payment: { from: paymentSummary(payment) },
+    });
   }
 }
 

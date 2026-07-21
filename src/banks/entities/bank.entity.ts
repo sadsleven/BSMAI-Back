@@ -18,6 +18,10 @@ export class Bank {
   @Column({ type: 'varchar', length: 200 })
   name: string;
 
+  /** Deshabilitado = no aparece como opción en formularios; referencias existentes se conservan. */
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

@@ -86,26 +86,20 @@ export class SeedService {
     return saved;
   }
 
+  /**
+   * Insert-only: el catálogo de bancos es administrable desde la UI, así que
+   * el seed sólo agrega códigos faltantes y nunca sobreescribe nombres ni
+   * estados editados por el usuario.
+   */
   private async seedBanks(): Promise<void> {
     const existing = await this.banksRepo.find();
-    const existingByCode = new Map(existing.map((b) => [b.code, b] as const));
-    const toInsert: Bank[] = [];
-    const toUpdate: Bank[] = [];
-
-    for (const def of BANKS_SEED) {
-      const found = existingByCode.get(def.codigo);
-      if (!found) {
-        toInsert.push(this.banksRepo.create({ code: def.codigo, name: def.nombre }));
-      } else if (found.name !== def.nombre) {
-        found.name = def.nombre;
-        toUpdate.push(found);
-      }
-    }
-    if (toInsert.length) await this.banksRepo.save(toInsert);
-    if (toUpdate.length) await this.banksRepo.save(toUpdate);
-    this.logger.log(
-      `Bancos: insertados=${toInsert.length} actualizados=${toUpdate.length} total=${BANKS_SEED.length}`,
+    const existingCodes = new Set(existing.map((b) => b.code));
+    const toInsert = BANKS_SEED.filter((def) => !existingCodes.has(def.codigo)).map((def) =>
+      this.banksRepo.create({ code: def.codigo, name: def.nombre }),
     );
+
+    if (toInsert.length) await this.banksRepo.save(toInsert);
+    this.logger.log(`Bancos: insertados=${toInsert.length} catálogo seed=${BANKS_SEED.length}`);
   }
 
   private async seedPermissions(): Promise<Permission[]> {

@@ -8,6 +8,7 @@ import { OrderServicePricing } from './entities/order-service-pricing.entity';
 import { OrderServiceType } from './entities/order-service-type.entity';
 import { OrderProviderReport } from './entities/order-provider-report.entity';
 import { OrderInternalOrder } from './entities/order-internal-order.entity';
+import { OrderChangeLog } from './entities/order-change-log.entity';
 import { Patient } from '../patients/entities/patient.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
 import { CareCenter } from '../care-centers/entities/care-center.entity';
@@ -38,6 +39,7 @@ import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.m
       OrderServiceType,
       OrderProviderReport,
       OrderInternalOrder,
+      OrderChangeLog,
       Patient,
       Doctor,
       CareCenter,

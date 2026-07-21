@@ -29,6 +29,7 @@ const REPORTS_GROUP = 'Reportes';
 const APP_CONFIG_GROUP = 'Configuración';
 const FILES_GROUP = 'Archivos';
 const PAYMENT_ACCOUNTS_GROUP = 'Cuentas bancarias';
+const BANKS_GROUP = 'Bancos';
 
 const usersPermissions: PermissionDefinition[] = [
   {
@@ -305,6 +306,27 @@ const paymentAccountsPermissions = buildResourcePermissions(
   standardActionLabels('cuenta bancaria', 'cuentas bancarias'),
 );
 
+/**
+ * Catálogo de bancos: el listado (GET /banks) es JWT-only sin permiso porque
+ * popula selects en formularios de cualquier usuario. Sólo las mutaciones
+ * llevan permiso; no hay borrado — un banco en desuso se deshabilita.
+ */
+const banksPermissions = buildResourcePermissions('banks', BANKS_GROUP, {
+  create: {
+    label: 'Crear bancos',
+    description: 'Permite agregar nuevos bancos al catálogo',
+  },
+  update: {
+    label: 'Editar bancos',
+    description: 'Permite modificar el código o nombre de un banco del catálogo',
+  },
+  'toggle-active': {
+    label: 'Habilitar/Deshabilitar bancos',
+    description:
+      'Permite habilitar o deshabilitar bancos del catálogo (los deshabilitados no aparecen como opción en formularios)',
+  },
+});
+
 const ordersPermissions: PermissionDefinition[] = [
   {
     name: 'orders.list',
@@ -560,6 +582,12 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
     description: 'Permite acceder al reporte detallado de retenciones aplicadas',
   },
   {
+    key: 'arc',
+    label: 'Ver comprobantes ARC',
+    description:
+      'Permite descargar los comprobantes ARC anuales de retención por médico o centro de salud',
+  },
+  {
     key: 'executive-panel',
     label: 'Ver panel ejecutivo',
     description: 'Permite acceder al panel ejecutivo con gráficos de flujo de caja y órdenes',
@@ -567,12 +595,14 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> = 
   {
     key: 'orders-analytics',
     label: 'Ver análisis de órdenes',
-    description: 'Permite acceder al reporte gráfico de volumen y mezcla de órdenes',
+    description:
+      'Permite ver la sección de análisis de órdenes (volumen y mezcla) dentro del panel ejecutivo',
   },
   {
     key: 'insurer-collections',
     label: 'Ver cobranzas por aseguradora',
-    description: 'Permite acceder al reporte gráfico de cobranzas por compañía de seguros',
+    description:
+      'Permite ver la sección de cobranzas por compañía de seguros dentro del panel ejecutivo',
   },
   {
     key: 'payment-account-inflows',
@@ -654,6 +684,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...branchesPermissions,
   ...taxUnitsPermissions,
   ...paymentAccountsPermissions,
+  ...banksPermissions,
   ...ordersPermissions,
   ...accountsPayablePermissions,
   ...accountsReceivablePermissions,
@@ -717,6 +748,11 @@ export const PERMISSIONS = {
   BRANCHES: buildResourceConst('branches'),
   TAX_UNITS: buildResourceConst('tax-units'),
   PAYMENT_ACCOUNTS: buildResourceConst('payment-accounts'),
+  BANKS: {
+    CREATE: 'banks.create',
+    UPDATE: 'banks.update',
+    TOGGLE_ACTIVE: 'banks.toggle-active',
+  },
   ORDERS: {
     LIST: 'orders.list',
     CREATE: 'orders.create',
@@ -769,6 +805,7 @@ export const PERMISSIONS = {
     ORDERS_TRACKING_LIST: 'reports.orders-tracking.list',
     SERVICES_BILLED_LIST: 'reports.services-billed.list',
     TAXES_RETAINED_LIST: 'reports.taxes-retained.list',
+    ARC_LIST: 'reports.arc.list',
     PAYMENT_ACCOUNT_INFLOWS_LIST: 'reports.payment-account-inflows.list',
   },
 } as const;

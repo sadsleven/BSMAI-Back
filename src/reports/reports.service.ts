@@ -1256,6 +1256,7 @@ export class ReportsService {
       totalBaseBs: number;
       totalRetainedBs: number;
     }>;
+    years: { min: number; max: number };
   }> {
     // Período fiscal: year > from/to > año actual (01-01 a 31-12).
     let year: number;
@@ -1275,7 +1276,23 @@ export class ReportsService {
       to = `${year}-12-31`;
     }
 
-    const empty = { period: { from, to, year }, beneficiaries: [] };
+    // Rango de años seleccionable en FE: de la orden más vieja a la más nueva
+    // del sistema (global, sin scope de sucursal). Sin órdenes → año actual.
+    const [yearsRow] = await this.dataSource.query<
+      Array<{ min: number | null; max: number | null }>
+    >(
+      `SELECT EXTRACT(YEAR FROM MIN(o."createdAt"))::int AS "min",
+              EXTRACT(YEAR FROM MAX(o."createdAt"))::int AS "max"
+       FROM "orders" o
+       WHERE o."deletedAt" IS NULL`,
+    );
+    const currentYear = new Date().getFullYear();
+    const years = {
+      min: yearsRow?.min ?? currentYear,
+      max: yearsRow?.max ?? currentYear,
+    };
+
+    const empty = { period: { from, to, year }, beneficiaries: [], years };
     const allowed = await this.resolveUserBranchIds(user);
     if (!user.isSuperAdmin && allowed.length === 0) return empty;
 
@@ -1421,7 +1438,7 @@ export class ReportsService {
       });
     }
 
-    return { period: { from, to, year }, beneficiaries: Array.from(map.values()) };
+    return { period: { from, to, year }, beneficiaries: Array.from(map.values()), years };
   }
 
   // ===========================================================================

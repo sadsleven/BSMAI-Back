@@ -1,7 +1,10 @@
 /**
- * Catálogo de bancos venezolanos para Pago Móvil.
+ * Catálogo inicial de bancos venezolanos para Pago Móvil.
  * Sincronizado con `Banks Pago Movil.json` del paquete de diseño.
- * Mutable por seed: si se agrega un banco al JSON original, agregarlo acá y correr `npm run seed`.
+ *
+ * El catálogo real vive en la tabla `banks` y es administrable desde la UI
+ * (Administración → Bancos). El seed es insert-only: sólo agrega códigos
+ * faltantes y nunca sobreescribe nombres/estados editados por el usuario.
  */
 export interface BankSeed {
   codigo: string;

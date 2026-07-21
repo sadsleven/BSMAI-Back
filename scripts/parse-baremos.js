@@ -10,6 +10,7 @@ const path = require('path');
 const dir = 'C:/Users/Abrahams/Documents/Proyectos Personales/AFMI/baremos';
 const OUT = path.join(__dirname, '..', 'src', 'seed', 'baremos', 'baremos.data.ts');
 const OUT_DOC = path.join(__dirname, '..', 'src', 'seed', 'baremos', 'baremos-doctors.data.ts');
+const OUT_CC = path.join(__dirname, '..', 'src', 'seed', 'baremos', 'baremos-care-centers.data.ts');
 
 function cellText(v) {
   if (v === null || v === undefined) return '';
@@ -270,6 +271,9 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = `;
 
   // ---- BAREMOS PARTICULAR -> precios por doctor ----
   await parseDoctors();
+
+  // ---- Baremos de centros de atención (RISLAB + URIMECA) ----
+  await parseCareCenters();
 })();
 
 /**
@@ -335,4 +339,130 @@ export interface BaremoDoctorSeed {
 export const BAREMO_DOCTORS: BaremoDoctorSeed[] = `;
   fs.writeFileSync(OUT_DOC, banner + JSON.stringify(rows, null, 2) + ';\n', 'utf8');
   console.log('wrote', path.relative(path.join(__dirname, '..'), OUT_DOC), '— doctores:', rows.length);
+}
+
+/**
+ * Hoja de laboratorio (RISLAB): col A/B = examen (B a veces vacía), col C =
+ * costo USD. Filas de categoría (Hematología, SEROLOGIA, ...) no tienen costo
+ * y se omiten. Devuelve Map(consultKey -> { name, priceUsd }); ante nombre
+ * repetido (Sodio/Potasio/Cloro aparecen en Química y en Orina con el mismo
+ * precio) gana la primera aparición.
+ */
+async function parseLabSheet(file) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(path.join(dir, file));
+  const ws = wb.getWorksheet('Hoja1');
+  const m = new Map();
+  for (let r = 5; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    const name = norm(row.getCell(1).value) || norm(row.getCell(2).value);
+    const price = cellNum(row.getCell(3).value);
+    if (!name || price === null || price <= 0) continue;
+    const key = consultKey(name);
+    if (!m.has(key)) m.set(key, { name, priceUsd: round2(price) });
+  }
+  return m;
+}
+
+/**
+ * Baremos de centros de atención → baremos-care-centers.data.ts.
+ *
+ *  - RISLAB (LABORATORIO CLÍNICO RISLAB ORIENTE C.A.): dos xlsx con la misma
+ *    estructura unidos por examen normalizado — BAREMOS DEL LABORATORIO.xlsx =
+ *    lo que cobra el centro (care_center_service_prices) y BAREMOS PARTICULAR
+ *    DEL LABORATORIO.xlsx = lo que cobra AFMI (particularPriceUsd del ST).
+ *  - URIMECA (UNIDAD RADIOLÓGICA DE IMÁGENES MÉDICAS, C.A., RIF J-40093835-0):
+ *    baremo por proyecciones del membrete BAREMOS URIMECA 2026.jpeg (no hay
+ *    xlsx), horneado aquí. Sin precio particular (no fue suministrado).
+ */
+async function parseCareCenters() {
+  const cost = await parseLabSheet('BAREMOS DEL LABORATORIO.xlsx');
+  const particular = await parseLabSheet('BAREMOS PARTICULAR DEL LABORATORIO.xlsx');
+
+  for (const key of particular.keys()) {
+    if (!cost.has(key)) {
+      console.log('!! examen sólo en BAREMOS PARTICULAR DEL LABORATORIO:', particular.get(key).name);
+    }
+  }
+  let sinParticular = 0;
+  const rislabServices = [...cost.values()]
+    .map((s) => {
+      const p = particular.get(consultKey(s.name));
+      if (!p) sinParticular++;
+      return {
+        name: s.name,
+        priceUsd: s.priceUsd,
+        particularPriceUsd: p ? p.priceUsd : null,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  if (sinParticular) console.log('!! exámenes RISLAB sin precio particular:', sinParticular);
+
+  const out = [
+    {
+      businessName: 'LABORATORIO CLÍNICO RISLAB ORIENTE C.A.',
+      rif: null,
+      centerAddress: null,
+      phones: [],
+      specialtyName: 'LABORATORIO',
+      services: rislabServices,
+    },
+    {
+      businessName: 'UNIDAD RADIOLÓGICA DE IMÁGENES MÉDICAS, C.A. (URIMECA)',
+      rif: 'J-40093835-0',
+      centerAddress:
+        'Av. Sta. Rosa, Edif. Centro Médico Virgen del Valle, planta baja, Sector Santa Rosa, Cumaná',
+      phones: [{ number: '02934333383', label: null }],
+      specialtyName: 'RADIOLOGÍA',
+      // Una "proyección" = complemento de un mismo estudio (ej. Tórax PA y
+      // lateral = 2 proyecciones). El estudio concreto se nombra per orden
+      // vía customName. Los STs son los canónicos ya existentes del catálogo
+      // ("RX CUALQUIER PARTE DEL CUERPO (N PROYECCIONES)"); su particular
+      // vigente se conserva (URIMECA no suministró precio particular).
+      services: [
+        { name: 'RX CUALQUIER PARTE DEL CUERPO (1 PROYECCIÓN)', priceUsd: 10, particularPriceUsd: null },
+        { name: 'RX CUALQUIER PARTE DEL CUERPO (2 PROYECCIONES)', priceUsd: 15, particularPriceUsd: null },
+        { name: 'RX CUALQUIER PARTE DEL CUERPO (3 PROYECCIONES)', priceUsd: 20, particularPriceUsd: null },
+        { name: 'RX CUALQUIER PARTE DEL CUERPO (4 PROYECCIONES)', priceUsd: 25, particularPriceUsd: null },
+      ],
+    },
+  ];
+
+  const banner = `/**
+ * AUTO-GENERADO por scripts/parse-baremos.js a partir de
+ * /baremos/BAREMOS DEL LABORATORIO.xlsx + BAREMOS PARTICULAR DEL
+ * LABORATORIO.xlsx (RISLAB) y del membrete BAREMOS URIMECA 2026.jpeg
+ * (URIMECA, horneado en el script). NO editar a mano.
+ * Regenerar: \`node scripts/parse-baremos.js\`.
+ *
+ * \`priceUsd\` = lo que cobra el centro (care_center_service_prices).
+ * \`particularPriceUsd\` = lo que cobra AFMI por ese servicio; PISA el
+ * particular del catálogo (fuente explícita de negocio). null = no tocar.
+ */
+
+export interface BaremoCareCenterServiceSeed {
+  name: string;
+  priceUsd: number;
+  particularPriceUsd: number | null;
+}
+
+export interface BaremoCareCenterSeed {
+  businessName: string;
+  rif: string | null;
+  centerAddress: string | null;
+  phones: { number: string; label: string | null }[];
+  specialtyName: string;
+  services: BaremoCareCenterServiceSeed[];
+}
+
+export const BAREMO_CARE_CENTERS: BaremoCareCenterSeed[] = `;
+  fs.writeFileSync(OUT_CC, banner + JSON.stringify(out, null, 2) + ';\n', 'utf8');
+  console.log(
+    'wrote',
+    path.relative(path.join(__dirname, '..'), OUT_CC),
+    '— centros:',
+    out.length,
+    '| RISLAB svc:',
+    rislabServices.length,
+  );
 }

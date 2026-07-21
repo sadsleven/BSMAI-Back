@@ -46,6 +46,16 @@ export class OrdersController {
     return this.service.customNameSuggestions(serviceTypeId);
   }
 
+  /** Historial de cambios por usuario de la orden (más reciente primero). */
+  @RequirePermissions(PERMISSIONS.ORDERS.LIST)
+  @Get(':id/history')
+  history(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.history(id, user);
+  }
+
   @RequirePermissions(PERMISSIONS.ORDERS.LIST)
   @Get(':id')
   findOne(
