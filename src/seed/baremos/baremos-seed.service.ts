@@ -6,9 +6,12 @@ import { InsuranceServicePrice } from '../../insurances/entities/insurance-servi
 import { ServiceType } from '../../service-types/entities/service-type.entity';
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { DoctorServicePrice } from '../../doctors/entities/doctor-service-price.entity';
+import { CareCenter } from '../../care-centers/entities/care-center.entity';
+import { CareCenterServicePrice } from '../../care-centers/entities/care-center-service-price.entity';
 import { Specialty } from '../../specialties/entities/specialty.entity';
 import { BAREMO_INSURANCES } from './baremos.data';
 import { BAREMO_DOCTORS } from './baremos-doctors.data';
+import { BAREMO_CARE_CENTERS } from './baremos-care-centers.data';
 import {
   STD_CANONICAL_BY_NORMKEY,
   STD_DELETE_NORMKEYS,
@@ -107,6 +110,10 @@ export class BaremosSeedService {
     private readonly doctorRepo: Repository<Doctor>,
     @InjectRepository(DoctorServicePrice)
     private readonly dspRepo: Repository<DoctorServicePrice>,
+    @InjectRepository(CareCenter)
+    private readonly ccRepo: Repository<CareCenter>,
+    @InjectRepository(CareCenterServicePrice)
+    private readonly ccspRepo: Repository<CareCenterServicePrice>,
     @InjectRepository(Specialty)
     private readonly specialtyRepo: Repository<Specialty>,
   ) {}
@@ -116,6 +123,7 @@ export class BaremosSeedService {
     const insIdByKey = await this.seedInsurances();
     await this.seedInsurancePrices(stIdByKey, insIdByKey);
     await this.seedDoctors(stIdByKey);
+    await this.seedCareCenters(stIdByKey);
     this.logger.log('Seed de baremos completado');
   }
 
@@ -459,6 +467,163 @@ export class BaremosSeedService {
     }
     this.logger.log(
       `Doctores: creados=${createdDoctors}/${BAREMO_DOCTORS.length} especialidades=${specByKey.size} STs nuevos=${createdServiceTypes} | precios insertados=${pricesInserted} actualizados=${pricesUpdated}`,
+    );
+  }
+
+  /**
+   * Centros de atención con baremo propio (RISLAB, URIMECA). Crea/reactiva el
+   * centro por razón social, su especialidad, teléfonos (sólo si el centro no
+   * tiene), y upsertea `care_center_service_prices` (lo que cobra el centro).
+   * El `particularPriceUsd` del baremo (lo que cobra AFMI) PISA el particular
+   * del catálogo: es fuente explícita de negocio, a diferencia del relleno
+   * por-defecto (máximo de seguros) de seedServiceTypes, que sólo aplica si
+   * está vacío. Los STs se resuelven por canónico y se crean si faltan.
+   */
+  private async seedCareCenters(stIdByKey: Map<string, string>): Promise<void> {
+    const specByKey = await this.ensureCatalog(
+      this.specialtyRepo,
+      [...new Set(BAREMO_CARE_CENTERS.map((c) => c.specialtyName))],
+      (name) => this.specialtyRepo.create({ name, isActive: true }),
+    );
+
+    const existingCenters = await this.ccRepo.find({ withDeleted: true });
+    const byName = new Map(
+      existingCenters.map((cc) => [cc.businessName.toUpperCase(), cc] as const),
+    );
+
+    let createdCenters = 0;
+    let createdServiceTypes = 0;
+    let pricesInserted = 0;
+    let pricesUpdated = 0;
+    let particularOverridden = 0;
+    for (const c of BAREMO_CARE_CENTERS) {
+      const specialty = specByKey.get(c.specialtyName.toUpperCase());
+      let center = byName.get(c.businessName.toUpperCase());
+      if (!center) {
+        center = await this.ccRepo.save(
+          this.ccRepo.create({
+            businessName: c.businessName,
+            rif: c.rif,
+            centerAddress: c.centerAddress,
+            isActive: true,
+            specialties: specialty ? [specialty] : [],
+            phones: c.phones.map((p) => ({
+              number: p.number,
+              label: p.label,
+            })),
+          }),
+        );
+        byName.set(c.businessName.toUpperCase(), center);
+        createdCenters++;
+      } else {
+        let touched = false;
+        if (center.deletedAt) {
+          await this.ccRepo.restore(center.id);
+          center.deletedAt = null;
+          touched = true;
+        }
+        if (!center.isActive) {
+          center.isActive = true;
+          touched = true;
+        }
+        // completa datos faltantes sin pisar ediciones manuales
+        if (!center.rif && c.rif) {
+          center.rif = c.rif;
+          touched = true;
+        }
+        if (!center.centerAddress && c.centerAddress) {
+          center.centerAddress = c.centerAddress;
+          touched = true;
+        }
+        if (
+          specialty &&
+          !(center.specialties ?? []).some((s) => s.id === specialty.id)
+        ) {
+          center.specialties = [...(center.specialties ?? []), specialty];
+          touched = true;
+        }
+        if ((center.phones ?? []).length === 0 && c.phones.length > 0) {
+          center.phones = c.phones.map(
+            (p) => ({ number: p.number, label: p.label }) as never,
+          );
+          touched = true;
+        }
+        if (touched) await this.ccRepo.save(center);
+      }
+
+      // precios del centro + override del particular AFMI
+      const existingPrices = await this.ccspRepo.find({
+        where: { careCenterId: center.id },
+      });
+      const byST = new Map(
+        existingPrices.map((p) => [p.serviceTypeId, p] as const),
+      );
+      const toInsert: CareCenterServicePrice[] = [];
+      const toUpdate: CareCenterServicePrice[] = [];
+      const particularByStId = new Map<string, string>();
+      const seen = new Set<string>();
+      for (const s of c.services) {
+        const cname = canonicalName(s.name);
+        if (cname === null) continue;
+        const key = normKey(cname);
+        let serviceTypeId = stIdByKey.get(key);
+        if (!serviceTypeId) {
+          const createdSt = await this.stRepo.save(
+            this.stRepo.create({
+              name: cname,
+              particularPriceUsd:
+                s.particularPriceUsd != null
+                  ? s.particularPriceUsd.toFixed(2)
+                  : null,
+              isActive: true,
+            }),
+          );
+          serviceTypeId = createdSt.id;
+          stIdByKey.set(key, serviceTypeId);
+          createdServiceTypes++;
+        } else if (s.particularPriceUsd != null) {
+          particularByStId.set(serviceTypeId, s.particularPriceUsd.toFixed(2));
+        }
+        // dos variantes del baremo que colapsan al mismo ST: primera gana
+        if (seen.has(serviceTypeId)) continue;
+        seen.add(serviceTypeId);
+        const price = s.priceUsd.toFixed(2);
+        const ex = byST.get(serviceTypeId);
+        if (!ex) {
+          toInsert.push(
+            this.ccspRepo.create({
+              careCenterId: center.id,
+              serviceTypeId,
+              priceUsd: price,
+            }),
+          );
+        } else if (ex.priceUsd !== price) {
+          ex.priceUsd = price;
+          toUpdate.push(ex);
+        }
+      }
+      await this.chunkedSave(this.ccspRepo, toInsert);
+      await this.chunkedSave(this.ccspRepo, toUpdate);
+      pricesInserted += toInsert.length;
+      pricesUpdated += toUpdate.length;
+
+      if (particularByStId.size > 0) {
+        const sts = await this.stRepo.find({
+          where: { id: In([...particularByStId.keys()]) },
+          withDeleted: true,
+        });
+        const stToUpdate = sts.filter(
+          (st) => st.particularPriceUsd !== particularByStId.get(st.id),
+        );
+        for (const st of stToUpdate) {
+          st.particularPriceUsd = particularByStId.get(st.id)!;
+        }
+        await this.chunkedSave(this.stRepo, stToUpdate);
+        particularOverridden += stToUpdate.length;
+      }
+    }
+    this.logger.log(
+      `Centros de atención: creados=${createdCenters}/${BAREMO_CARE_CENTERS.length} STs nuevos=${createdServiceTypes} | precios centro insertados=${pricesInserted} actualizados=${pricesUpdated} | particulares AFMI pisados=${particularOverridden}`,
     );
   }
 

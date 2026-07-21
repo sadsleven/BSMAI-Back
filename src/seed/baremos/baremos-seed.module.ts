@@ -5,6 +5,8 @@ import { InsuranceServicePrice } from '../../insurances/entities/insurance-servi
 import { ServiceType } from '../../service-types/entities/service-type.entity';
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { DoctorServicePrice } from '../../doctors/entities/doctor-service-price.entity';
+import { CareCenter } from '../../care-centers/entities/care-center.entity';
+import { CareCenterServicePrice } from '../../care-centers/entities/care-center-service-price.entity';
 import { Specialty } from '../../specialties/entities/specialty.entity';
 import { BaremosSeedService } from './baremos-seed.service';
 
@@ -20,6 +22,8 @@ import { BaremosSeedService } from './baremos-seed.service';
       InsuranceServicePrice,
       Doctor,
       DoctorServicePrice,
+      CareCenter,
+      CareCenterServicePrice,
       Specialty,
     ]),
   ],
