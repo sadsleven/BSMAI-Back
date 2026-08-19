@@ -29,6 +29,8 @@ services:
       DB_HOST: host.docker.internal
       # MinIO por red interna de Docker.
       MINIO_ENDPOINT: http://minio:9000
+      # Storage de producción = MinIO (el .env de Vercel usa vercel_blob).
+      STORAGE_DRIVER: minio
     extra_hosts:
       # Linux: resuelve host.docker.internal → gateway del host (Docker >= 20.10)
       - "host.docker.internal:host-gateway"

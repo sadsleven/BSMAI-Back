@@ -12,6 +12,7 @@ import { FileEntity, FileOwnerType } from './entities/file.entity';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { QueryFilesDto } from './dto/query-files.dto';
 import { STORAGE_PROVIDER, StorageProvider } from './storage/storage.provider';
+import { StorageRegistry } from './storage/storage.registry';
 import {
   MAX_UPLOAD_SIZE_BYTES,
   ORDER_REPORT_ALLOWED_MIME,
@@ -45,6 +46,7 @@ export class FilesService {
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly storageRegistry: StorageRegistry,
     private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
@@ -167,7 +169,11 @@ export class FilesService {
     contentLength: number | null;
   }> {
     const file = await this.findOne(id, user);
-    const result = await this.storage.download(file.url);
+    // Resuelve por el provider con el que se subió: los archivos previos a un
+    // cambio de storage (Vercel Blob → MinIO) siguen descargándose.
+    const result = await this.storageRegistry
+      .resolve(file.storageProvider)
+      .download(file.url);
     return { stream: result.stream, file, contentLength: result.contentLength };
   }
 
@@ -177,7 +183,7 @@ export class FilesService {
     const file = await this.repo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!file) throw new NotFoundException('Archivo no encontrado');
     await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'delete', file.kind);
-    await this.storage.delete(file.url);
+    await this.storageRegistry.resolve(file.storageProvider).delete(file.url);
     await this.repo.softDelete(file.id);
   }
 
