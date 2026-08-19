@@ -26,11 +26,13 @@ import { MAX_UPLOAD_SIZE_BYTES } from './files.constants';
 
 /**
  * Files. Upload server-side: FE manda multipart con el binario; el backend
- * proxea a Vercel Blob usando `BLOB_READ_WRITE_TOKEN` (nunca expuesto al FE).
+ * proxea al storage activo (MinIO en producción, Vercel Blob en el deploy dev)
+ * con credenciales que nunca se exponen al FE. La descarga también la proxea el
+ * backend, así MinIO no necesita estar publicado a internet.
  *
- * Atención: Vercel Serverless limita el cuerpo HTTP a ~4.5 MB por request.
- * Archivos por encima de ese umbral en producción requieren mover a un host
- * sin esa limitación o reintroducir client-direct upload.
+ * Atención: Vercel Serverless limita el cuerpo HTTP a ~4.5 MB por request. En
+ * el servidor con Docker no aplica: manda `MAX_UPLOAD_SIZE_BYTES` (y el
+ * `client_max_body_size` de nginx).
  */
 @Controller('files')
 export class FilesController {

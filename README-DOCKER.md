@@ -111,27 +111,54 @@ make logs-api     # seguir logs
   loopback). Para entrar a la consola sin exponerla: túnel SSH
   `ssh -L 9001:127.0.0.1:9001 usuario@servidor` → `http://localhost:9001`.
 - `minio-init` crea el bucket `MINIO_BUCKET` con versionado y lo deja **privado**:
-  los adjuntos son informes médicos, el acceso va con URLs firmadas, nunca con
-  política anónima de lectura.
+  los adjuntos son informes médicos. El acceso pasa siempre por el backend
+  (`GET /files/:id/download`, con permiso y chequeo de sucursal/proveedor);
+  nunca por política anónima de lectura.
 - Datos en el volumen `minio_data`. Respáldalo junto con el dump de Postgres.
   `make nuke` lo borra (pide confirmación escrita).
 - Buena práctica: crear un *service account* (Access Keys en la consola) para el
-  backend en vez de usar las credenciales root, y poner esas keys en `.env`.
+  backend en vez de usar las credenciales root, y ponerlas en `MINIO_ACCESS_KEY`
+  / `MINIO_SECRET_KEY` del `.env` (`make restart` para tomarlas).
 
-### Storage: estado del código
+### Storage: dos providers, uno activo
 
-`FilesModule` sigue enlazado a `VercelBlobProvider`
-(`src/files/files.module.ts`), así que **MinIO queda levantado pero todavía no lo
-usa el backend**. Para migrar, según el comentario que ya está en ese módulo:
+`FilesModule` registra los dos providers a la vez y elige el activo por env:
 
-1. Crear `MinioStorageProvider implements StorageProvider` (S3 API, path-style,
-   URLs firmadas), consumiendo `MINIO_ENDPOINT` / `MINIO_PUBLIC_ENDPOINT` /
-   `MINIO_BUCKET` / credenciales.
-2. Cambiar `useClass: VercelBlobProvider` → `useClass: MinioStorageProvider`.
-3. Ajustar `afmi-front/src/modules/files/infrastructure/filesGateway.ts` al
-   flujo de subida por URL firmada.
+| Driver | Clase | Cuándo |
+| --- | --- | --- |
+| `minio` | `MinioStorageProvider` (`src/files/storage/minio.provider.ts`) | Producción en este servidor. |
+| `vercel_blob` | `VercelBlobProvider` | Deploy dev en Vercel (serverless, sin MinIO). |
 
-Hasta entonces `BLOB_READ_WRITE_TOKEN` debe seguir seteado.
+- `STORAGE_DRIVER` = `minio` \| `vercel_blob` \| `auto` (default `auto`:
+  serverless → `vercel_blob`; resto → `minio` si está configurado). El
+  `docker-compose.yml` fuerza `STORAGE_DRIVER=minio`, así que en el servidor no
+  hay que pensarlo.
+- Los uploads nuevos van al driver activo; **las descargas y borrados se
+  resuelven por `files.storageProvider`** (`StorageRegistry`), así que los
+  archivos que ya estaban en Vercel Blob siguen abriéndose después de migrar.
+  Para eso `BLOB_READ_WRITE_TOKEN` debe seguir seteado mientras existan filas
+  con `storageProvider = 'vercel_blob'`; si la BD de producción arranca limpia,
+  se puede dejar vacío.
+- **MinIO no necesita salir a internet**: upload y download los proxea el
+  backend (`POST /files`, `GET /files/:id/download`), el navegador nunca habla
+  con MinIO. No hacen falta URLs firmadas ni subdominio de archivos.
+  `MINIO_PUBLIC_ENDPOINT` es opcional y sólo define el prefijo guardado en
+  `files.url`; cambiarlo después no invalida nada (la key se saca del *path*).
+- Credenciales: `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` (service account,
+  recomendado) con fallback a `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`.
+- Al arrancar, si el driver es `minio` se hace un `HeadBucket` **no bloqueante**:
+  el log dice `MinIO OK — bucket "afmi-files" en http://minio:9000`, o avisa
+  `MinIO no disponible todavía: ...` sin tumbar la API.
+- El límite de subida real es `MAX_UPLOAD_SIZE_BYTES` (`src/files/files.constants.ts`)
+  y el `client_max_body_size` de nginx — el techo de 4.5 MB es de Vercel, aquí no aplica.
+- Cliente S3: `@aws-sdk/client-s3` con `forcePathStyle`. Sirve igual para
+  DigitalOcean Spaces / AWS S3 cambiando endpoint, región y llaves.
+
+Verificar que los objetos están llegando:
+
+```bash
+docker exec -it afmi-minio sh -c 'mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc ls -r local/afmi-files'
+```
 
 ## Cron de tasas del BCV
 

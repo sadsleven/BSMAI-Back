@@ -1,11 +1,17 @@
 /**
  * Capa de abstracción de storage. Único punto de cambio al migrar de
- * proveedor (Vercel Blob → MinIO/S3 → etc.). Resto del backend (controller/
- * service/orders) NO cambia.
+ * proveedor. Resto del backend (controller/service/orders) NO cambia.
+ *
+ * Implementaciones vivas:
+ *  - `MinioStorageProvider` (`minio`)       → producción, docker compose.
+ *  - `VercelBlobProvider`   (`vercel_blob`) → deploy dev en Vercel.
+ * El provider por defecto lo elige `storage.factory.ts` según `STORAGE_DRIVER`;
+ * `StorageRegistry` resuelve por `files.storageProvider` para download/delete.
  *
  * Diseño: upload server-side. El archivo viaja FE → BE (multipart) → storage.
  * Token/credenciales del proveedor permanecen en el servidor. Trade-off en
- * Vercel Serverless: cuerpo HTTP limitado a 4.5 MB por request.
+ * Vercel Serverless: cuerpo HTTP limitado a 4.5 MB por request (en Docker el
+ * límite lo pone `MAX_UPLOAD_SIZE_BYTES` + `client_max_body_size` de nginx).
  */
 
 export const STORAGE_PROVIDER = Symbol('STORAGE_PROVIDER');
