@@ -4,6 +4,7 @@ import { ValidationPipe, LogLevel, INestApplication } from '@nestjs/common';
 import express, { Express, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { getCorsOriginConfig } from './shared/utils/cors-origins.util';
+import { isServerlessRuntime } from './shared/utils/runtime.util';
 
 let cachedApp: INestApplication | null = null;
 let cachedServer: Express | null = null;
@@ -57,7 +58,7 @@ async function bootstrap(): Promise<{ app: INestApplication; server: Express }> 
   return { app, server: expressApp };
 }
 
-const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const isServerless = isServerlessRuntime();
 
 if (!isServerless) {
   bootstrap().then(async ({ app }) => {

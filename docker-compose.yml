@@ -1,0 +1,112 @@
+name: afmi
+
+# ---------------------------------------------------------------------------
+# Stack de producción (servidor Linux):
+#   api    → afmi-backend (NestJS)
+#   minio  → almacenamiento S3-compatible para archivos (informes, adjuntos)
+#
+# PostgreSQL NO está aquí: corre instalado en el host Ubuntu. El contenedor lo
+# alcanza por `host.docker.internal` (mapeado a la IP del gateway del host).
+# Requisitos en el host, ver README-DOCKER.md:
+#   postgresql.conf → listen_addresses = '*'   (o la IP de docker0)
+#   pg_hba.conf     → host afmi <user> 172.16.0.0/12 scram-sha-256
+# ---------------------------------------------------------------------------
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: afmi-backend:latest
+    container_name: afmi-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # DB en el host, fuera de Docker. Se sobreescribe lo que venga del .env.
+      DB_HOST: host.docker.internal
+      # MinIO por red interna de Docker.
+      MINIO_ENDPOINT: http://minio:9000
+    extra_hosts:
+      # Linux: resuelve host.docker.internal → gateway del host (Docker >= 20.10)
+      - "host.docker.internal:host-gateway"
+    ports:
+      # Sólo loopback: nginx/caddy del host hace el reverse proxy + TLS.
+      # Para exponer directo a internet: "3000:3000" (no recomendado).
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:'+(process.env.PORT||3000)+'/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  minio:
+    # Pinnear a un RELEASE concreto cuando se estabilice el deploy.
+    image: minio/minio:latest
+    container_name: afmi-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # URL pública de la consola detrás de reverse proxy (opcional):
+      # MINIO_BROWSER_REDIRECT_URL: https://minio-console.tudominio.com
+    volumes:
+      - minio_data:/data
+    ports:
+      # API S3 y consola sólo por loopback → publicar vía reverse proxy.
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      # `mc ready` en releases nuevos; curl al endpoint de salud como respaldo.
+      test:
+        - CMD-SHELL
+        - mc ready local || curl -f http://localhost:9000/minio/health/live
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Job de un solo uso: crea el bucket si no existe. El bucket queda PRIVADO
+  # (los archivos son informes médicos) → el acceso se hace con URLs firmadas.
+  minio-init:
+    image: minio/mc:latest
+    container_name: afmi-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-afmi-files}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      mc alias set afmi http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+      mc mb --ignore-existing afmi/"$$MINIO_BUCKET" &&
+      mc version enable afmi/"$$MINIO_BUCKET" &&
+      echo "bucket $$MINIO_BUCKET listo (privado)"
+    restart: "no"
+
+volumes:
+  minio_data:
+    driver: local
