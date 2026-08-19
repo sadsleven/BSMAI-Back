@@ -19,10 +19,14 @@ import { QueryExchangeRatesDto } from './dto/query-exchange-rates.dto';
 import { CURRENCIES, Currency } from './entities/exchange-rate.entity';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../permissions/permissions.catalog';
+import { BcvRatesSyncService } from './bcv/bcv-rates-sync.service';
 
 @Controller('exchange-rates')
 export class ExchangeRatesController {
-  constructor(private readonly service: ExchangeRatesService) {}
+  constructor(
+    private readonly service: ExchangeRatesService,
+    private readonly bcvSync: BcvRatesSyncService,
+  ) {}
 
   @RequirePermissions(PERMISSIONS.EXCHANGE_RATES.LIST)
   @Get()
@@ -55,6 +59,19 @@ export class ExchangeRatesController {
   @Post()
   create(@Body() dto: CreateExchangeRateDto) {
     return this.service.create(dto);
+  }
+
+  /**
+   * Lee la página del BCV y guarda las tasas USD/EUR publicadas. Es la misma
+   * operación que corre el cron; sirve para forzarla a mano y funciona también
+   * cuando el backend está desplegado en modo serverless (donde el cron no
+   * corre). `force=true` ignora la guarda de "ya se obtuvo la tasa de hoy";
+   * nunca sobreescribe filas: si el monto ya está guardado, no crea nada.
+   */
+  @RequirePermissions(PERMISSIONS.EXCHANGE_RATES.CREATE)
+  @Post('sync-bcv')
+  syncBcv(@Query('force') force?: string) {
+    return this.bcvSync.syncNow(force === 'true');
   }
 
   @RequirePermissions(PERMISSIONS.EXCHANGE_RATES.UPDATE)

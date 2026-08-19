@@ -25,7 +25,8 @@
     "migrate": "ts-node src/runMigrations.ts",
     "migration:down": "ts-node node_modules/typeorm/cli.js migration:revert -d src/shared/utils/datasource.ts",
     "seed": "ts-node src/seed.ts",
-    "seed:baremos": "ts-node src/seed-baremos.ts"
+    "seed:baremos": "ts-node src/seed-baremos.ts",
+    "sync:bcv": "ts-node src/sync-bcv.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
