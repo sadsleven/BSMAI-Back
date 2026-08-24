@@ -1,3 +1,8 @@
+// Primero de todo: el `.env` debe estar en `process.env` antes de que se evalúen
+// los módulos — hay constantes leídas al importar (p. ej. MAX_UPLOAD_SIZE_MB en
+// `files.constants.ts`, consumida por el decorador de multer). `ConfigModule`
+// también carga el `.env`, pero más tarde en el ciclo de vida.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe, LogLevel, INestApplication } from '@nestjs/common';

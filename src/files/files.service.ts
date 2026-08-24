@@ -15,6 +15,7 @@ import { STORAGE_PROVIDER, StorageProvider } from './storage/storage.provider';
 import { StorageRegistry } from './storage/storage.registry';
 import {
   MAX_UPLOAD_SIZE_BYTES,
+  MAX_UPLOAD_SIZE_MB,
   ORDER_REPORT_ALLOWED_MIME,
   ORDER_REPORT_KIND,
   ORDER_REPORT_KIND_PREFIX,
@@ -62,7 +63,7 @@ export class FilesService {
     }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       throw new BadRequestException(
-        `El archivo supera el tamaño máximo (${MAX_UPLOAD_SIZE_BYTES} bytes)`,
+        `El archivo supera el tamaño máximo (${MAX_UPLOAD_SIZE_MB} MB)`,
       );
     }
 
