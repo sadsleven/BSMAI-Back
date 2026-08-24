@@ -266,22 +266,86 @@ export class OrdersService implements OnModuleInit {
     return u.map((r) => r.id);
   }
 
+  /** Piso de numeración de órdenes: `ORDER_NUMBER_START` (def 1). */
+  private orderNumberFloor(): number {
+    const raw = this.config.get<string>('ORDER_NUMBER_START');
+    const start = raw ? Number(raw) : 1;
+    if (!Number.isFinite(start) || start < 1) return 1;
+    return Math.trunc(start);
+  }
+
   /**
-   * Extrae `n` números consecutivos de `orders_seq` dentro de la transacción
-   * dada. Cada proveedor distinto de una orden consume uno; el primero es además
-   * el número BASE de la orden (`orders.orderNumber`). La secuencia es atómica y
-   * monotónica: creaciones concurrentes simplemente intercalan valores globales
-   * (unicidad garantizada; los gaps son aceptables y nunca se reutilizan).
+   * Asigna `n` números de orden interna dentro de la transacción dada. Cada
+   * proveedor distinto de una orden consume uno; el primero es además el número
+   * BASE de la orden (`orders.orderNumber`).
+   *
+   * Política: **los números libres se reutilizan**. Se toma siempre el menor
+   * número libre ≥ `ORDER_NUMBER_START`; libre = no usado por ninguna orden
+   * interna ni como número base de una orden (incluidas las órdenes en
+   * papelera, que conservan su número porque son restaurables). Así, borrar
+   * permanentemente una orden (o quitar un proveedor de un borrador) devuelve
+   * su número al pool y la numeración sigue desde ahí, sin gaps.
+   *
+   * Concurrencia: lock de aplicación por transacción (`pg_advisory_xact_lock`)
+   * serializa la asignación; además `internalNumber`/`orderNumber` son UNIQUE.
+   * `orders_seq` se mantiene sincronizada al máximo en uso (queda como
+   * marca de agua; la asignación ya no depende de `nextval`).
    */
   private async drawOrderNumbers(mgr: EntityManager, n: number): Promise<string[]> {
-    const out: string[] = [];
-    for (let i = 0; i < n; i += 1) {
-      const r = await mgr.query<{ nextval: string }[]>(
-        "SELECT nextval('orders_seq') AS nextval",
-      );
-      out.push(String(r[0].nextval));
+    if (n <= 0) return [];
+    const floor = this.orderNumberFloor();
+    // Serializa la asignación entre transacciones concurrentes.
+    await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
+    const rows = await mgr.query<{ n: string }[]>(
+      `WITH taken AS (
+         SELECT "internalNumber"::bigint AS n
+           FROM "order_internal_orders"
+          WHERE "internalNumber" ~ '^[0-9]+$'
+         UNION
+         SELECT "orderNumber"::bigint
+           FROM "orders"
+          WHERE "orderNumber" ~ '^[0-9]+$'
+       ),
+       hi AS (SELECT COALESCE(MAX(n), $1::bigint - 1) AS v FROM taken)
+       SELECT g AS n
+         FROM generate_series($1::bigint, (SELECT v FROM hi) + $2::bigint) AS g
+        WHERE NOT EXISTS (SELECT 1 FROM taken t WHERE t.n = g)
+        ORDER BY g
+        LIMIT $2`,
+      [floor, n],
+    );
+    if (rows.length < n) {
+      throw new BadRequestException('No se pudieron asignar números de orden');
     }
+    const out = rows.map((r) => String(r.n));
+    await this.syncOrderSequence(mgr, Number(out[out.length - 1]));
     return out;
+  }
+
+  /**
+   * Deja `orders_seq` en la marca de agua real: máximo entre los números en uso,
+   * los recién asignados y `ORDER_NUMBER_START - 1`. Nunca lanza (la secuencia
+   * es informativa: la asignación se calcula sobre los números en uso).
+   */
+  private async syncOrderSequence(
+    mgr: EntityManager | null,
+    justAllocated = 0,
+  ): Promise<void> {
+    const runner = mgr ?? this.dataSource;
+    const floor = this.orderNumberFloor();
+    try {
+      await runner.query(
+        `SELECT setval('orders_seq', GREATEST(
+           (SELECT COALESCE(MAX("internalNumber"::bigint), 0)
+              FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
+           (SELECT COALESCE(MAX("orderNumber"::bigint), 0)
+              FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
+           $1::bigint, $2::bigint, 1), true)`,
+        [justAllocated, floor - 1],
+      );
+    } catch (e) {
+      this.logger.warn(`No se pudo sincronizar orders_seq: ${(e as Error).message}`);
+    }
   }
 
   private orderRelations() {
@@ -1163,9 +1227,10 @@ export class OrdersService implements OnModuleInit {
    *
    *  - Sobreviviente (proveedor sigue): se mantiene su fila y su número (NUNCA
    *    se renumera).
-   *  - Quitado (proveedor ya no está): se BORRA su fila → número quemado (gap,
-   *    nunca reutilizado; la secuencia no retrocede).
-   *  - Nuevo: extrae `nextval('orders_seq')` y crea su fila (posición al final).
+   *  - Quitado (proveedor ya no está): se BORRA su fila → su número vuelve al
+   *    pool de números libres (se reutiliza en la próxima asignación).
+   *  - Nuevo: toma el menor número libre (`drawOrderNumbers`) y crea su fila
+   *    (posición al final).
    *
    * `orders.orderNumber` (base) NO se toca aquí: queda congelado aun si el
    * proveedor de la posición 1 se quita (política FREEZE).
@@ -1203,16 +1268,13 @@ export class OrdersService implements OnModuleInit {
       if (keepKeys.has(key)) {
         map.set(key, { id: r.id, internalNumber: r.internalNumber });
       } else {
-        // Proveedor quitado: borra su orden interna → número quemado.
+        // Proveedor quitado: borra su orden interna → su número queda libre.
         await mgr.query(`DELETE FROM "order_internal_orders" WHERE id = $1`, [r.id]);
       }
     }
     for (const { providerType, providerId, key } of distinct) {
       if (map.has(key)) continue;
-      const numRows = await mgr.query<{ nextval: string }[]>(
-        "SELECT nextval('orders_seq') AS nextval",
-      );
-      const internalNumber = String(numRows[0].nextval);
+      const [internalNumber] = await this.drawOrderNumbers(mgr, 1);
       maxPos += 1;
       const inserted = await mgr.query<{ id: string }[]>(
         `INSERT INTO "order_internal_orders"
@@ -2139,10 +2201,16 @@ export class OrdersService implements OnModuleInit {
     }
   }
 
+  /**
+   * Hard-delete: borra la orden y sus órdenes internas (CASCADE). Sus números
+   * vuelven al pool y se reasignan en la próxima creación (menor número libre
+   * ≥ `ORDER_NUMBER_START`); `orders_seq` retrocede a la marca de agua real.
+   */
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user, true);
     await this.assertNotInBatch(id);
     await this.repo.delete(id);
+    await this.syncOrderSequence(null);
   }
 
   async restore(id: string, user: AuthenticatedUser): Promise<Order> {
