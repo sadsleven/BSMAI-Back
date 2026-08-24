@@ -115,7 +115,10 @@ export class MinioStorageProvider implements StorageProvider {
       this.logger.log(`MinIO OK — bucket "${cfg.bucket}" en ${cfg.endpoint}`);
       return true;
     } catch (err) {
-      this.logger.warn(`MinIO no disponible todavía: ${(err as Error).message}`);
+      // `UnknownError` a secas no dice nada: el SDK lo usa cuando la respuesta
+      // no trae cuerpo de error parseable. El status HTTP sí distingue el caso
+      // (403 = credenciales/firma, 404 = bucket inexistente, 301 = región).
+      this.logger.warn(`MinIO no disponible todavía: ${describeS3Error(err)}`);
       return false;
     }
   }
@@ -223,4 +226,34 @@ export class MinioStorageProvider implements StorageProvider {
       this.logger.warn(`No se pudo borrar objeto ${url}: ${(err as Error).message}`);
     }
   }
+}
+
+/**
+ * Mensaje diagnóstico de un error del SDK de S3. `err.message` suele venir
+ * vacío o como `UnknownError` en respuestas sin cuerpo (HeadObject/HeadBucket),
+ * así que se agregan `name`, status HTTP y el hint del caso más probable.
+ */
+export function describeS3Error(err: unknown): string {
+  const e = err as {
+    name?: string;
+    message?: string;
+    $metadata?: { httpStatusCode?: number };
+    Code?: string;
+  };
+  const status = e.$metadata?.httpStatusCode;
+  const hint =
+    status === 403
+      ? ' — credenciales inválidas (MINIO_ACCESS_KEY/SECRET_KEY o MINIO_ROOT_USER/PASSWORD)'
+      : status === 404
+        ? ' — el bucket no existe (créalo: mc mb local/<bucket>)'
+        : status === 301 || status === 400
+          ? ' — endpoint/región/path-style mal configurados'
+          : '';
+  const parts = [
+    e.name ?? 'Error',
+    e.Code && e.Code !== e.name ? `(${e.Code})` : null,
+    status ? `HTTP ${status}` : null,
+    e.message && e.message !== e.name ? e.message : null,
+  ].filter(Boolean);
+  return `${parts.join(' ')}${hint}`;
 }
