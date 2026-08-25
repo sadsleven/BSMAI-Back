@@ -22,7 +22,10 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrderServiceTypeRowDto } from './dto/order-service-type.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
-import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
+import {
+  CreateOrderPaymentDto,
+  UpdateOrderPaymentDto,
+} from './dto/order-payment.dto';
 import {
   AttendOrderDto,
   AuthorizeOrderAmountDto,
@@ -99,17 +102,23 @@ export class OrdersService implements OnModuleInit {
 
   constructor(
     @InjectRepository(Order) private readonly repo: Repository<Order>,
-    @InjectRepository(OrderPayment) private readonly paymentsRepo: Repository<OrderPayment>,
+    @InjectRepository(OrderPayment)
+    private readonly paymentsRepo: Repository<OrderPayment>,
     @InjectRepository(OrderServiceType)
     private readonly ostRepo: Repository<OrderServiceType>,
-    @InjectRepository(Patient) private readonly patientsRepo: Repository<Patient>,
+    @InjectRepository(Patient)
+    private readonly patientsRepo: Repository<Patient>,
     @InjectRepository(Doctor) private readonly doctorsRepo: Repository<Doctor>,
-    @InjectRepository(CareCenter) private readonly careCentersRepo: Repository<CareCenter>,
+    @InjectRepository(CareCenter)
+    private readonly careCentersRepo: Repository<CareCenter>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
-    @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
-    @InjectRepository(ServiceType) private readonly serviceTypesRepo: Repository<ServiceType>,
-    @InjectRepository(Pathology) private readonly pathologiesRepo: Repository<Pathology>,
+    @InjectRepository(ExchangeRate)
+    private readonly ratesRepo: Repository<ExchangeRate>,
+    @InjectRepository(ServiceType)
+    private readonly serviceTypesRepo: Repository<ServiceType>,
+    @InjectRepository(Pathology)
+    private readonly pathologiesRepo: Repository<Pathology>,
     @InjectRepository(InsuranceServicePrice)
     private readonly insurancePricesRepo: Repository<InsuranceServicePrice>,
     @InjectRepository(DoctorServicePrice)
@@ -129,7 +138,6 @@ export class OrdersService implements OnModuleInit {
     private readonly paymentAccounts: PaymentAccountsService,
     private readonly providerAccounts: ProviderAccountsService,
   ) {
-    void this.insurancePricesRepo;
     void this.orderPricingRepo;
     void this.ostRepo;
     void this.banksRepo;
@@ -138,7 +146,10 @@ export class OrdersService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     await this.bumpSequence('orders_seq', 'ORDER_NUMBER_START');
     await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
-    await this.bumpSequence('accounts_receivable_seq', 'RECEIVABLE_NUMBER_START');
+    await this.bumpSequence(
+      'accounts_receivable_seq',
+      'RECEIVABLE_NUMBER_START',
+    );
     await this.bumpSequence('taxes_payable_seq', 'TAX_PAYABLE_NUMBER_START');
     await this.bumpSequence('tax_payment_batch_seq', 'TAX_BATCH_NUMBER_START');
   }
@@ -188,7 +199,10 @@ export class OrdersService implements OnModuleInit {
   }
 
   /** Historial de cambios de la orden (más reciente primero). */
-  async history(id: string, user: AuthenticatedUser): Promise<OrderChangeLog[]> {
+  async history(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<OrderChangeLog[]> {
     await this.findOne(id, user, true);
     return this.changeLogsRepo.find({
       where: { orderId: id },
@@ -198,31 +212,176 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Suma de precios Particular (USD) de las filas dadas, multiplicando por la
-   * cantidad cuando el ST permite cantidad. Usado para forzar el monto cuando el
-   * usuario no tiene orders.edit-amount.
+   * Suma de precios de catálogo (USD) de las filas dadas: baremo del seguro
+   * elegido cuando la orden es de seguro, precio Particular en el resto.
+   * Multiplica por la cantidad de cada fila. Es el **monto base** de la orden;
+   * la diferencia contra `priceAmount` es el descuento (negativo) o recargo
+   * (positivo) del Paso 1.
+   *
+   * `complete=false` cuando algún ST no tiene precio de catálogo: el base es
+   * incompleto y no se puede leer la diferencia como ajuste (espeja el aviso
+   * "Sin precio definido" del FE).
    */
-  private async computeParticularSum(
+  private async computeCatalogSum(
+    type: 'cash' | 'credit' | 'insurance' | 'cashea',
+    insuranceId: string | null | undefined,
     rows: Array<{ serviceTypeId: string; quantity?: number }>,
-  ): Promise<number> {
-    if (!rows.length) return 0;
+  ): Promise<{ sum: number; complete: boolean }> {
+    if (!rows.length) return { sum: 0, complete: false };
     const ids = Array.from(new Set(rows.map((r) => r.serviceTypeId)));
-    const sts = await this.serviceTypesRepo.find({
-      where: { id: In(ids) },
-      select: ['id', 'particularPriceUsd'],
-    });
-    const byId = new Map(sts.map((s) => [s.id, s]));
-    let sum = 0;
+    const unitByST = new Map<string, number>();
+    if (type === 'insurance' && insuranceId) {
+      const prices = await this.insurancePricesRepo.find({
+        where: { insuranceId, serviceTypeId: In(ids) },
+      });
+      for (const p of prices) {
+        const n = Number(p.priceUsd);
+        if (Number.isFinite(n)) unitByST.set(p.serviceTypeId, n);
+      }
+    } else {
+      const sts = await this.serviceTypesRepo.find({
+        where: { id: In(ids) },
+        select: ['id', 'particularPriceUsd'],
+      });
+      for (const st of sts) {
+        if (st.particularPriceUsd == null) continue;
+        const n = Number(st.particularPriceUsd);
+        if (Number.isFinite(n)) unitByST.set(st.id, n);
+      }
+    }
+    let cents = 0;
+    let complete = true;
     for (const r of rows) {
-      const st = byId.get(r.serviceTypeId);
-      if (!st) continue;
-      const n = Number(st.particularPriceUsd);
-      if (!Number.isFinite(n)) continue;
+      const unit = unitByST.get(r.serviceTypeId);
+      if (unit == null) {
+        complete = false;
+        continue;
+      }
       // Todo ST tiene cantidad (≥1, default 1).
       const qty = Math.max(1, Math.trunc(r.quantity ?? 1));
-      sum += n * qty;
+      cents += Math.round(unit * 100) * qty;
     }
-    return +sum.toFixed(2);
+    return { sum: cents / 100, complete };
+  }
+
+  /**
+   * Ajuste de monto del Paso 1 — monto efectivo + trazabilidad.
+   *
+   * El monto base es la suma de precios de catálogo (baremo del seguro o
+   * Particular). El usuario con `orders.edit-amount` puede guardar un monto
+   * distinto (descuento o recargo) y en ese caso el **motivo es obligatorio**:
+   * se persiste junto a quién lo aplicó y cuándo. Sin el permiso el monto se
+   * fuerza al base, salvo que un validador ya haya autorizado uno (su decisión
+   * no se pisa, ver `authorizeAmount`).
+   */
+  private async resolvePriceAdjustment(
+    args: {
+      type: 'cash' | 'credit' | 'insurance' | 'cashea';
+      insuranceId: string | null | undefined;
+      rows: Array<{ serviceTypeId: string; quantity?: number }>;
+      requestedAmount: number;
+      note?: string | null;
+      /** Orden existente en `update`; undefined al crear. */
+      existing?: Order | null;
+    },
+    user: AuthenticatedUser,
+  ): Promise<{
+    priceAmount: number;
+    priceBaseAmount: string;
+    priceAdjustmentNote: string | null;
+    priceAdjustedById: string | null;
+    priceAdjustedAt: Date | null;
+  }> {
+    const { type, insuranceId, rows, requestedAmount, existing } = args;
+    const { sum: base, complete } = await this.computeCatalogSum(
+      type,
+      insuranceId,
+      rows,
+    );
+    const canEditAmount = this.userHasPermission(
+      user,
+      PERMISSIONS.ORDERS.EDIT_AMOUNT,
+    );
+
+    let amount = requestedAmount;
+    if (!canEditAmount) {
+      amount = existing?.amountAuthorizedById
+        ? Number(existing.priceAmount)
+        : base;
+    }
+
+    // Catálogo incompleto (algún ST sin precio): el base no es comparable, así
+    // que se guarda igual al monto y no se registra ajuste.
+    if (!complete) {
+      return {
+        priceAmount: amount,
+        priceBaseAmount: amount.toFixed(2),
+        priceAdjustmentNote: null,
+        priceAdjustedById: null,
+        priceAdjustedAt: null,
+      };
+    }
+
+    const noAdjustment = {
+      priceAmount: base,
+      priceBaseAmount: base.toFixed(2),
+      priceAdjustmentNote: null,
+      priceAdjustedById: null,
+      priceAdjustedAt: null,
+    };
+    if (Math.round(amount * 100) === Math.round(base * 100))
+      return noAdjustment;
+
+    // Sin permiso para editar el monto tampoco se acepta un motivo nuevo: el
+    // rastro del monto autorizado por el validador se conserva tal cual.
+    const note = canEditAmount ? (args.note ?? '').trim() : '';
+    const sameAmount =
+      !!existing &&
+      Math.round(Number(existing.priceAmount) * 100) ===
+        Math.round(amount * 100);
+    if (note) {
+      // Mismo monto y mismo motivo ⇒ conserva autor/fecha originales (guardar el
+      // borrador de nuevo no re-estampa el ajuste).
+      const keepTrail =
+        sameAmount &&
+        !!existing?.priceAdjustedById &&
+        (existing.priceAdjustmentNote ?? '').trim() === note;
+      return {
+        priceAmount: amount,
+        priceBaseAmount: base.toFixed(2),
+        priceAdjustmentNote: note,
+        priceAdjustedById: keepTrail
+          ? (existing.priceAdjustedById as string)
+          : user.id,
+        priceAdjustedAt: keepTrail
+          ? (existing.priceAdjustedAt ?? null)
+          : new Date(),
+      };
+    }
+
+    // Sin motivo nuevo: sólo se acepta si el monto no cambió y ya hay una
+    // justificación previa (ajuste anterior o autorización de un validador).
+    if (sameAmount && existing?.priceAdjustmentNote) {
+      return {
+        priceAmount: amount,
+        priceBaseAmount: base.toFixed(2),
+        priceAdjustmentNote: existing.priceAdjustmentNote,
+        priceAdjustedById: existing.priceAdjustedById ?? null,
+        priceAdjustedAt: existing.priceAdjustedAt ?? null,
+      };
+    }
+    if (sameAmount && existing?.amountAuthorizedById) {
+      return {
+        priceAmount: amount,
+        priceBaseAmount: base.toFixed(2),
+        priceAdjustmentNote: existing.amountAuthorizationNote ?? null,
+        priceAdjustedById: existing.amountAuthorizedById,
+        priceAdjustedAt: existing.amountAuthorizedAt ?? null,
+      };
+    }
+    throw new BadRequestException(
+      'Indica el motivo del ajuste de monto: el monto difiere de la suma de los precios de catálogo',
+    );
   }
 
   private async bumpSequence(seq: string, envKey: string): Promise<void> {
@@ -237,7 +396,9 @@ export class OrdersService implements OnModuleInit {
       const isCalled = rows[0]?.is_called ?? false;
       const nextWouldBe = isCalled ? lastValue + 1 : lastValue;
       if (nextWouldBe >= start) return;
-      await this.dataSource.query(`SELECT setval('${seq}', $1, true)`, [start - 1]);
+      await this.dataSource.query(`SELECT setval('${seq}', $1, true)`, [
+        start - 1,
+      ]);
       this.logger.log(`${seq} bumped: próximo número = ${start}`);
     } catch (e) {
       this.logger.warn(
@@ -246,7 +407,9 @@ export class OrdersService implements OnModuleInit {
     }
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },
@@ -279,23 +442,87 @@ export class OrdersService implements OnModuleInit {
    * proveedor distinto de una orden consume uno; el primero es además el número
    * BASE de la orden (`orders.orderNumber`).
    *
-   * Política: **los números libres se reutilizan**. Se toma siempre el menor
-   * número libre ≥ `ORDER_NUMBER_START`; libre = no usado por ninguna orden
-   * interna ni como número base de una orden (incluidas las órdenes en
-   * papelera, que conservan su número porque son restaurables). Así, borrar
-   * permanentemente una orden (o quitar un proveedor de un borrador) devuelve
-   * su número al pool y la numeración sigue desde ahí, sin gaps.
+   * Política del rango automático (≥ `ORDER_NUMBER_START`): **los números NO se
+   * reutilizan**. La numeración continúa siempre desde el último emitido, así
+   * que borrar permanentemente una orden (o quitar un proveedor de un borrador)
+   * deja un hueco que nunca se rellena. La marca de agua vive en `orders_seq` y
+   * sólo avanza, por eso el hueco sobrevive aun si lo borrado era el número más
+   * alto.
+   *
+   * Con `maxExclusive` (rango histórico, < `ORDER_NUMBER_START`) sí se buscan
+   * huecos: ese rango lo llenan a mano las órdenes viejas que se registran
+   * ahora, y se cargan en desorden.
    *
    * Concurrencia: lock de aplicación por transacción (`pg_advisory_xact_lock`)
    * serializa la asignación; además `internalNumber`/`orderNumber` son UNIQUE.
-   * `orders_seq` se mantiene sincronizada al máximo en uso (queda como
-   * marca de agua; la asignación ya no depende de `nextval`).
    */
-  private async drawOrderNumbers(mgr: EntityManager, n: number): Promise<string[]> {
+  private async drawOrderNumbers(
+    mgr: EntityManager,
+    n: number,
+    opts?: { from?: number; maxExclusive?: number },
+  ): Promise<string[]> {
     if (n <= 0) return [];
-    const floor = this.orderNumberFloor();
     // Serializa la asignación entre transacciones concurrentes.
     await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
+    if (opts?.maxExclusive != null) {
+      return this.drawLegacyOrderNumbers(
+        mgr,
+        n,
+        opts.from ?? 1,
+        opts.maxExclusive,
+      );
+    }
+    return this.drawAutoOrderNumbers(mgr, n);
+  }
+
+  /**
+   * Rango automático: `n` números CONSECUTIVOS desde la marca de agua. Nunca
+   * mira los huecos. El arranque es el mayor entre lo que entregaría
+   * `orders_seq`, el mayor número en uso + 1 y el piso del env (cubre secuencias
+   * que quedaron atrás o restauraciones de BD). El `setval` final deja la marca
+   * en el último entregado: sólo avanza, nunca retrocede al borrar.
+   */
+  private async drawAutoOrderNumbers(
+    mgr: EntityManager,
+    n: number,
+  ): Promise<string[]> {
+    const rows = await mgr.query<{ next: string }[]>(
+      `SELECT GREATEST(
+         (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END
+            FROM orders_seq),
+         (SELECT COALESCE(MAX("internalNumber"::bigint), 0) + 1
+            FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
+         (SELECT COALESCE(MAX("orderNumber"::bigint), 0) + 1
+            FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
+         $1::bigint
+       )::text AS next`,
+      [this.orderNumberFloor()],
+    );
+    const start = Number(rows[0]?.next);
+    if (!Number.isFinite(start)) {
+      throw new BadRequestException('No se pudieron asignar números de orden');
+    }
+    // `setval` no es transaccional: si la creación falla después, el número
+    // queda quemado (hueco) en vez de reasignarse a otra orden.
+    await mgr.query(`SELECT setval('orders_seq', $1::bigint, true)`, [
+      String(start + n - 1),
+    ]);
+    return Array.from({ length: n }, (_, i) => String(start + i));
+  }
+
+  /**
+   * Rango histórico (`[from, maxExclusive)`, siempre por debajo de
+   * `ORDER_NUMBER_START`): los `n` menores números LIBRES. Aquí sí se rellenan
+   * huecos — libre = no usado por ninguna orden interna ni como número base de
+   * una orden, incluidas las órdenes en papelera (conservan su número porque son
+   * restaurables).
+   */
+  private async drawLegacyOrderNumbers(
+    mgr: EntityManager,
+    n: number,
+    from: number,
+    maxExclusive: number,
+  ): Promise<string[]> {
     const rows = await mgr.query<{ n: string }[]>(
       `WITH taken AS (
          SELECT "internalNumber"::bigint AS n
@@ -306,46 +533,159 @@ export class OrdersService implements OnModuleInit {
            FROM "orders"
           WHERE "orderNumber" ~ '^[0-9]+$'
        ),
-       hi AS (SELECT COALESCE(MAX(n), $1::bigint - 1) AS v FROM taken)
+       hi AS (
+         SELECT COALESCE(MAX(n), $1::bigint - 1) AS v
+           FROM taken
+          WHERE n >= $1::bigint AND n < $3::bigint
+       )
        SELECT g AS n
-         FROM generate_series($1::bigint, (SELECT v FROM hi) + $2::bigint) AS g
+         FROM generate_series(
+                $1::bigint,
+                LEAST((SELECT v FROM hi) + $2::bigint, $3::bigint - 1)) AS g
         WHERE NOT EXISTS (SELECT 1 FROM taken t WHERE t.n = g)
         ORDER BY g
         LIMIT $2`,
-      [floor, n],
+      [from, n, maxExclusive],
     );
     if (rows.length < n) {
-      throw new BadRequestException('No se pudieron asignar números de orden');
+      throw new BadRequestException(
+        `No hay suficientes números libres por debajo de ${maxExclusive} para todos los proveedores de la orden`,
+      );
     }
-    const out = rows.map((r) => String(r.n));
-    await this.syncOrderSequence(mgr, Number(out[out.length - 1]));
-    return out;
+    return rows.map((r) => String(r.n));
   }
 
   /**
-   * Deja `orders_seq` en la marca de agua real: máximo entre los números en uso,
-   * los recién asignados y `ORDER_NUMBER_START - 1`. Nunca lanza (la secuencia
-   * es informativa: la asignación se calcula sobre los números en uso).
+   * Rango válido de un número manual (sin tocar la BD): entero ≥ 1 y menor a
+   * `ORDER_NUMBER_START`. Se chequea antes de abrir la transacción para dar el
+   * error exacto y no arrastrar un valor imposible al reparto de números.
    */
-  private async syncOrderSequence(
-    mgr: EntityManager | null,
-    justAllocated = 0,
-  ): Promise<void> {
-    const runner = mgr ?? this.dataSource;
-    const floor = this.orderNumberFloor();
-    try {
-      await runner.query(
-        `SELECT setval('orders_seq', GREATEST(
-           (SELECT COALESCE(MAX("internalNumber"::bigint), 0)
-              FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
-           (SELECT COALESCE(MAX("orderNumber"::bigint), 0)
-              FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
-           $1::bigint, $2::bigint, 1), true)`,
-        [justAllocated, floor - 1],
+  private assertCustomNumberRange(value: number): number {
+    const n = Math.trunc(value);
+    if (!Number.isFinite(n) || n < 1) {
+      throw new BadRequestException(
+        'El número de orden debe ser mayor o igual a 1',
       );
-    } catch (e) {
-      this.logger.warn(`No se pudo sincronizar orders_seq: ${(e as Error).message}`);
     }
+    const floor = this.orderNumberFloor();
+    if (floor <= 1) {
+      throw new BadRequestException(
+        'La numeración manual no está disponible: el número inicial del sistema es 1, no queda rango histórico libre',
+      );
+    }
+    if (n >= floor) {
+      throw new BadRequestException(
+        `El número manual debe ser menor a ${floor}: desde ese número la numeración la asigna el sistema`,
+      );
+    }
+    return n;
+  }
+
+  /**
+   * Valida un número de orden MANUAL (órdenes viejas que se registran ahora).
+   * Debe ser entero ≥ 1, estrictamente menor a `ORDER_NUMBER_START` — ese rango
+   * el sistema nunca lo asigna, así que queda reservado para lo histórico — y
+   * estar libre (ninguna orden ni orden interna lo usa, incluidas las que están
+   * en papelera). `excludeOrderId` ignora los números de la propia orden cuando
+   * se renumera un borrador. Devuelve el número normalizado.
+   */
+  private async assertCustomOrderNumber(
+    mgr: EntityManager,
+    value: number,
+    excludeOrderId?: string,
+  ): Promise<number> {
+    const n = this.assertCustomNumberRange(value);
+    await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
+    const rows = await mgr.query<{ taken: number }[]>(
+      `SELECT 1 AS taken
+         FROM "order_internal_orders"
+        WHERE "internalNumber" = $1
+          AND ($2::uuid IS NULL OR "orderId" <> $2::uuid)
+       UNION ALL
+       SELECT 1
+         FROM "orders"
+        WHERE "orderNumber" = $1
+          AND ($2::uuid IS NULL OR id <> $2::uuid)
+        LIMIT 1`,
+      [String(n), excludeOrderId ?? null],
+    );
+    if (rows.length) {
+      throw new BadRequestException(`El número de orden ${n} ya está en uso`);
+    }
+    return n;
+  }
+
+  /**
+   * Numeración manual: el número dado es el BASE (proveedor 1) y el resto de
+   * proveedores toma los siguientes números libres del MISMO rango histórico
+   * (< `ORDER_NUMBER_START`), para que la orden vieja no mezcle numeraciones.
+   */
+  private async drawCustomOrderNumbers(
+    mgr: EntityManager,
+    custom: number,
+    n: number,
+    excludeOrderId?: string,
+  ): Promise<string[]> {
+    const base = await this.assertCustomOrderNumber(
+      mgr,
+      custom,
+      excludeOrderId,
+    );
+    const rest = await this.drawOrderNumbers(mgr, Math.max(0, n - 1), {
+      from: base + 1,
+      maxExclusive: this.orderNumberFloor(),
+    });
+    return [String(base), ...rest];
+  }
+
+  /**
+   * Renumera por completo una orden en borrador con numeración manual: el
+   * número dado pasa a ser el BASE y los demás proveedores toman los siguientes
+   * libres del rango histórico. Primero libera los números actuales de la orden
+   * poniendo valores temporales NO numéricos (el pool sólo mira números), para
+   * que reasignar un número entre proveedores de la misma orden no choque con
+   * el UNIQUE de `internalNumber`.
+   */
+  private async renumberOrder(
+    mgr: EntityManager,
+    orderId: string,
+    custom: number,
+  ): Promise<void> {
+    const rows = await mgr.query<Array<{ id: string }>>(
+      `SELECT id FROM "order_internal_orders"
+        WHERE "orderId" = $1 ORDER BY "sequencePosition"`,
+      [orderId],
+    );
+    const temp = `'t' || left(replace(id::text, '-', ''), 12)`;
+    await mgr.query(
+      `UPDATE "order_internal_orders" SET "internalNumber" = ${temp} WHERE "orderId" = $1`,
+      [orderId],
+    );
+    await mgr.query(
+      `UPDATE "orders" SET "orderNumber" = ${temp} WHERE id = $1`,
+      [orderId],
+    );
+    const numbers = await this.drawCustomOrderNumbers(
+      mgr,
+      custom,
+      Math.max(1, rows.length),
+      orderId,
+    );
+    for (let i = 0; i < rows.length; i += 1) {
+      await mgr.query(
+        `UPDATE "order_internal_orders" SET "internalNumber" = $1 WHERE id = $2`,
+        [numbers[i], rows[i].id],
+      );
+    }
+    await mgr.query(`UPDATE "orders" SET "orderNumber" = $1 WHERE id = $2`, [
+      numbers[0],
+      orderId,
+    ]);
+  }
+
+  /** Número desde el cual el sistema asigna automáticamente (`ORDER_NUMBER_START`). */
+  orderNumberStart(): { start: number } {
+    return { start: this.orderNumberFloor() };
   }
 
   private orderRelations() {
@@ -366,6 +706,7 @@ export class OrdersService implements OnModuleInit {
       pathologies: true,
       createdBy: true,
       amountAuthorizedBy: true,
+      priceAdjustedBy: true,
       payments: { exchangeRate: true },
       billingExchangeRate: true,
       fixedExchangeRate: true,
@@ -443,7 +784,9 @@ export class OrdersService implements OnModuleInit {
       qb.withDeleted();
     }
 
-    const provider = user.isSuperAdmin ? null : await this.resolveProvider(user);
+    const provider = user.isSuperAdmin
+      ? null
+      : await this.resolveProvider(user);
     if (!user.isSuperAdmin) {
       if (provider) {
         // Usuario proveedor: solo sus órdenes (vía OST) y solo accionables.
@@ -478,12 +821,15 @@ export class OrdersService implements OnModuleInit {
         'EXISTS (SELECT 1 FROM order_service_types fst WHERE fst."orderId" = o.id AND fst."careCenterId" = :careCenterId)',
         { careCenterId },
       );
-    if (specialtyId) qb.andWhere('o.specialtyId = :specialtyId', { specialtyId });
-    if (orderDateFrom) qb.andWhere('o.orderDate >= :odf', { odf: orderDateFrom });
+    if (specialtyId)
+      qb.andWhere('o.specialtyId = :specialtyId', { specialtyId });
+    if (orderDateFrom)
+      qb.andWhere('o.orderDate >= :odf', { odf: orderDateFrom });
     if (orderDateTo) qb.andWhere('o.orderDate <= :odt', { odt: orderDateTo });
     if (appointmentDateFrom)
       qb.andWhere('o.appointmentDate >= :adf', { adf: appointmentDateFrom });
-    if (appointmentDateTo) qb.andWhere('o.appointmentDate <= :adt', { adt: appointmentDateTo });
+    if (appointmentDateTo)
+      qb.andWhere('o.appointmentDate <= :adt', { adt: appointmentDateTo });
 
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
@@ -529,13 +875,18 @@ export class OrdersService implements OnModuleInit {
         [ids, provider.id, kind],
       );
       const done = new Set(rows.map((r) => r.orderId));
-      for (const o of result.data) o.providerObservationComplete = done.has(o.id);
+      for (const o of result.data)
+        o.providerObservationComplete = done.has(o.id);
     }
 
     return result;
   }
 
-  async findOne(id: string, user: AuthenticatedUser, withDeleted = false): Promise<Order> {
+  async findOne(
+    id: string,
+    user: AuthenticatedUser,
+    withDeleted = false,
+  ): Promise<Order> {
     const order = await this.repo.findOne({
       where: { id },
       relations: this.orderRelations(),
@@ -594,7 +945,10 @@ export class OrdersService implements OnModuleInit {
     await this.assertBranchVisibility(order.branchId, user);
   }
 
-  private async assertBranchVisibility(branchId: string, user: AuthenticatedUser): Promise<void> {
+  private async assertBranchVisibility(
+    branchId: string,
+    user: AuthenticatedUser,
+  ): Promise<void> {
     if (user.isSuperAdmin) return;
     const allowed = await this.resolveUserBranchIds(user);
     if (!allowed.includes(branchId)) {
@@ -614,7 +968,8 @@ export class OrdersService implements OnModuleInit {
     if (!dto.branchId) throw new BadRequestException('branchId requerido');
     await this.assertBranchVisibility(dto.branchId, user);
 
-    if (!dto.specialtyId) throw new BadRequestException('specialtyId requerido');
+    if (!dto.specialtyId)
+      throw new BadRequestException('specialtyId requerido');
 
     const holder = await this.patientsRepo.findOne({
       where: { id: dto.holderId!, deletedAt: IsNull() },
@@ -625,14 +980,16 @@ export class OrdersService implements OnModuleInit {
       // cartesiano que revienta la memoria (OOM) en titulares con muchos seguros.
       loadEagerRelations: false,
     });
-    if (!holder) throw new BadRequestException('Titular no encontrado o eliminado');
+    if (!holder)
+      throw new BadRequestException('Titular no encontrado o eliminado');
 
     if (dto.patientId && dto.patientId !== dto.holderId) {
       const pat = await this.patientsRepo.findOne({
         where: { id: dto.patientId, deletedAt: IsNull() },
         loadEagerRelations: false,
       });
-      if (!pat) throw new BadRequestException('Paciente no encontrado o eliminado');
+      if (!pat)
+        throw new BadRequestException('Paciente no encontrado o eliminado');
     }
 
     if (dto.type === 'insurance') {
@@ -679,7 +1036,11 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    if (dto.type !== 'insurance' && dto.serviceKey && dto.serviceKey.trim() !== '') {
+    if (
+      dto.type !== 'insurance' &&
+      dto.serviceKey &&
+      dto.serviceKey.trim() !== ''
+    ) {
       throw new BadRequestException(
         'serviceKey solo aplica para órdenes tipo seguro',
       );
@@ -716,10 +1077,16 @@ export class OrdersService implements OnModuleInit {
 
     // Validate provider per row.
     const doctorIds = Array.from(
-      new Set(rows.filter((r) => r.providerType === 'doctor').map((r) => r.doctorId!)),
+      new Set(
+        rows.filter((r) => r.providerType === 'doctor').map((r) => r.doctorId!),
+      ),
     );
     const ccIds = Array.from(
-      new Set(rows.filter((r) => r.providerType === 'care_center').map((r) => r.careCenterId!)),
+      new Set(
+        rows
+          .filter((r) => r.providerType === 'care_center')
+          .map((r) => r.careCenterId!),
+      ),
     );
     // loadEagerRelations:false → evita que Doctor/CareCenter auto-unan sus
     // eager to-many (phones, paymentMethods, servicePrices). Sin esto, .find()
@@ -745,14 +1112,10 @@ export class OrdersService implements OnModuleInit {
     for (const row of rows) {
       if (row.providerType === 'doctor') {
         if (!row.doctorId) {
-          throw new BadRequestException(
-            'Cada fila Doctor requiere doctorId',
-          );
+          throw new BadRequestException('Cada fila Doctor requiere doctorId');
         }
         if (row.careCenterId) {
-          throw new BadRequestException(
-            'Fila Doctor no admite careCenterId',
-          );
+          throw new BadRequestException('Fila Doctor no admite careCenterId');
         }
         const d = docMap.get(row.doctorId);
         if (!d || !d.isActive)
@@ -766,9 +1129,7 @@ export class OrdersService implements OnModuleInit {
           );
         }
         if (row.doctorId) {
-          throw new BadRequestException(
-            'Fila Centro no admite doctorId',
-          );
+          throw new BadRequestException('Fila Centro no admite doctorId');
         }
         const cc = ccMap.get(row.careCenterId);
         if (!cc || !cc.isActive)
@@ -785,7 +1146,9 @@ export class OrdersService implements OnModuleInit {
         select: ['id', 'isActive'],
       });
       if (ps.length !== pIds.length || ps.some((p) => !p.isActive)) {
-        throw new BadRequestException('Alguna patología no existe o está deshabilitada');
+        throw new BadRequestException(
+          'Alguna patología no existe o está deshabilitada',
+        );
       }
     }
 
@@ -851,27 +1214,40 @@ export class OrdersService implements OnModuleInit {
       p.type === 'bank_transfer' ||
       p.type === 'card'
     ) {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
-        throw new BadRequestException('Pago móvil/transferencia/punto debe ser en BS');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        throw new BadRequestException(
+          'Pago móvil/transferencia/punto debe ser en BS',
+        );
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
       if (rate.currency !== 'USD')
         throw new BadRequestException('Pago en BS requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
-      if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido');
+      if (p.amountCurrency !== 'BS')
+        throw new BadRequestException('cash_bs debe ser en BS');
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
       if (rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'bank_transfer_usd') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency !== 'USD')
-        throw new BadRequestException('Transferencia en dólares debe ser en USD');
+        throw new BadRequestException(
+          'Transferencia en dólares debe ser en USD',
+        );
       out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_usd') {
       if (p.amountCurrency !== 'USD')
@@ -882,20 +1258,28 @@ export class OrdersService implements OnModuleInit {
         throw new BadRequestException('cash_eur debe ser en EUR');
       if (!p.exchangeRateId)
         throw new BadRequestException('exchangeRateId requerido (EUR)');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
       if (rate.currency !== 'EUR')
-        throw new BadRequestException('cash_eur requiere una tasa de cambio en EUR');
+        throw new BadRequestException(
+          'cash_eur requiere una tasa de cambio en EUR',
+        );
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency === 'BS' || p.amountCurrency === 'EUR') {
         if (!p.exchangeRateId)
           throw new BadRequestException(
             `exchangeRateId requerido para pago other en ${p.amountCurrency}`,
           );
-        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
-        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+        const rate = await this.ratesRepo.findOne({
+          where: { id: p.exchangeRateId },
+        });
+        if (!rate)
+          throw new BadRequestException('Tasa de cambio no encontrada');
         if (p.amountCurrency === 'BS' && rate.currency !== 'USD')
           throw new BadRequestException('other en BS requiere tasa USD/Bs');
         if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
@@ -918,7 +1302,9 @@ export class OrdersService implements OnModuleInit {
   }
 
   /** Σ de los pagos del Paso 1 convertidos a USD (moneda del precio). */
-  private async sumPaymentsUsd(payments: CreateOrderPaymentDto[]): Promise<number> {
+  private async sumPaymentsUsd(
+    payments: CreateOrderPaymentDto[],
+  ): Promise<number> {
     let total = 0;
     for (const p of payments) {
       total += await computeAmountInUsd(
@@ -954,7 +1340,9 @@ export class OrdersService implements OnModuleInit {
     const TOL = 0.01;
     if (type === 'cash') {
       if (priceUsd <= 0) {
-        throw new BadRequestException('La orden de contado no tiene monto a cobrar');
+        throw new BadRequestException(
+          'La orden de contado no tiene monto a cobrar',
+        );
       }
       if (Math.abs(sumUsd - priceUsd) > TOL) {
         throw new BadRequestException(
@@ -1009,7 +1397,9 @@ export class OrdersService implements OnModuleInit {
         'Seguro no indexado: selecciona la tasa de la orden',
       );
     }
-    const rate = await this.ratesRepo.findOne({ where: { id: requestedRateId } });
+    const rate = await this.ratesRepo.findOne({
+      where: { id: requestedRateId },
+    });
     if (!rate) throw new BadRequestException('Tasa de la orden no encontrada');
     if (rate.currency !== 'USD') {
       throw new BadRequestException('La tasa de la orden debe ser USD/Bs');
@@ -1020,6 +1410,19 @@ export class OrdersService implements OnModuleInit {
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
 
+    // Número manual (orden vieja que se registra ahora): permiso dedicado.
+    if (
+      dto.customOrderNumber != null &&
+      !this.userHasPermission(user, PERMISSIONS.ORDERS.CUSTOM_NUMBER)
+    ) {
+      throw new ForbiddenException(
+        'No tienes permiso para asignar el número de orden manualmente',
+      );
+    }
+    if (dto.customOrderNumber != null) {
+      this.assertCustomNumberRange(dto.customOrderNumber);
+    }
+
     // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado" ⇒ fija en Bs a la tasa de la orden).
     const fixed = await this.resolveFixedRate(
       dto.type,
@@ -1027,14 +1430,19 @@ export class OrdersService implements OnModuleInit {
       dto.fixedExchangeRateId ?? null,
     );
 
-    // Sin orders.edit-amount, el monto de órdenes no-seguro se fuerza a la suma Particular.
-    let effectivePriceAmount = dto.priceAmount;
-    if (
-      dto.type !== 'insurance' &&
-      !this.userHasPermission(user, PERMISSIONS.ORDERS.EDIT_AMOUNT)
-    ) {
-      effectivePriceAmount = await this.computeParticularSum(dto.serviceTypes);
-    }
+    // Monto base (catálogo) + ajuste con motivo. Sin orders.edit-amount el
+    // monto se fuerza al base.
+    const priceAdj = await this.resolvePriceAdjustment(
+      {
+        type: dto.type,
+        insuranceId: dto.insuranceId ?? null,
+        rows: dto.serviceTypes,
+        requestedAmount: dto.priceAmount,
+        note: dto.priceAdjustmentNote,
+      },
+      user,
+    );
+    const effectivePriceAmount = priceAdj.priceAmount;
 
     // Snapshot Cashea: la inicial la ingresa el usuario; las tasas (comisión
     // sobre el total + financiamiento sobre el restante) se toman de la config
@@ -1076,7 +1484,14 @@ export class OrdersService implements OnModuleInit {
       // los números por adelantado; el primero es además el número BASE de la
       // orden (base == proveedor 1). Una orden siempre tiene ≥1 proveedor.
       const distinct = this.distinctProvidersFromRows(dto.serviceTypes);
-      const numbers = await this.drawOrderNumbers(mgr, distinct.length);
+      const numbers =
+        dto.customOrderNumber != null
+          ? await this.drawCustomOrderNumbers(
+              mgr,
+              dto.customOrderNumber,
+              distinct.length,
+            )
+          : await this.drawOrderNumbers(mgr, distinct.length);
       const orderNumber = numbers[0];
       const entity = mgr.create(Order, {
         orderNumber,
@@ -1087,7 +1502,8 @@ export class OrdersService implements OnModuleInit {
         patientId: dto.patientId,
         contractorId: dto.contractorId ?? null,
         insuranceId: dto.insuranceId ?? null,
-        insuranceSource: dto.type === 'insurance' ? dto.insuranceSource ?? null : null,
+        insuranceSource:
+          dto.type === 'insurance' ? (dto.insuranceSource ?? null) : null,
         serviceKey:
           dto.type === 'insurance' && dto.serviceKey?.trim()
             ? dto.serviceKey.trim()
@@ -1097,6 +1513,10 @@ export class OrdersService implements OnModuleInit {
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
         priceAmount: effectivePriceAmount.toFixed(2),
+        priceBaseAmount: priceAdj.priceBaseAmount,
+        priceAdjustmentNote: priceAdj.priceAdjustmentNote,
+        priceAdjustedById: priceAdj.priceAdjustedById,
+        priceAdjustedAt: priceAdj.priceAdjustedAt,
         casheaFirstInstallmentAmount:
           casheaFields?.casheaFirstInstallmentAmount ?? null,
         casheaCommissionRate: casheaFields?.casheaCommissionRate ?? null,
@@ -1108,7 +1528,10 @@ export class OrdersService implements OnModuleInit {
       const saved = await mgr.save(entity);
 
       // Crear las órdenes internas (1 por proveedor distinto) con su número.
-      const iioByKey = new Map<ProviderKey, { id: string; internalNumber: string }>();
+      const iioByKey = new Map<
+        ProviderKey,
+        { id: string; internalNumber: string }
+      >();
       let position = 0;
       for (const { providerType, providerId, key } of distinct) {
         const internalNumber = numbers[position];
@@ -1147,10 +1570,15 @@ export class OrdersService implements OnModuleInit {
           .add(pIds);
       }
 
-      if ((dto.type === 'cash' || dto.type === 'cashea') && dto.payments?.length) {
+      if (
+        (dto.type === 'cash' || dto.type === 'cashea') &&
+        dto.payments?.length
+      ) {
         for (const p of dto.payments) {
           const payload = await this.resolvePaymentForSave(p, null);
-          await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: saved.id }));
+          await mgr.save(
+            mgr.create(OrderPayment, { ...payload, orderId: saved.id }),
+          );
         }
       }
 
@@ -1168,7 +1596,21 @@ export class OrdersService implements OnModuleInit {
       // proveedor se persiste en `order_internal_orders.providerAmountUsd` al
       // facturar (Paso 4); las órdenes con deudor quedan como pendientes de cobro.
 
-      await this.logChange(mgr, saved.id, user.id, 'create');
+      // El ajuste de monto al crear queda en el historial (además de las
+      // columnas de trazabilidad de la orden).
+      await this.logChange(
+        mgr,
+        saved.id,
+        user.id,
+        'create',
+        priceAdj.priceAdjustmentNote
+          ? {
+              priceAmount: { to: +effectivePriceAmount.toFixed(2) },
+              priceBaseAmount: { to: Number(priceAdj.priceBaseAmount) },
+              priceAdjustmentNote: { to: priceAdj.priceAdjustmentNote },
+            }
+          : null,
+      );
 
       return saved.id;
     });
@@ -1193,8 +1635,11 @@ export class OrdersService implements OnModuleInit {
     if (!rows.length) return;
     // Todo ST tiene cantidad (≥1, default 1).
     const values = rows.map((r) => {
-      const providerId = r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
-      const iio = iioByKey.get(`${r.providerType}:${providerId}` as ProviderKey);
+      const providerId =
+        r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
+      const iio = iioByKey.get(
+        `${r.providerType}:${providerId}` as ProviderKey,
+      );
       if (!iio) {
         throw new BadRequestException(
           'Falta la orden interna del proveedor de un tipo de servicio',
@@ -1204,9 +1649,9 @@ export class OrdersService implements OnModuleInit {
         orderId,
         serviceTypeId: r.serviceTypeId,
         providerType: r.providerType,
-        doctorId: r.providerType === 'doctor' ? r.doctorId ?? null : null,
+        doctorId: r.providerType === 'doctor' ? (r.doctorId ?? null) : null,
         careCenterId:
-          r.providerType === 'care_center' ? r.careCenterId ?? null : null,
+          r.providerType === 'care_center' ? (r.careCenterId ?? null) : null,
         quantity: Math.max(1, Math.trunc(r.quantity ?? 1)),
         customName: (r.customName ?? '').trim(),
         // ST indexado sólo tiene sentido con seguro no indexado (orden en modo
@@ -1227,10 +1672,11 @@ export class OrdersService implements OnModuleInit {
    *
    *  - Sobreviviente (proveedor sigue): se mantiene su fila y su número (NUNCA
    *    se renumera).
-   *  - Quitado (proveedor ya no está): se BORRA su fila → su número vuelve al
-   *    pool de números libres (se reutiliza en la próxima asignación).
-   *  - Nuevo: toma el menor número libre (`drawOrderNumbers`) y crea su fila
-   *    (posición al final).
+   *  - Quitado (proveedor ya no está): se BORRA su fila → su número queda como
+   *    hueco definitivo (no se reutiliza).
+   *  - Nuevo: toma el siguiente número de la marca de agua (`drawOrderNumbers`)
+   *    y crea su fila (posición al final). En una orden histórica sí se rellenan
+   *    huecos, pero sólo dentro del rango viejo (`legacyBase`).
    *
    * `orders.orderNumber` (base) NO se toca aquí: queda congelado aun si el
    * proveedor de la posición 1 se quita (política FREEZE).
@@ -1243,6 +1689,7 @@ export class OrdersService implements OnModuleInit {
       providerId: string;
       key: ProviderKey;
     }>,
+    legacyBase: number | null = null,
   ): Promise<Map<ProviderKey, { id: string; internalNumber: string }>> {
     const existing = await mgr.query<
       Array<{
@@ -1268,13 +1715,24 @@ export class OrdersService implements OnModuleInit {
       if (keepKeys.has(key)) {
         map.set(key, { id: r.id, internalNumber: r.internalNumber });
       } else {
-        // Proveedor quitado: borra su orden interna → su número queda libre.
-        await mgr.query(`DELETE FROM "order_internal_orders" WHERE id = $1`, [r.id]);
+        // Proveedor quitado: borra su orden interna → su número queda quemado.
+        await mgr.query(`DELETE FROM "order_internal_orders" WHERE id = $1`, [
+          r.id,
+        ]);
       }
     }
     for (const { providerType, providerId, key } of distinct) {
       if (map.has(key)) continue;
-      const [internalNumber] = await this.drawOrderNumbers(mgr, 1);
+      // Orden histórica (número base por debajo del piso del sistema): los
+      // proveedores nuevos también toman número de ese rango, para no mezclar
+      // numeración vieja y automática en la misma orden.
+      const [internalNumber] = await this.drawOrderNumbers(
+        mgr,
+        1,
+        legacyBase != null
+          ? { from: legacyBase + 1, maxExclusive: this.orderNumberFloor() }
+          : undefined,
+      );
       maxPos += 1;
       const inserted = await mgr.query<{ id: string }[]>(
         `INSERT INTO "order_internal_orders"
@@ -1295,9 +1753,7 @@ export class OrdersService implements OnModuleInit {
   }
 
   /** Set único de proveedores activos en la orden. Preserva orden de aparición. */
-  private distinctProvidersFromRows(
-    rows: OrderServiceTypeRowDto[],
-  ): Array<{
+  private distinctProvidersFromRows(rows: OrderServiceTypeRowDto[]): Array<{
     providerType: 'doctor' | 'care_center';
     providerId: string;
     key: ProviderKey;
@@ -1321,7 +1777,11 @@ export class OrdersService implements OnModuleInit {
 
   // ----- Transiciones de estado (Pasos 2-4) -----
 
-  async attend(id: string, dto: AttendOrderDto, user: AuthenticatedUser): Promise<Order> {
+  async attend(
+    id: string,
+    dto: AttendOrderDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
     const order = await this.findOne(id, user);
     if (!['draft', 'in_progress', 'attended'].includes(order.status)) {
       throw new BadRequestException(
@@ -1352,13 +1812,19 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(id, user);
   }
 
-  async report(id: string, dto: ReportOrderDto, user: AuthenticatedUser): Promise<Order> {
+  async report(
+    id: string,
+    dto: ReportOrderDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
     const order = await this.findOne(id, user);
     // `otherStudies`, observaciones por proveedor y adjuntos son editables
     // retroactivamente. Solo se bloquea `draft`/`in_progress` (orden aún sin
     // atender — no tiene sentido emitir informe).
     if (order.status === 'draft' || order.status === 'in_progress') {
-      throw new BadRequestException('La orden debe estar atendida para emitir informe');
+      throw new BadRequestException(
+        'La orden debe estar atendida para emitir informe',
+      );
     }
 
     const provider = await this.resolveProvider(user);
@@ -1412,7 +1878,8 @@ export class OrdersService implements OnModuleInit {
               : null;
         }
         for (const r of dto.providerReports ?? []) {
-          const pid = r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
+          const pid =
+            r.providerType === 'doctor' ? r.doctorId! : r.careCenterId!;
           const key = `${r.providerType}:${pid}`;
           if (!validKeys.has(key)) {
             throw new BadRequestException(
@@ -1447,7 +1914,8 @@ export class OrdersService implements OnModuleInit {
     providerId: string,
     observations: string | null,
   ): Promise<void> {
-    const obs = observations && observations.trim() !== '' ? observations : null;
+    const obs =
+      observations && observations.trim() !== '' ? observations : null;
     const doctorId = providerType === 'doctor' ? providerId : null;
     const careCenterId = providerType === 'care_center' ? providerId : null;
     // Raw SQL (igual que las cuentas auto-generadas): evita la ambigüedad de
@@ -1479,7 +1947,8 @@ export class OrdersService implements OnModuleInit {
    * Cuando el usuario que edita la orden no tiene `orders.edit-amount`, otro
    * usuario que sí lo tenga valida sus credenciales (email + contraseña) e
    * ingresa el nuevo monto + observación. Queda registrado como autor del cambio.
-   * Sólo aplica a órdenes `draft` no-seguro (el monto de seguro es fijo).
+   * Sólo aplica a órdenes en `draft` (cualquier tipo: el monto de catálogo,
+   * baremo del seguro incluido, admite descuento o recargo justificado).
    */
   async authorizeAmount(
     id: string,
@@ -1491,9 +1960,6 @@ export class OrdersService implements OnModuleInit {
       throw new BadRequestException(
         'Solo se puede autorizar el monto mientras la orden está en borrador',
       );
-    }
-    if (order.type === 'insurance') {
-      throw new BadRequestException('El monto de las órdenes de seguro es fijo');
     }
     this.assertStep1Editable(order, user);
 
@@ -1510,18 +1976,53 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
+    // El monto autorizado también es un ajuste del Paso 1: el validador queda
+    // como autor del descuento/recargo y su observación como motivo.
+    const { sum: catalogSum, complete: catalogComplete } =
+      await this.computeCatalogSum(
+        order.type,
+        order.insuranceId ?? null,
+        (order.orderServiceTypes ?? []).map((ost) => ({
+          serviceTypeId: ost.serviceTypeId,
+          quantity: ost.quantity ?? 1,
+        })),
+      );
+    const now = new Date();
+    const observation = dto.observation.trim();
+    // Catálogo incompleto: el base no es comparable ⇒ base = monto, sin ajuste.
+    const base = catalogComplete ? catalogSum : dto.priceAmount;
+    const adjusted =
+      catalogComplete &&
+      Math.round(dto.priceAmount * 100) !== Math.round(base * 100);
+
     // `update` por columnas (la orden trae `providerReports` cargada).
     await this.repo.update(
       { id: order.id },
       {
         priceAmount: dto.priceAmount.toFixed(2),
+        priceBaseAmount: base.toFixed(2),
+        priceAdjustmentNote: adjusted ? observation : null,
+        priceAdjustedById: adjusted ? validator.id : null,
+        priceAdjustedAt: adjusted ? now : null,
         amountAuthorizedById: validator.id,
-        amountAuthorizedAt: new Date(),
-        amountAuthorizationNote: dto.observation.trim(),
+        amountAuthorizedAt: now,
+        amountAuthorizationNote: observation,
       },
     );
     await this.logChange(null, order.id, user.id, 'authorize_amount', {
-      priceAmount: { from: Number(order.priceAmount), to: +dto.priceAmount.toFixed(2) },
+      priceAmount: {
+        from: Number(order.priceAmount),
+        to: +dto.priceAmount.toFixed(2),
+      },
+      priceBaseAmount: {
+        from:
+          order.priceBaseAmount != null ? Number(order.priceBaseAmount) : null,
+        to: base,
+      },
+      priceAdjustmentNote: {
+        from: order.priceAdjustmentNote ?? null,
+        to: adjusted ? observation : null,
+      },
     });
     return this.findOne(id, user);
   }
@@ -1536,7 +2037,11 @@ export class OrdersService implements OnModuleInit {
    * - `doctorAmount` = total USD; `doctorAmountSuggested` = suma sugeridos USD.
    * - `billingExchangeRateId` debe ser tasa USD/Bs (snapshot al facturar).
    */
-  async billing(id: string, dto: BillingOrderDto, user: AuthenticatedUser): Promise<Order> {
+  async billing(
+    id: string,
+    dto: BillingOrderDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
     const order = await this.findOne(id, user);
     if (order.status !== 'report_issued') {
       throw new BadRequestException(
@@ -1544,7 +2049,10 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    const rate = await resolveUsdRate(this.ratesRepo, dto.billingExchangeRateId);
+    const rate = await resolveUsdRate(
+      this.ratesRepo,
+      dto.billingExchangeRateId,
+    );
     void rate;
 
     // Set de proveedores esperados según las filas OST de la orden.
@@ -1571,9 +2079,7 @@ export class OrdersService implements OnModuleInit {
       const pid = p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
       const key = `${p.providerType}:${pid}` as ProviderKey;
       if (seenKeys.has(key)) {
-        throw new BadRequestException(
-          'Proveedor duplicado en la facturación',
-        );
+        throw new BadRequestException('Proveedor duplicado en la facturación');
       }
       seenKeys.add(key);
       dtoMap.set(key, p);
@@ -1618,17 +2124,17 @@ export class OrdersService implements OnModuleInit {
     }> = [];
     for (const prov of expected) {
       const rowsForProv = orderRows.filter((r) => {
-        const pid =
-          r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
+        const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
         return r.providerType === prov.providerType && pid === prov.providerId;
       });
       const stIds = rowsForProv.map((r) => r.serviceTypeId);
-      const { suggested, snapshotRows: rows } = await this.computeProviderPricing(
-        prov.providerType,
-        prov.providerId,
-        stIds,
-        qtyByST,
-      );
+      const { suggested, snapshotRows: rows } =
+        await this.computeProviderPricing(
+          prov.providerType,
+          prov.providerId,
+          stIds,
+          qtyByST,
+        );
       suggestedSum += suggested;
       snapshotRows.push(...rows);
     }
@@ -1697,16 +2203,14 @@ export class OrdersService implements OnModuleInit {
   ): Promise<void> {
     if (!serviceTypeIds.length) return;
     if (type === 'insurance' && insuranceId) {
-      const rows = await mgr
-        .getRepository(InsuranceServicePrice)
-        .find({
-          where: { insuranceId, serviceTypeId: In(serviceTypeIds) },
-        });
+      const rows = await mgr.getRepository(InsuranceServicePrice).find({
+        where: { insuranceId, serviceTypeId: In(serviceTypeIds) },
+      });
       const byST = new Map(rows.map((r) => [r.serviceTypeId, r]));
       const missing = serviceTypeIds.filter((id) => !byST.has(id));
       if (missing.length) {
         throw new BadRequestException(
-          `El seguro seleccionado no tiene precio definido para algún tipo de servicio (${missing.length} pendiente${missing.length === 1 ? '' : 's'}). Cargá los precios en el seguro o quitá esos servicios.`,
+          `El seguro seleccionado no tiene precio definido para algún tipo de servicio (${missing.length} pendiente${missing.length === 1 ? '' : 's'}). Carga los precios en el seguro o quita esos servicios.`,
         );
       }
       const values = serviceTypeIds.map((stId) => {
@@ -1759,7 +2263,10 @@ export class OrdersService implements OnModuleInit {
             where: { doctorId: providerId, serviceTypeId: In(serviceTypeIds) },
           })
         : await this.careCenterPricesRepo.find({
-            where: { careCenterId: providerId, serviceTypeId: In(serviceTypeIds) },
+            where: {
+              careCenterId: providerId,
+              serviceTypeId: In(serviceTypeIds),
+            },
           });
 
     let suggested = 0;
@@ -1801,6 +2308,9 @@ export class OrdersService implements OnModuleInit {
       casheaFirstInstallmentAmount: string | null;
       useFixedRate: boolean;
       fixedExchangeRateId: string | null;
+      /** Monto base efectivo ("123.00") y motivo del ajuste post-normalización. */
+      priceBaseAmount: string;
+      priceAdjustmentNote: string | null;
       dtoPayments?: CreateOrderPaymentDto[];
     },
   ): Record<string, { from?: unknown; to?: unknown }> {
@@ -1813,9 +2323,21 @@ export class OrdersService implements OnModuleInit {
     put('type', existing.type, merged.type);
     put('holderId', existing.holderId, merged.holderId);
     put('patientId', existing.patientId, merged.patientId);
-    put('contractorId', existing.contractorId ?? null, merged.contractorId ?? null);
-    put('insuranceId', existing.insuranceId ?? null, merged.insuranceId ?? null);
-    put('insuranceSource', existing.insuranceSource ?? null, fin.insuranceSource);
+    put(
+      'contractorId',
+      existing.contractorId ?? null,
+      merged.contractorId ?? null,
+    );
+    put(
+      'insuranceId',
+      existing.insuranceId ?? null,
+      merged.insuranceId ?? null,
+    );
+    put(
+      'insuranceSource',
+      existing.insuranceSource ?? null,
+      fin.insuranceSource,
+    );
     put('serviceKey', existing.serviceKey ?? null, fin.serviceKey);
     put('isReimbursement', existing.isReimbursement, fin.isReimbursement);
     put('specialtyId', existing.specialtyId, merged.specialtyId);
@@ -1829,7 +2351,23 @@ export class OrdersService implements OnModuleInit {
       existing.appointmentDate.toISOString(),
       new Date(merged.appointmentDate).toISOString(),
     );
-    put('priceAmount', Number(existing.priceAmount), +merged.priceAmount.toFixed(2));
+    put(
+      'priceAmount',
+      Number(existing.priceAmount),
+      +merged.priceAmount.toFixed(2),
+    );
+    put(
+      'priceBaseAmount',
+      existing.priceBaseAmount != null
+        ? Number(existing.priceBaseAmount)
+        : null,
+      Number(fin.priceBaseAmount),
+    );
+    put(
+      'priceAdjustmentNote',
+      existing.priceAdjustmentNote ?? null,
+      fin.priceAdjustmentNote,
+    );
     put(
       'casheaFirstInstallmentAmount',
       existing.casheaFirstInstallmentAmount != null
@@ -1859,7 +2397,9 @@ export class OrdersService implements OnModuleInit {
       [
         r.serviceTypeId,
         r.providerType,
-        r.providerType === 'doctor' ? r.doctorId ?? '' : r.careCenterId ?? '',
+        r.providerType === 'doctor'
+          ? (r.doctorId ?? '')
+          : (r.careCenterId ?? ''),
         Math.max(1, Math.trunc(r.quantity ?? 1)),
         (r.customName ?? '').trim(),
         r.isIndexed ? '1' : '0',
@@ -1910,11 +2450,30 @@ export class OrdersService implements OnModuleInit {
     return out;
   }
 
-  async update(id: string, dto: UpdateOrderDto, user: AuthenticatedUser): Promise<Order> {
+  async update(
+    id: string,
+    dto: UpdateOrderDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
     const existing = await this.findOne(id, user);
     if (existing.status !== 'draft')
       throw new BadRequestException('Solo se puede editar órdenes en borrador');
     this.assertStep1Editable(existing, user);
+
+    // Número manual (orden vieja registrada ahora). `undefined` = no tocar la
+    // numeración; sólo se puede corregir mientras la orden siga en borrador.
+    const customNumber = dto.customOrderNumber ?? null;
+    if (
+      customNumber != null &&
+      !this.userHasPermission(user, PERMISSIONS.ORDERS.CUSTOM_NUMBER)
+    ) {
+      throw new ForbiddenException(
+        'No tienes permiso para asignar el número de orden manualmente',
+      );
+    }
+    if (customNumber != null) {
+      this.assertCustomNumberRange(customNumber);
+    }
 
     const existingPathologyIds = (existing.pathologies ?? []).map((p) => p.id);
     const existingRows: OrderServiceTypeRowDto[] = (
@@ -1935,15 +2494,13 @@ export class OrdersService implements OnModuleInit {
       patientId: dto.patientId ?? existing.patientId,
       contractorId: dto.contractorId ?? existing.contractorId ?? undefined,
       insuranceId: dto.insuranceId ?? existing.insuranceId ?? undefined,
-      insuranceSource:
-        (dto.insuranceSource ?? existing.insuranceSource ?? undefined) as
-          | 'direct'
-          | 'via_contractor'
-          | undefined,
+      insuranceSource: (dto.insuranceSource ??
+        existing.insuranceSource ??
+        undefined) as 'direct' | 'via_contractor' | undefined,
       serviceKey:
         dto.serviceKey !== undefined
           ? dto.serviceKey
-          : existing.serviceKey ?? undefined,
+          : (existing.serviceKey ?? undefined),
       isReimbursement:
         dto.isReimbursement !== undefined
           ? dto.isReimbursement
@@ -1972,13 +2529,20 @@ export class OrdersService implements OnModuleInit {
       merged.fixedExchangeRateId ?? null,
     );
 
-    // Sin orders.edit-amount, el monto de órdenes no-seguro se fuerza a la suma Particular.
-    if (
-      merged.type !== 'insurance' &&
-      !this.userHasPermission(user, PERMISSIONS.ORDERS.EDIT_AMOUNT)
-    ) {
-      merged.priceAmount = await this.computeParticularSum(merged.serviceTypes);
-    }
+    // Monto base (catálogo) + ajuste con motivo. Sin orders.edit-amount el
+    // monto se fuerza al base (salvo monto ya autorizado por un validador).
+    const priceAdjUpd = await this.resolvePriceAdjustment(
+      {
+        type: merged.type,
+        insuranceId: merged.insuranceId ?? null,
+        rows: merged.serviceTypes,
+        requestedAmount: merged.priceAmount,
+        note: dto.priceAdjustmentNote,
+        existing,
+      },
+      user,
+    );
+    merged.priceAmount = priceAdjUpd.priceAmount;
 
     // Snapshot Cashea: si pasa a cashea desde otro tipo, capturar tasas de la
     // config global; si ya era cashea, preservar tasas snapshot y sólo actualizar
@@ -2046,22 +2610,31 @@ export class OrdersService implements OnModuleInit {
     // los mismos que se escriben abajo en la transacción).
     const changes = this.diffUpdateChanges(existing, merged, {
       insuranceSource:
-        merged.type === 'insurance' ? merged.insuranceSource ?? null : null,
+        merged.type === 'insurance' ? (merged.insuranceSource ?? null) : null,
       serviceKey:
         merged.type === 'insurance' && merged.serviceKey?.trim()
           ? merged.serviceKey.trim()
           : null,
-      isReimbursement: merged.type === 'credit' ? !!merged.isReimbursement : false,
+      isReimbursement:
+        merged.type === 'credit' ? !!merged.isReimbursement : false,
       casheaFirstInstallmentAmount:
         nextCashea !== undefined
           ? nextCashea === null
             ? null
             : nextCashea.casheaFirstInstallmentAmount
-          : existing.casheaFirstInstallmentAmount ?? null,
+          : (existing.casheaFirstInstallmentAmount ?? null),
       useFixedRate: fixedUpd.useFixedRate,
       fixedExchangeRateId: fixedUpd.fixedExchangeRateId,
+      priceBaseAmount: priceAdjUpd.priceBaseAmount,
+      priceAdjustmentNote: priceAdjUpd.priceAdjustmentNote,
       dtoPayments: dto.payments,
     });
+    if (customNumber != null && String(customNumber) !== existing.orderNumber) {
+      changes.orderNumber = {
+        from: existing.orderNumber,
+        to: String(customNumber),
+      };
+    }
 
     await this.dataSource.transaction(async (mgr) => {
       // Importante: NO usar `Object.assign(existing, …)` + `mgr.save(existing)`
@@ -2076,7 +2649,7 @@ export class OrdersService implements OnModuleInit {
         contractorId: merged.contractorId ?? null,
         insuranceId: merged.insuranceId ?? null,
         insuranceSource:
-          merged.type === 'insurance' ? merged.insuranceSource ?? null : null,
+          merged.type === 'insurance' ? (merged.insuranceSource ?? null) : null,
         serviceKey:
           merged.type === 'insurance' && merged.serviceKey?.trim()
             ? merged.serviceKey.trim()
@@ -2087,6 +2660,10 @@ export class OrdersService implements OnModuleInit {
         orderDate: merged.orderDate,
         appointmentDate: new Date(merged.appointmentDate),
         priceAmount: merged.priceAmount.toFixed(2),
+        priceBaseAmount: priceAdjUpd.priceBaseAmount,
+        priceAdjustmentNote: priceAdjUpd.priceAdjustmentNote,
+        priceAdjustedById: priceAdjUpd.priceAdjustedById,
+        priceAdjustedAt: priceAdjUpd.priceAdjustedAt,
         ...(nextCashea !== undefined
           ? nextCashea === null
             ? {
@@ -2104,12 +2681,23 @@ export class OrdersService implements OnModuleInit {
       //   1) borrar todas las OST (libera las referencias a las internas),
       //   2) reconciliar order_internal_orders (sobrevive/quema/agrega número),
       //   3) reinsertar OST ligadas a su orden interna.
+      // Orden histórica: base por debajo del piso ⇒ los proveedores nuevos
+      // también toman número del rango viejo (no mezclar numeraciones).
+      const currentBase = Number(existing.orderNumber);
+      const legacyBase =
+        customNumber != null
+          ? customNumber
+          : Number.isFinite(currentBase) &&
+              currentBase < this.orderNumberFloor()
+            ? currentBase
+            : null;
       const distinct = this.distinctProvidersFromRows(merged.serviceTypes);
       await mgr.delete(OrderServiceType, { orderId: existing.id });
       const iioByKey = await this.reconcileInternalOrders(
         mgr,
         existing.id,
         distinct,
+        legacyBase,
       );
       await this.persistOrderServiceTypes(
         mgr,
@@ -2119,8 +2707,19 @@ export class OrdersService implements OnModuleInit {
         fixedUpd.useFixedRate,
       );
 
+      // Cambio de número manual: renumera la orden completa (base + proveedores).
+      if (
+        customNumber != null &&
+        String(customNumber) !== existing.orderNumber
+      ) {
+        await this.renumberOrder(mgr, existing.id, customNumber);
+      }
+
       // Pathologies replace.
-      const pRel = mgr.createQueryBuilder().relation(Order, 'pathologies').of(existing.id);
+      const pRel = mgr
+        .createQueryBuilder()
+        .relation(Order, 'pathologies')
+        .of(existing.id);
       if (existingPathologyIds.length) await pRel.remove(existingPathologyIds);
       if (merged.pathologyIds && merged.pathologyIds.length)
         await pRel.add(Array.from(new Set(merged.pathologyIds)));
@@ -2133,7 +2732,9 @@ export class OrdersService implements OnModuleInit {
         ) {
           for (const p of dto.payments) {
             const payload = await this.resolvePaymentForSave(p, null);
-            await mgr.save(mgr.create(OrderPayment, { ...payload, orderId: existing.id }));
+            await mgr.save(
+              mgr.create(OrderPayment, { ...payload, orderId: existing.id }),
+            );
           }
         }
       } else if (merged.type !== 'cash' && merged.type !== 'cashea') {
@@ -2194,7 +2795,10 @@ export class OrdersService implements OnModuleInit {
       `SELECT count(*)::int AS c FROM "accounts_receivable_orders" WHERE "orderId" = $1`,
       [orderId],
     );
-    if (Number(inPayable[0]?.c ?? 0) > 0 || Number(inReceivable[0]?.c ?? 0) > 0) {
+    if (
+      Number(inPayable[0]?.c ?? 0) > 0 ||
+      Number(inReceivable[0]?.c ?? 0) > 0
+    ) {
       throw new BadRequestException(
         'La orden está incluida en un lote de cuentas por pagar/cobrar. Anulá el lote antes de eliminar la orden.',
       );
@@ -2203,14 +2807,13 @@ export class OrdersService implements OnModuleInit {
 
   /**
    * Hard-delete: borra la orden y sus órdenes internas (CASCADE). Sus números
-   * vuelven al pool y se reasignan en la próxima creación (menor número libre
-   * ≥ `ORDER_NUMBER_START`); `orders_seq` retrocede a la marca de agua real.
+   * NO se reciclan: quedan como hueco definitivo y la numeración sigue desde el
+   * último emitido (`orders_seq` sólo avanza).
    */
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user, true);
     await this.assertNotInBatch(id);
     await this.repo.delete(id);
-    await this.syncOrderSequence(null);
   }
 
   async restore(id: string, user: AuthenticatedUser): Promise<Order> {
@@ -2232,9 +2835,13 @@ export class OrdersService implements OnModuleInit {
   ): Promise<OrderPayment> {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
-      throw new BadRequestException('Solo se permiten pagos en órdenes en borrador');
+      throw new BadRequestException(
+        'Solo se permiten pagos en órdenes en borrador',
+      );
     if (order.type !== 'cash')
-      throw new BadRequestException('Solo se admiten pagos para órdenes de tipo Contado');
+      throw new BadRequestException(
+        'Solo se admiten pagos para órdenes de tipo Contado',
+      );
     this.assertStep1Editable(order, user);
     const payload = await this.resolvePaymentForSave(
       dto,
@@ -2256,15 +2863,20 @@ export class OrdersService implements OnModuleInit {
   ): Promise<OrderPayment> {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
-      throw new BadRequestException('Solo se permiten pagos en órdenes en borrador');
+      throw new BadRequestException(
+        'Solo se permiten pagos en órdenes en borrador',
+      );
     this.assertStep1Editable(order, user);
-    const payment = await this.paymentsRepo.findOne({ where: { id: paymentId, orderId } });
+    const payment = await this.paymentsRepo.findOne({
+      where: { id: paymentId, orderId },
+    });
     if (!payment) throw new NotFoundException('Pago no encontrado');
     const before = paymentSummary(payment);
     const merged: CreateOrderPaymentDto = {
       type: (dto.type ?? payment.type) as CreateOrderPaymentDto['type'],
       paymentDate: dto.paymentDate ?? payment.paymentDate,
-      referenceNumber: dto.referenceNumber ?? payment.referenceNumber ?? undefined,
+      referenceNumber:
+        dto.referenceNumber ?? payment.referenceNumber ?? undefined,
       bankCode: dto.bankCode ?? payment.bankCode ?? undefined,
       accountNumber: dto.accountNumber ?? payment.accountNumber ?? undefined,
       exchangeRateId: dto.exchangeRateId ?? payment.exchangeRateId ?? undefined,
@@ -2294,9 +2906,13 @@ export class OrdersService implements OnModuleInit {
   ): Promise<void> {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
-      throw new BadRequestException('Solo se permiten cambios de pagos en borrador');
+      throw new BadRequestException(
+        'Solo se permiten cambios de pagos en borrador',
+      );
     this.assertStep1Editable(order, user);
-    const payment = await this.paymentsRepo.findOne({ where: { id: paymentId, orderId } });
+    const payment = await this.paymentsRepo.findOne({
+      where: { id: paymentId, orderId },
+    });
     if (!payment) throw new NotFoundException('Pago no encontrado');
     await this.paymentsRepo.delete(paymentId);
     await this.logChange(null, orderId, user.id, 'payment_remove', {

@@ -1,10 +1,11 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -57,7 +58,9 @@ export class CreateOrderDto {
    */
   @IsOptional()
   @IsString()
-  @MaxLength(30, { message: 'La clave de servicio no puede superar 30 caracteres' })
+  @MaxLength(30, {
+    message: 'La clave de servicio no puede superar 30 caracteres',
+  })
   serviceKey?: string;
 
   /**
@@ -70,6 +73,17 @@ export class CreateOrderDto {
 
   @IsUUID()
   specialtyId: string;
+
+  /**
+   * Número de orden manual (órdenes históricas que se registran ahora). Debe ser
+   * un entero ≥ 1 y **menor** a `ORDER_NUMBER_START`: ese rango nunca lo asigna
+   * el sistema, así que es el pool reservado para lo viejo. Requiere el permiso
+   * `orders.custom-number`. Sin este campo, la numeración es automática.
+   */
+  @IsOptional()
+  @IsInt({ message: 'El número de orden debe ser un entero' })
+  @Min(1, { message: 'El número de orden debe ser mayor o igual a 1' })
+  customOrderNumber?: number;
 
   /**
    * Tipos de servicio con su proveedor por fila. Reemplaza el antiguo
@@ -98,6 +112,19 @@ export class CreateOrderDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   priceAmount: number;
+
+  /**
+   * Motivo del ajuste de monto (descuento o recargo respecto de la suma de
+   * precios de catálogo). Obligatorio cuando `priceAmount` difiere de esa suma;
+   * el service lo exige y lo persiste junto a quién lo aplicó y cuándo.
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(500)
+  priceAdjustmentNote?: string;
 
   /**
    * Monto de la inicial Cashea, en USD. Requerido sólo cuando `type='cashea'`.

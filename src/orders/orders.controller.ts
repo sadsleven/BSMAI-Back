@@ -46,6 +46,16 @@ export class OrdersController {
     return this.service.customNameSuggestions(serviceTypeId);
   }
 
+  /**
+   * Piso de la numeración automática (`ORDER_NUMBER_START`). Los números
+   * manuales de órdenes históricas deben ser menores a este valor. Sólo JWT
+   * (lo consume el Paso 1 para validar y mostrar el rango disponible).
+   */
+  @Get('config/number-start')
+  numberStart() {
+    return this.service.orderNumberStart();
+  }
+
   /** Historial de cambios por usuario de la orden (más reciente primero). */
   @RequirePermissions(PERMISSIONS.ORDERS.LIST)
   @Get(':id/history')

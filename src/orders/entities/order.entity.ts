@@ -165,6 +165,34 @@ export class Order {
   priceAmount: string;
 
   /**
+   * Monto base = suma de los precios de catálogo snapshot al guardar (baremo del
+   * seguro para órdenes de seguro; precio Particular para el resto). El ajuste
+   * es derivado: `priceAmount − priceBaseAmount` (negativo descuento, positivo
+   * recargo). Null sólo en órdenes previas a la migración de ajuste.
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  priceBaseAmount?: string | null;
+
+  /**
+   * Trazabilidad del ajuste de monto (Paso 1): motivo obligatorio cuando
+   * `priceAmount ≠ priceBaseAmount`, más quién lo aplicó y cuándo. Se limpian
+   * al volver el monto al base. El historial (`order_change_logs`) guarda además
+   * el cambio de monto.
+   */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  priceAdjustmentNote?: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  priceAdjustedById?: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'priceAdjustedById' })
+  priceAdjustedBy?: User | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  priceAdjustedAt?: Date | null;
+
+  /**
    * Snapshot Cashea al crear la orden. Sólo se setean cuando `type='cashea'`
    * (CHECK chk_orders_cashea_fields). Preservan los valores aunque el admin
    * cambie la config global en `app_config` después.

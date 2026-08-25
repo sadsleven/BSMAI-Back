@@ -123,7 +123,8 @@ const consultaName = (name) => {
 const CONFIGS = [
   {
     file: 'BAREMO PREVISORA ENERO 2026.xlsx',
-    insurance: 'Seguros La Previsora',
+    insurance: 'C.N.A SEGUROS LA PREVISORA',
+    aliases: ['Seguros La Previsora'],
     rif: null,
     sheets: [
       { name: 'CONSULTAS Y PROCEDIMIENTOS', nameCol: 3, priceCol: 4, startRow: 11 },
@@ -134,25 +135,29 @@ const CONFIGS = [
   {
     // Sólo APS: actos quirúrgicos / gastos clínicos excluidos por decisión de negocio
     file: 'BAREMO SEGUROS ALTAMIRA FEBRERO 2026.xlsx',
-    insurance: 'Seguros Altamira',
+    insurance: 'SEGUROS ALTAMIRA, C.A',
+    aliases: ['Seguros Altamira'],
     rif: null,
     sheets: [{ name: 'APS', nameCol: 2, priceCol: 4, startRow: 12 }],
   },
   {
     file: 'BAREMOS ACTUAL ESTAR SEGUROS.xlsx',
-    insurance: 'Estar Seguros',
+    insurance: 'Estar Seguros S.A',
+    aliases: ['Estar Seguros'],
     rif: null,
     sheets: [{ name: 'APS', nameCol: 2, priceCol: 3, startRow: 11 }],
   },
   {
     file: 'BAREMOS CONSTITUCION.xlsx',
-    insurance: 'Seguros Constitución',
+    insurance: 'SEGUROS CONSTITUCION, C.A',
+    aliases: ['Seguros Constitución'],
     rif: null,
     sheets: [{ name: 'BAREMO AMP ', nameCol: 1, priceCol: 3, startRow: 6 }],
   },
   {
     file: 'BAREMOS ENVIASITENCIA.xlsx',
-    insurance: 'Enviasistencia',
+    insurance: 'ENVIASISTENCIA',
+    aliases: ['Enviasistencia'],
     rif: null,
     sheets: [
       { name: 'CONSULTAS ', nameCol: 2, priceCol: 3, startRow: 12 },
@@ -161,13 +166,15 @@ const CONFIGS = [
   },
   {
     file: 'BAREMOS HISPANA.xlsx',
-    insurance: 'La Hispana',
+    insurance: 'HISPANA DE SEGUROS, S.A',
+    aliases: ['La Hispana'],
     rif: null,
     sheets: [{ name: 'APS', nameCol: 2, priceCol: 3, startRow: 11 }],
   },
   {
     file: 'BAREMOS SEG. VENEZUELA.xlsx',
-    insurance: 'Seguros Venezuela',
+    insurance: 'SEGUROS VENEZUELA C.A',
+    aliases: ['Seguros Venezuela'],
     rif: null,
     sheets: [{ name: 'BAREMO AMP 2025', nameCol: 1, priceCol: 2, startRow: 7 }],
   },
@@ -179,7 +186,8 @@ const CONFIGS = [
     // mapeado a "CONSULTA: X" por consultaName). Actos con "NO PROCEDE POR APS"
     // (Anatomía Patológica) quedan fuera.
     file: 'BAREMOS UNIVERSITAS.xlsx',
-    insurance: 'Seguros Universitas',
+    insurance: 'SEGUROS UNIVERSITAS, C.A',
+    aliases: ['Seguros Universitas'],
     rif: null,
     sheets: [
       { name: 'APS', nameCol: 9, priceCol: 10, startRow: 9 },
@@ -192,9 +200,25 @@ const CONFIGS = [
     // nombres traen "CONSULTA 1A VEZ / DE CONTROL" y quedan tal cual (no son
     // consultas de especialidad simples mapeables).
     file: 'BAREMOS PIRAMIDE.xlsx',
-    insurance: 'Seguros Pirámide',
+    insurance: 'SEGUROS PIRAMIDE, C.A',
+    aliases: ['Seguros Pirámide'],
     rif: null,
     sheets: [{ name: 'AFMI', nameCol: 2, priceCol: 4, startRow: 4 }],
+  },
+  {
+    // Hoja única "Hoja1" con la negociación: col C = servicio, col D = tarifa
+    // propuesta por AFMI (01-07-2024) y col F = "PROPUESTA 1" del seguro
+    // (15-07-2024), que trae o un monto (contraoferta) o el texto "APROBADO".
+    // Precio vigente = col F si es numérica, si no col D. Las filas de sección
+    // (LABORATORIO, RADIOLOGIA CONVENCIONAL, ECOGRAFIA, ...) no tienen monto en
+    // col D y quedan fuera solas.
+    file: 'BAREMOS OCEANICA.xlsx',
+    insurance: 'OCEANICA DE SEGUROS, C.A',
+    aliases: [],
+    rif: null,
+    sheets: [
+      { name: 'Hoja1', nameCol: 3, priceCol: 4, altPriceCol: 6, startRow: 9 },
+    ],
   },
 ];
 
@@ -214,9 +238,13 @@ const CONFIGS = [
       for (let r = sc.startRow; r <= ws.rowCount; r++) {
         const row = ws.getRow(r);
         const name = norm(row.getCell(sc.nameCol).value);
-        const price = cellNum(row.getCell(sc.priceCol).value);
+        const base = cellNum(row.getCell(sc.priceCol).value);
+        // altPriceCol = columna de contraoferta: gana si trae monto (si trae
+        // texto tipo "APROBADO" se queda el de priceCol).
+        const alt = sc.altPriceCol ? cellNum(row.getCell(sc.altPriceCol).value) : null;
         if (!name || CATEGORY_RE.test(name)) continue;
-        if (price === null || price <= 0) continue;
+        if (base === null || base <= 0) continue;
+        const price = alt !== null && alt > 0 ? alt : base;
         if (name.length > 200) {
           skippedLong++;
           continue;
@@ -228,7 +256,7 @@ const CONFIGS = [
     }
     const services = [...m.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'));
     const prices = services.map((s) => s.priceUsd);
-    out.push({ name: cfg.insurance, rif: cfg.rif, services });
+    out.push({ name: cfg.insurance, aliases: cfg.aliases ?? [], rif: cfg.rif, services });
     console.log(
       cfg.insurance.padEnd(24),
       'svc:', String(services.length).padStart(4),
@@ -257,7 +285,10 @@ export interface BaremoServiceSeed {
 }
 
 export interface BaremoInsuranceSeed {
+  /** Razón social oficial tal cual está registrada en el sistema. */
   name: string;
+  /** Nombres anteriores/abreviados con los que pudo quedar creado el seguro. */
+  aliases: string[];
   rif: string | null;
   services: BaremoServiceSeed[];
 }

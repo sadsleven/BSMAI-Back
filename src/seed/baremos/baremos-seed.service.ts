@@ -16,6 +16,7 @@ import {
   STD_CANONICAL_BY_NORMKEY,
   STD_DELETE_NORMKEYS,
 } from './standardization-map';
+import { BAREMO_NAME_ALIASES } from './baremos-name-aliases';
 
 const CHUNK = 200;
 
@@ -41,21 +42,47 @@ function normKey(s: string): string {
 
 const STD_DELETES = new Set(STD_DELETE_NORMKEYS);
 
+/** Alias manuales (baremos-name-aliases.ts) indexados por normKey. */
+const MANUAL_ALIASES = new Map(
+  Object.entries(BAREMO_NAME_ALIASES).map(
+    ([raw, canonical]) => [normKey(stripControl(raw)), canonical] as const,
+  ),
+);
+
 /**
  * Nombre canónico aprobado (ESTANDARIZACION-BAREMOS.md) para un nombre de baremo.
  * Devuelve `null` si el nombre es basura aprobada para eliminar (se omite del seed).
  * Mantiene en sincronía el seeder con la migración StandardizeServiceTypeNames:
  * ambos salen de `standardization-map.ts` / `*.data.json` (regenerar con
  * `node scripts/gen-baremos-standardization.cjs` si cambia el reporte).
+ *
+ * Primero se consultan los alias manuales de `baremos-name-aliases.ts` (mapeo
+ * a mano de nombres crudos de un Excel al tipo de servicio ya existente); el
+ * resultado vuelve a pasar por el mapa de estandarización.
  */
 function canonicalName(raw: string): string | null {
   const cleaned = stripControl(raw).trim();
-  const k = normKey(cleaned);
+  if (STD_DELETES.has(normKey(cleaned))) return null;
+  const aliased = MANUAL_ALIASES.get(normKey(cleaned)) ?? cleaned;
+  const k = normKey(aliased);
   if (STD_DELETES.has(k)) return null;
   const mapped = STD_CANONICAL_BY_NORMKEY[k];
   if (mapped) return mapped;
   // estudios RX sueltos (no fusionados): normaliza el prefijo "RX." -> "RX "
-  return cleaned.replace(/^RX\.\s*/, 'RX ');
+  return aliased.replace(/^RX\.\s*/, 'RX ');
+}
+
+/**
+ * Clave de identidad de un seguro: sin acentos/puntuación, MAYÚSCULAS y sin
+ * sufijos societarios (C.A., S.A., C.N.A., S.R.L.). Con esto "Seguros
+ * Pirámide", "SEGUROS PIRAMIDE, C.A" y "Seguros Piramide CA" son el mismo.
+ */
+function insuranceKey(name: string): string {
+  return normKey(stripControl(name))
+    .replace(/[^A-Z0-9ÑÜ ]+/g, ' ')
+    .replace(/\b(C\s*N\s*A|C\s*A|S\s*A|S\s*R\s*L|R\s*L)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** True si el nombre tiene algún acento/diacrítico. */
@@ -88,12 +115,18 @@ const ST_REFERENCES: Array<{ table: string; owner: string; extra?: string }> = [
  *  2. Tipos de servicio: unión de todos los baremos agrupada por clave sin
  *     acentos. `particularPriceUsd` por defecto = MÁXIMO precio de seguro hallado
  *     (sólo se setea si está vacío, no pisa ediciones manuales).
- *  3. Seguros: crea/reactiva los seguros por nombre.
+ *  3. Seguros: crea/reactiva. El match es por identidad normalizada
+ *     (`insuranceKey`) + los `aliases` del baremo, así que un seguro ya
+ *     registrado con otra escritura ("Seguros Pirámide" vs "SEGUROS PIRAMIDE,
+ *     C.A") se reutiliza en vez de duplicarse, y su nombre no se toca.
  *  4. `insurance_service_prices`: precio USD por (seguro, tipo de servicio).
  *  5. Doctores + `doctor_service_prices` (baremo Particular).
  *
  * Idempotente: re-ejecutable. Match de tipos de servicio por clave normalizada
- * (sin acentos). Ejecutar con `npm run seed:baremos`.
+ * (sin acentos). Los precios son **insert-only**: sólo se dan de alta los pares
+ * que faltan; los ya registrados se dejan como están (no se pisan ediciones
+ * manuales ni se revierte un precio cambiado en la UI). Ejecutar con
+ * `npm run seed:baremos`.
  */
 @Injectable()
 export class BaremosSeedService {
@@ -275,19 +308,56 @@ export class BaremosSeedService {
     return new Map([...byKey].map(([k, st]) => [k, st.id] as const));
   }
 
-  /** Crea/reactiva los seguros por nombre. */
+  /**
+   * Crea/reactiva los seguros. El match con lo ya registrado es por identidad
+   * normalizada (`insuranceKey`: sin acentos, puntuación ni sufijos C.A./S.A.)
+   * más los `aliases` del baremo, de modo que "SEGUROS PIRAMIDE, C.A" y
+   * "Seguros Pirámide" son el mismo seguro y NO se duplica. Nunca renombra un
+   * seguro existente: manda el nombre que ya tiene el sistema.
+   */
   private async seedInsurances(): Promise<Map<string, string>> {
     const existing = await this.insRepo.find({ withDeleted: true });
-    const byName = new Map(
-      existing.map((i) => [i.name.toUpperCase(), i] as const),
+    const byKey = new Map<string, Insurance[]>();
+    for (const i of existing) {
+      const k = insuranceKey(i.name);
+      const g = byKey.get(k);
+      if (g) g.push(i);
+      else byKey.set(k, [i]);
+    }
+    // precios ya cargados por seguro: desempata cuál sobrevive si hay duplicados
+    const priceRows: Array<{ insuranceId: string; c: string }> =
+      await this.insRepo.manager.query(
+        'SELECT "insuranceId", COUNT(*) AS c FROM "insurance_service_prices" GROUP BY "insuranceId"',
+      );
+    const pricedCount = new Map(
+      priceRows.map((r) => [r.insuranceId, Number(r.c)] as const),
     );
 
     const result = new Map<string, string>();
     let created = 0;
     let reactivated = 0;
+    let matched = 0;
     for (const ins of BAREMO_INSURANCES) {
       const key = ins.name.toUpperCase();
-      let entity = byName.get(key);
+      const candidateKeys = [ins.name, ...(ins.aliases ?? [])].map(insuranceKey);
+      const matches = candidateKeys.flatMap((k) => byKey.get(k) ?? []);
+      const unique = [...new Map(matches.map((m) => [m.id, m])).values()];
+      if (unique.length > 1) {
+        this.logger.warn(
+          `"${ins.name}" coincide con ${unique.length} seguros ya registrados ` +
+            `(${unique.map((u) => u.name).join(' | ')}). Se usa el que tiene ` +
+            `precios/es más antiguo; unifica los duplicados a mano.`,
+        );
+      }
+      let entity = this.pickInsurance(unique, pricedCount);
+      if (entity) {
+        matched++;
+        if (entity.name !== ins.name) {
+          this.logger.log(
+            `Seguro "${ins.name}" ya existe como "${entity.name}": se respeta el nombre registrado.`,
+          );
+        }
+      }
       if (!entity) {
         entity = await this.insRepo.save(
           this.insRepo.create({
@@ -298,6 +368,7 @@ export class BaremosSeedService {
           }),
         );
         created++;
+        byKey.set(insuranceKey(entity.name), [entity]);
       } else {
         let touched = false;
         if (entity.deletedAt) {
@@ -317,18 +388,49 @@ export class BaremosSeedService {
       result.set(key, entity.id);
     }
     this.logger.log(
-      `Seguros: creados=${created} reactivados=${reactivated} total=${BAREMO_INSURANCES.length}`,
+      `Seguros: creados=${created} reutilizados=${matched} reactivados=${reactivated} total=${BAREMO_INSURANCES.length}`,
     );
     return result;
   }
 
-  /** Upsert de precios USD por (seguro, tipo de servicio). */
+  /**
+   * Ante varios seguros que colapsan a la misma identidad, gana el que ya tiene
+   * precios cargados; si empatan, el no borrado y luego el de id menor (estable).
+   */
+  private pickInsurance(
+    candidates: Insurance[],
+    priced: Map<string, number>,
+  ): Insurance | undefined {
+    if (candidates.length <= 1) return candidates[0];
+    return [...candidates].sort((a, b) => {
+      const aDel = a.deletedAt ? 1 : 0;
+      const bDel = b.deletedAt ? 1 : 0;
+      if (aDel !== bDel) return aDel - bDel;
+      const diff = (priced.get(b.id) ?? 0) - (priced.get(a.id) ?? 0);
+      if (diff !== 0) return diff;
+      return a.id < b.id ? -1 : 1;
+    })[0];
+  }
+
+  /**
+   * Alta de precios USD por (seguro, tipo de servicio). SÓLO inserta los que
+   * faltan: si el par ya está registrado se respeta el precio en base (puede
+   * venir de una edición manual), nunca se pisa.
+   *
+   * Varias filas de un mismo baremo pueden colapsar al mismo tipo de servicio
+   * (el seguro repite el estudio bajo códigos distintos, ej. Oceánica lista
+   * "ECOGRAFIA SUPRARRENAL" $40 y "ECOGRAFIA SUPRARENAL" $30). En ese caso
+   * gana el MAYOR: son tarifas aprobadas por el seguro y el precio es lo que
+   * AFMI cobra, así que quedarse con la menor sería regalar dinero. Se loguea
+   * cuántas filas se colapsaron.
+   */
   private async seedInsurancePrices(
     stIdByKey: Map<string, string>,
     insIdByKey: Map<string, string>,
   ): Promise<void> {
     let inserted = 0;
-    let updated = 0;
+    let skipped = 0;
+    let collapsed = 0;
     for (const ins of BAREMO_INSURANCES) {
       const insuranceId = insIdByKey.get(ins.name.toUpperCase());
       if (!insuranceId) continue;
@@ -336,40 +438,41 @@ export class BaremosSeedService {
       const existing = await this.ispRepo.find({ where: { insuranceId } });
       const byST = new Map(existing.map((p) => [p.serviceTypeId, p] as const));
 
-      const toInsert: InsuranceServicePrice[] = [];
-      const toUpdate: InsuranceServicePrice[] = [];
-      const seen = new Set<string>();
+      // serviceTypeId -> precio a registrar (máximo de las filas que colapsan)
+      const wanted = new Map<string, number>();
       for (const s of ins.services) {
         const cname = canonicalName(s.name);
         if (cname === null) continue;
         const serviceTypeId = stIdByKey.get(normKey(cname));
         if (!serviceTypeId) continue;
-        // dos variantes (acento/no) del mismo baremo colapsan al mismo ST: el
-        // primero gana, evita doble insert del par (insuranceId, serviceTypeId).
-        if (seen.has(serviceTypeId)) continue;
-        seen.add(serviceTypeId);
-        const price = s.priceUsd.toFixed(2);
-        const ex = byST.get(serviceTypeId);
-        if (!ex) {
-          toInsert.push(
-            this.ispRepo.create({
-              insuranceId,
-              serviceTypeId,
-              priceUsd: price,
-            }),
-          );
-        } else if (ex.priceUsd !== price) {
-          ex.priceUsd = price;
-          toUpdate.push(ex);
+        const prev = wanted.get(serviceTypeId);
+        if (prev === undefined) {
+          wanted.set(serviceTypeId, s.priceUsd);
+          continue;
         }
+        collapsed++;
+        if (s.priceUsd > prev) wanted.set(serviceTypeId, s.priceUsd);
+      }
+
+      const toInsert: InsuranceServicePrice[] = [];
+      for (const [serviceTypeId, priceUsd] of wanted) {
+        if (byST.has(serviceTypeId)) {
+          skipped++;
+          continue;
+        }
+        toInsert.push(
+          this.ispRepo.create({
+            insuranceId,
+            serviceTypeId,
+            priceUsd: priceUsd.toFixed(2),
+          }),
+        );
       }
       await this.chunkedSave(this.ispRepo, toInsert);
-      await this.chunkedSave(this.ispRepo, toUpdate);
       inserted += toInsert.length;
-      updated += toUpdate.length;
     }
     this.logger.log(
-      `Precios de seguro: insertados=${inserted} actualizados=${updated}`,
+      `Precios de seguro: insertados=${inserted} ya registrados (omitidos)=${skipped} filas colapsadas al mismo ST=${collapsed}`,
     );
   }
 
@@ -396,7 +499,7 @@ export class BaremosSeedService {
     let createdDoctors = 0;
     let createdServiceTypes = 0;
     let pricesInserted = 0;
-    let pricesUpdated = 0;
+    let pricesSkipped = 0;
     for (const d of BAREMO_DOCTORS) {
       const nameKey = `${d.firstName}|${d.lastName}`.toUpperCase();
       const specialty = specByKey.get(d.specialtyName.toUpperCase());
@@ -446,7 +549,7 @@ export class BaremosSeedService {
         createdServiceTypes++;
       }
 
-      const price = d.priceUsd.toFixed(2);
+      // precio ya registrado => se respeta (no se pisa una edición manual)
       const existing = await this.dspRepo.findOne({
         where: { doctorId: doctor.id, serviceTypeId },
       });
@@ -455,18 +558,16 @@ export class BaremosSeedService {
           this.dspRepo.create({
             doctorId: doctor.id,
             serviceTypeId,
-            priceUsd: price,
+            priceUsd: d.priceUsd.toFixed(2),
           }),
         );
         pricesInserted++;
-      } else if (existing.priceUsd !== price) {
-        existing.priceUsd = price;
-        await this.dspRepo.save(existing);
-        pricesUpdated++;
+      } else {
+        pricesSkipped++;
       }
     }
     this.logger.log(
-      `Doctores: creados=${createdDoctors}/${BAREMO_DOCTORS.length} especialidades=${specByKey.size} STs nuevos=${createdServiceTypes} | precios insertados=${pricesInserted} actualizados=${pricesUpdated}`,
+      `Doctores: creados=${createdDoctors}/${BAREMO_DOCTORS.length} especialidades=${specByKey.size} STs nuevos=${createdServiceTypes} | precios insertados=${pricesInserted} ya registrados (omitidos)=${pricesSkipped}`,
     );
   }
 
@@ -494,7 +595,7 @@ export class BaremosSeedService {
     let createdCenters = 0;
     let createdServiceTypes = 0;
     let pricesInserted = 0;
-    let pricesUpdated = 0;
+    let pricesSkipped = 0;
     let particularOverridden = 0;
     for (const c of BAREMO_CARE_CENTERS) {
       const specialty = specByKey.get(c.specialtyName.toUpperCase());
@@ -559,7 +660,6 @@ export class BaremosSeedService {
         existingPrices.map((p) => [p.serviceTypeId, p] as const),
       );
       const toInsert: CareCenterServicePrice[] = [];
-      const toUpdate: CareCenterServicePrice[] = [];
       const particularByStId = new Map<string, string>();
       const seen = new Set<string>();
       for (const s of c.services) {
@@ -587,25 +687,21 @@ export class BaremosSeedService {
         // dos variantes del baremo que colapsan al mismo ST: primera gana
         if (seen.has(serviceTypeId)) continue;
         seen.add(serviceTypeId);
-        const price = s.priceUsd.toFixed(2);
-        const ex = byST.get(serviceTypeId);
-        if (!ex) {
-          toInsert.push(
-            this.ccspRepo.create({
-              careCenterId: center.id,
-              serviceTypeId,
-              priceUsd: price,
-            }),
-          );
-        } else if (ex.priceUsd !== price) {
-          ex.priceUsd = price;
-          toUpdate.push(ex);
+        // precio ya registrado => se respeta (no se pisa una edicion manual)
+        if (byST.has(serviceTypeId)) {
+          pricesSkipped++;
+          continue;
         }
+        toInsert.push(
+          this.ccspRepo.create({
+            careCenterId: center.id,
+            serviceTypeId,
+            priceUsd: s.priceUsd.toFixed(2),
+          }),
+        );
       }
       await this.chunkedSave(this.ccspRepo, toInsert);
-      await this.chunkedSave(this.ccspRepo, toUpdate);
       pricesInserted += toInsert.length;
-      pricesUpdated += toUpdate.length;
 
       if (particularByStId.size > 0) {
         const sts = await this.stRepo.find({
@@ -623,7 +719,7 @@ export class BaremosSeedService {
       }
     }
     this.logger.log(
-      `Centros de atención: creados=${createdCenters}/${BAREMO_CARE_CENTERS.length} STs nuevos=${createdServiceTypes} | precios centro insertados=${pricesInserted} actualizados=${pricesUpdated} | particulares AFMI pisados=${particularOverridden}`,
+      `Centros de atención: creados=${createdCenters}/${BAREMO_CARE_CENTERS.length} STs nuevos=${createdServiceTypes} | precios centro insertados=${pricesInserted} ya registrados (omitidos)=${pricesSkipped} | particulares AFMI pisados=${particularOverridden}`,
     );
   }
 

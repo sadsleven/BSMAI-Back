@@ -410,6 +410,15 @@ const ordersPermissions: PermissionDefinition[] = [
     group: ORDERS_GROUP,
   },
   {
+    name: 'orders.custom-number',
+    resource: 'orders',
+    action: 'custom-number',
+    label: 'Número de orden manual (Paso 1)',
+    description:
+      'Permite asignar manualmente el número de una orden histórica (siempre menor al número inicial del sistema)',
+    group: ORDERS_GROUP,
+  },
+  {
     name: 'orders.set-provider-amount',
     resource: 'orders',
     action: 'set-provider-amount',
@@ -764,6 +773,7 @@ export const PERMISSIONS = {
     STAGE_REPORT: 'orders.stage-report',
     STAGE_BILLING: 'orders.stage-billing',
     EDIT_AMOUNT: 'orders.edit-amount',
+    CUSTOM_NUMBER: 'orders.custom-number',
     SET_PROVIDER_AMOUNT: 'orders.set-provider-amount',
   },
   ACCOUNTS_PAYABLE: {

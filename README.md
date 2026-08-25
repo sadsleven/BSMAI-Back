@@ -359,6 +359,8 @@ Subtabla `order_payments` con FK `orderId` (CASCADE) + `exchangeRateId?` (RESTRI
 
 **`orderNumber`** es número auto-incremental simple (string sólo dígitos) desde `nextval('orders_seq')`. Ya no usa el formato `ORD-YYYY-NNNNNN`. La env `ORDER_NUMBER_START` define desde qué número arranca la secuencia: `OrdersService.onModuleInit` lee la env y, si la próxima emisión está por debajo de `START`, hace `setval('orders_seq', START - 1, true)`. Idempotente — nunca retrocede.
 
+Las órdenes **históricas** (las que ya existían en papel y se registran ahora) se numeran a mano: el Paso 1 acepta `customOrderNumber` (entero ≥ 1, **menor** a `ORDER_NUMBER_START` y libre) con el permiso `orders.custom-number`. Ese rango el sistema nunca lo asigna solo, así que las dos numeraciones no chocan. Si la orden tiene varios proveedores, el número dado es el BASE y el resto toma los siguientes libres por debajo del piso. Mientras la orden siga en borrador se puede corregir con `PATCH /orders/:id` (renumera la orden completa). `GET /orders/config/number-start` devuelve el piso.
+
 **Filtrado por sucursal del usuario**: en `findAll`/`findOne`, si `user.isSuperAdmin === false`, se restringe a las sucursales asignadas al usuario. Super Admin ve todo.
 
 **Validaciones cruzadas** en `validateCoreReferences`:
