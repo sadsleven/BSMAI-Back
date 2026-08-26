@@ -2937,8 +2937,14 @@ export class OrdersService implements OnModuleInit {
     await this.logChange(null, id, user.id, 'soft_delete');
   }
 
-  /** Lanza si la orden participa en un lote de cuentas por pagar/cobrar. */
-  private async assertNotInBatch(orderId: string): Promise<void> {
+  /**
+   * Lanza si la orden participa en un lote de cuentas por pagar/cobrar.
+   * `action` es el verbo que se muestra en el mensaje ("eliminar", "cancelar").
+   */
+  private async assertNotInBatch(
+    orderId: string,
+    action = 'eliminar',
+  ): Promise<void> {
     const inPayable = await this.dataSource.query<{ c: string }[]>(
       `SELECT count(*)::int AS c
        FROM "accounts_payable_orders" apo
@@ -2955,7 +2961,7 @@ export class OrdersService implements OnModuleInit {
       Number(inReceivable[0]?.c ?? 0) > 0
     ) {
       throw new BadRequestException(
-        'La orden está incluida en un lote de cuentas por pagar/cobrar. Anulá el lote antes de eliminar la orden.',
+        `La orden está incluida en un lote de cuentas por pagar/cobrar. Anula el lote antes de ${action} la orden.`,
       );
     }
   }
@@ -2998,9 +3004,12 @@ export class OrdersService implements OnModuleInit {
    * flujo (no se puede editar, atender, informar ni facturar). Es la
    * alternativa al borrado para no abrir huecos en la numeración.
    *
-   * No se permite cancelar una orden `finalized`: ya tiene factura emitida y
-   * alimenta cuentas por cobrar/pagar. Guarda el estado previo para poder
-   * revertir con {@link uncancel}.
+   * Aplica a CUALQUIER estado, `finalized` incluido (una orden ya facturada
+   * también se puede anular). Al cancelarla desaparece de pendientes y reportes
+   * (todos filtran `status='finalized'`). Lo único que sigue bloqueado es una
+   * orden ya metida en un lote de cuentas por pagar/cobrar: hay que anular el
+   * lote primero para no dejar el lote apuntando a una orden fuera de circuito.
+   * Guarda el estado previo para poder revertir con {@link uncancel}.
    */
   async cancel(
     id: string,
@@ -3011,12 +3020,7 @@ export class OrdersService implements OnModuleInit {
     if (order.status === 'cancelled') {
       throw new BadRequestException('La orden ya está cancelada');
     }
-    if (order.status === 'finalized') {
-      throw new BadRequestException(
-        'La orden ya está finalizada (factura emitida). No se puede cancelar.',
-      );
-    }
-    await this.assertNotInBatch(id);
+    await this.assertNotInBatch(id, 'cancelar');
     const reason = dto.reason.trim();
     await this.repo.update(
       { id: order.id },
