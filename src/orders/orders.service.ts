@@ -32,6 +32,7 @@ import {
   BillingOrderDto,
   BillingProviderDto,
   CancelOrderDto,
+  ChangeOrderNumberDto,
   ReportOrderDto,
 } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
@@ -2984,6 +2985,35 @@ export class OrdersService implements OnModuleInit {
     if (!order.deletedAt) return this.findOne(id, user);
     await this.repo.update({ id }, { deletedAt: null });
     await this.logChange(null, id, user.id, 'restore');
+    return this.findOne(id, user);
+  }
+
+  /**
+   * Cambia el N° de orden de una orden YA CREADA (Paso 1), en cualquier estado
+   * del flujo: el número pasa a ser el BASE y los proveedores toman el bloque
+   * consecutivo `[number, number + K - 1]` (`renumberOrder`), que debe estar
+   * libre. No aplica a órdenes canceladas (el flujo está congelado) y respeta
+   * el candado del Paso 1 (sólo el creador o Super Admin).
+   *
+   * Los lotes de cuentas por pagar/cobrar referencian la orden por id, no por
+   * número, así que renumerar no los rompe: sólo cambia lo que muestran.
+   */
+  async changeNumber(
+    id: string,
+    dto: ChangeOrderNumberDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    this.assertNotCancelled(order);
+    this.assertStep1Editable(order, user);
+    const base = this.assertOrderNumberRange(dto.number);
+    if (String(base) === order.orderNumber) return order;
+    await this.dataSource.transaction(async (mgr) => {
+      await this.renumberOrder(mgr, order.id, base);
+    });
+    await this.logChange(null, order.id, user.id, 'update', {
+      orderNumber: { from: order.orderNumber, to: String(base) },
+    });
     return this.findOne(id, user);
   }
 

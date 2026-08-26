@@ -22,6 +22,7 @@ import {
   AuthorizeOrderAmountDto,
   BillingOrderDto,
   CancelOrderDto,
+  ChangeOrderNumberDto,
   ReportOrderDto,
 } from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -132,6 +133,21 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.restore(id, user);
+  }
+
+  /**
+   * Cambia el N° de orden de una orden ya creada (Paso 1). Renumera la orden
+   * completa (base + una orden interna por proveedor) al bloque consecutivo que
+   * arranca en el número dado.
+   */
+  @RequirePermissions(PERMISSIONS.ORDERS.CUSTOM_NUMBER)
+  @Patch(':id/number')
+  changeNumber(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ChangeOrderNumberDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.changeNumber(id, dto, user);
   }
 
   /**

@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsInt,
   IsISO8601,
   IsNotEmpty,
   IsNumber,
@@ -12,7 +13,9 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateIf,
   ValidateNested,
@@ -31,6 +34,17 @@ export class CancelOrderDto {
   @MinLength(3, { message: 'El motivo debe tener al menos 3 caracteres' })
   @MaxLength(500)
   reason: string;
+}
+
+/**
+ * Cambio del N° de orden después de creada (Paso 1). Renumera la orden completa:
+ * el número pasa a ser el BASE y los proveedores toman el bloque consecutivo.
+ */
+export class ChangeOrderNumberDto {
+  @IsInt({ message: 'El número de orden debe ser un entero' })
+  @Min(1, { message: 'El número de orden debe ser mayor o igual a 1' })
+  @Max(999999999, { message: 'El número de orden no puede superar 999999999' })
+  number: number;
 }
 
 /** Paso 2 — Atención del paciente. */
