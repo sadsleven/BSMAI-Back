@@ -13,6 +13,7 @@ import {
   IsString,
   IsUUID,
   Min,
+  Max,
   MaxLength,
   ValidateIf,
   ValidateNested,
@@ -75,14 +76,17 @@ export class CreateOrderDto {
   specialtyId: string;
 
   /**
-   * Número de orden manual (órdenes históricas que se registran ahora). Debe ser
-   * un entero ≥ 1 y **menor** a `ORDER_NUMBER_START`: ese rango nunca lo asigna
-   * el sistema, así que es el pool reservado para lo viejo. Requiere el permiso
-   * `orders.custom-number`. Sin este campo, la numeración es automática.
+   * Número de orden elegido en el Paso 1. Cualquier entero ≥ 1 que esté LIBRE:
+   * el formulario propone por defecto el mayor en uso + 1, y con varios
+   * proveedores la orden ocupa el bloque consecutivo
+   * `[customOrderNumber, customOrderNumber + proveedores - 1]` (un número por
+   * orden interna del Paso 2). Requiere el permiso `orders.custom-number`; sin
+   * este campo la numeración es automática.
    */
   @IsOptional()
   @IsInt({ message: 'El número de orden debe ser un entero' })
   @Min(1, { message: 'El número de orden debe ser mayor o igual a 1' })
+  @Max(999999999, { message: 'El número de orden no puede superar 999999999' })
   customOrderNumber?: number;
 
   /**

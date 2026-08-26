@@ -31,6 +31,7 @@ import {
   AuthorizeOrderAmountDto,
   BillingOrderDto,
   BillingProviderDto,
+  CancelOrderDto,
   ReportOrderDto,
 } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
@@ -73,6 +74,21 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 void ALLOWED_TRANSITIONS;
 
 type ProviderKey = `doctor:${string}` | `care_center:${string}`;
+
+/**
+ * Tope defensivo del número de orden elegido en el Paso 1. El campo acepta
+ * cualquier entero libre; este techo sólo evita valores absurdos (la columna es
+ * varchar y los números se comparan como bigint).
+ */
+const MAX_ORDER_NUMBER = 999_999_999;
+
+/**
+ * Banda de números TEMPORALES usada al renumerar una orden (ver
+ * `OrdersService.renumberOrder`). Está por encima de {@link MAX_ORDER_NUMBER}
+ * (ningún número real puede caer ahí) y por debajo de 2^31 para no romper el
+ * índice de `order_internal_orders."internalNumber"` que castea a entero.
+ */
+const RENUMBER_TEMP_BASE = 1_500_000_000;
 
 /** Etiquetas ES de tipos de pago para el historial de cambios. Espejo del FE. */
 const PAYMENT_TYPE_LABEL_ES: Record<string, string> = {
@@ -442,16 +458,18 @@ export class OrdersService implements OnModuleInit {
    * proveedor distinto de una orden consume uno; el primero es además el número
    * BASE de la orden (`orders.orderNumber`).
    *
-   * Política del rango automático (≥ `ORDER_NUMBER_START`): **los números NO se
-   * reutilizan**. La numeración continúa siempre desde el último emitido, así
-   * que borrar permanentemente una orden (o quitar un proveedor de un borrador)
-   * deja un hueco que nunca se rellena. La marca de agua vive en `orders_seq` y
-   * sólo avanza, por eso el hueco sobrevive aun si lo borrado era el número más
-   * alto.
+   * Tres modos:
+   *  - `base` (número elegido a mano en el Paso 1): bloque CONSECUTIVO
+   *    `[base, base + n - 1]`. Los `n` números deben estar libres; si alguno
+   *    está en uso se rechaza diciendo cuáles (nunca se reasigna en silencio).
+   *  - `from` (proveedor agregado a una orden ya numerada): los `n` menores
+   *    números LIBRES ≥ `from`, para que las órdenes internas de una misma
+   *    orden queden contiguas y se rellenen sus propios huecos.
+   *  - sin opciones (numeración automática): `n` consecutivos desde la marca de
+   *    agua (`orders_seq`), que sólo avanza — esos números no se reutilizan.
    *
-   * Con `maxExclusive` (rango histórico, < `ORDER_NUMBER_START`) sí se buscan
-   * huecos: ese rango lo llenan a mano las órdenes viejas que se registran
-   * ahora, y se cargan en desorden.
+   * `excludeOrderId` ignora los números que ya tiene la propia orden (usado al
+   * renumerar).
    *
    * Concurrencia: lock de aplicación por transacción (`pg_advisory_xact_lock`)
    * serializa la asignación; además `internalNumber`/`orderNumber` son UNIQUE.
@@ -459,49 +477,147 @@ export class OrdersService implements OnModuleInit {
   private async drawOrderNumbers(
     mgr: EntityManager,
     n: number,
-    opts?: { from?: number; maxExclusive?: number },
+    opts?: { base?: number; from?: number; excludeOrderId?: string },
   ): Promise<string[]> {
     if (n <= 0) return [];
     // Serializa la asignación entre transacciones concurrentes.
     await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
-    if (opts?.maxExclusive != null) {
-      return this.drawLegacyOrderNumbers(
-        mgr,
-        n,
-        opts.from ?? 1,
-        opts.maxExclusive,
-      );
+    if (opts?.base != null) {
+      return this.drawBlockFrom(mgr, opts.base, n, opts.excludeOrderId);
+    }
+    if (opts?.from != null) {
+      return this.drawFirstFreeFrom(mgr, opts.from, n, opts.excludeOrderId);
     }
     return this.drawAutoOrderNumbers(mgr, n);
   }
 
   /**
+   * Números del bloque `[base, base + n - 1]` que ya están en uso, sea como
+   * número base de una orden o como orden interna. Cuenta también las órdenes en
+   * papelera (conservan su número porque son restaurables).
+   */
+  private async takenInBlock(
+    mgr: EntityManager,
+    base: number,
+    n: number,
+    excludeOrderId?: string,
+  ): Promise<number[]> {
+    const rows = await mgr.query<{ n: string }[]>(
+      `WITH block AS (
+         SELECT generate_series($1::bigint, $1::bigint + $2::bigint - 1) AS n
+       )
+       SELECT b.n::text AS n
+         FROM block b
+        WHERE EXISTS (
+                SELECT 1 FROM "order_internal_orders" iio
+                 WHERE iio."internalNumber" = b.n::text
+                   AND ($3::uuid IS NULL OR iio."orderId" <> $3::uuid)
+              )
+           OR EXISTS (
+                SELECT 1 FROM "orders" o
+                 WHERE o."orderNumber" = b.n::text
+                   AND ($3::uuid IS NULL OR o.id <> $3::uuid)
+              )
+        ORDER BY b.n`,
+      [String(base), String(n), excludeOrderId ?? null],
+    );
+    return rows.map((r) => Number(r.n));
+  }
+
+  /**
+   * Bloque consecutivo desde un número elegido a mano. Todos los números del
+   * bloque deben estar libres: una orden con K proveedores ocupa
+   * `[base, base + K - 1]`. Sube la marca de agua para que la numeración
+   * automática no vuelva a entregar esos números.
+   */
+  private async drawBlockFrom(
+    mgr: EntityManager,
+    base: number,
+    n: number,
+    excludeOrderId?: string,
+  ): Promise<string[]> {
+    const start = this.assertOrderNumberRange(base);
+    const taken = await this.takenInBlock(mgr, start, n, excludeOrderId);
+    if (taken.length) {
+      throw new BadRequestException(
+        n === 1
+          ? `El número de orden ${taken[0]} ya está en uso`
+          : `La orden necesita ${n} números consecutivos desde ${start} (uno por proveedor) y ya están en uso: ${taken.join(', ')}`,
+      );
+    }
+    await this.advanceSequenceTo(mgr, start + n - 1);
+    return Array.from({ length: n }, (_, i) => String(start + i));
+  }
+
+  /**
+   * Los `n` menores números LIBRES ≥ `from` (rellena huecos). Lo usa el
+   * proveedor que se agrega a una orden ya numerada, para que sus órdenes
+   * internas queden lo más contiguas posible al número base.
+   */
+  private async drawFirstFreeFrom(
+    mgr: EntityManager,
+    from: number,
+    n: number,
+    excludeOrderId?: string,
+  ): Promise<string[]> {
+    const start = this.assertOrderNumberRange(from);
+    const rows = await mgr.query<{ n: string }[]>(
+      `WITH taken AS (
+         SELECT "internalNumber"::bigint AS n
+           FROM "order_internal_orders"
+          WHERE "internalNumber" ~ '^[0-9]+$'
+            AND "internalNumber"::bigint >= $1::bigint
+            AND ($3::uuid IS NULL OR "orderId" <> $3::uuid)
+         UNION
+         SELECT "orderNumber"::bigint
+           FROM "orders"
+          WHERE "orderNumber" ~ '^[0-9]+$'
+            AND "orderNumber"::bigint >= $1::bigint
+            AND ($3::uuid IS NULL OR id <> $3::uuid)
+       ),
+       hi AS (SELECT COALESCE(MAX(n), $1::bigint - 1) AS v FROM taken)
+       SELECT g AS n
+         FROM generate_series($1::bigint, (SELECT v FROM hi) + $2::bigint) AS g
+        WHERE NOT EXISTS (SELECT 1 FROM taken t WHERE t.n = g)
+        ORDER BY g
+        LIMIT $2`,
+      [String(start), String(n), excludeOrderId ?? null],
+    );
+    if (rows.length < n) {
+      throw new BadRequestException(
+        `No hay suficientes números libres desde ${start} para todos los proveedores de la orden`,
+      );
+    }
+    const numbers = rows.map((r) => Number(r.n));
+    await this.advanceSequenceTo(mgr, Math.max(...numbers));
+    return numbers.map((v) => String(v));
+  }
+
+  /** Sube la marca de agua de `orders_seq` hasta `value`. Nunca la baja. */
+  private async advanceSequenceTo(
+    mgr: EntityManager,
+    value: number,
+  ): Promise<void> {
+    await mgr.query(
+      `SELECT setval('orders_seq', GREATEST(
+         (SELECT CASE WHEN is_called THEN last_value ELSE last_value - 1 END
+            FROM orders_seq),
+         $1::bigint
+       ), true)`,
+      [String(Math.max(1, Math.trunc(value)))],
+    );
+  }
+
+  /**
    * Rango automático: `n` números CONSECUTIVOS desde la marca de agua. Nunca
-   * mira los huecos. El arranque es el mayor entre lo que entregaría
-   * `orders_seq`, el mayor número en uso + 1 y el piso del env (cubre secuencias
-   * que quedaron atrás o restauraciones de BD). El `setval` final deja la marca
-   * en el último entregado: sólo avanza, nunca retrocede al borrar.
+   * mira los huecos. El `setval` final deja la marca en el último entregado:
+   * sólo avanza, nunca retrocede al borrar.
    */
   private async drawAutoOrderNumbers(
     mgr: EntityManager,
     n: number,
   ): Promise<string[]> {
-    const rows = await mgr.query<{ next: string }[]>(
-      `SELECT GREATEST(
-         (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END
-            FROM orders_seq),
-         (SELECT COALESCE(MAX("internalNumber"::bigint), 0) + 1
-            FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
-         (SELECT COALESCE(MAX("orderNumber"::bigint), 0) + 1
-            FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
-         $1::bigint
-       )::text AS next`,
-      [this.orderNumberFloor()],
-    );
-    const start = Number(rows[0]?.next);
-    if (!Number.isFinite(start)) {
-      throw new BadRequestException('No se pudieron asignar números de orden');
-    }
+    const start = await this.nextAutoNumber(mgr);
     // `setval` no es transaccional: si la creación falla después, el número
     // queda quemado (hueco) en vez de reasignarse a otra orden.
     await mgr.query(`SELECT setval('orders_seq', $1::bigint, true)`, [
@@ -511,166 +627,188 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Rango histórico (`[from, maxExclusive)`, siempre por debajo de
-   * `ORDER_NUMBER_START`): los `n` menores números LIBRES. Aquí sí se rellenan
-   * huecos — libre = no usado por ninguna orden interna ni como número base de
-   * una orden, incluidas las órdenes en papelera (conservan su número porque son
-   * restaurables).
+   * Próximo número que entregaría la numeración automática = "el mayor + 1":
+   * mayor entre la marca de agua de `orders_seq`, el mayor número en uso + 1 y
+   * el piso del env (cubre secuencias atrasadas o restauraciones de BD). Es el
+   * valor que el Paso 1 propone por defecto.
    */
-  private async drawLegacyOrderNumbers(
-    mgr: EntityManager,
-    n: number,
-    from: number,
-    maxExclusive: number,
-  ): Promise<string[]> {
-    const rows = await mgr.query<{ n: string }[]>(
-      `WITH taken AS (
-         SELECT "internalNumber"::bigint AS n
-           FROM "order_internal_orders"
-          WHERE "internalNumber" ~ '^[0-9]+$'
-         UNION
-         SELECT "orderNumber"::bigint
-           FROM "orders"
-          WHERE "orderNumber" ~ '^[0-9]+$'
-       ),
-       hi AS (
-         SELECT COALESCE(MAX(n), $1::bigint - 1) AS v
-           FROM taken
-          WHERE n >= $1::bigint AND n < $3::bigint
-       )
-       SELECT g AS n
-         FROM generate_series(
-                $1::bigint,
-                LEAST((SELECT v FROM hi) + $2::bigint, $3::bigint - 1)) AS g
-        WHERE NOT EXISTS (SELECT 1 FROM taken t WHERE t.n = g)
-        ORDER BY g
-        LIMIT $2`,
-      [from, n, maxExclusive],
+  private async nextAutoNumber(mgr?: EntityManager): Promise<number> {
+    const runner = mgr ?? this.dataSource.manager;
+    const rows = await runner.query<{ next: string }[]>(
+      `SELECT GREATEST(
+         (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END
+            FROM orders_seq),
+         (SELECT COALESCE(MAX("internalNumber"::bigint), 0) + 1
+            FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
+         (SELECT COALESCE(MAX("orderNumber"::bigint), 0) + 1
+            FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
+         $1::bigint
+       )::text AS next`,
+      [String(this.orderNumberFloor())],
     );
-    if (rows.length < n) {
-      throw new BadRequestException(
-        `No hay suficientes números libres por debajo de ${maxExclusive} para todos los proveedores de la orden`,
-      );
+    const next = Number(rows[0]?.next);
+    if (!Number.isFinite(next)) {
+      throw new BadRequestException('No se pudieron asignar números de orden');
     }
-    return rows.map((r) => String(r.n));
+    return next;
   }
 
   /**
-   * Rango válido de un número manual (sin tocar la BD): entero ≥ 1 y menor a
-   * `ORDER_NUMBER_START`. Se chequea antes de abrir la transacción para dar el
-   * error exacto y no arrastrar un valor imposible al reparto de números.
+   * Rango válido de un número de orden (sin tocar la BD): entero entre 1 y
+   * `MAX_ORDER_NUMBER`. Ya no hay tope por `ORDER_NUMBER_START`: el Paso 1 puede
+   * fijar cualquier número libre (el env es sólo el piso de la numeración
+   * automática). Se chequea antes de abrir la transacción para dar el error
+   * exacto y no arrastrar un valor imposible al reparto de números.
    */
-  private assertCustomNumberRange(value: number): number {
+  private assertOrderNumberRange(value: number): number {
     const n = Math.trunc(value);
     if (!Number.isFinite(n) || n < 1) {
       throw new BadRequestException(
         'El número de orden debe ser mayor o igual a 1',
       );
     }
-    const floor = this.orderNumberFloor();
-    if (floor <= 1) {
+    if (n > MAX_ORDER_NUMBER) {
       throw new BadRequestException(
-        'La numeración manual no está disponible: el número inicial del sistema es 1, no queda rango histórico libre',
-      );
-    }
-    if (n >= floor) {
-      throw new BadRequestException(
-        `El número manual debe ser menor a ${floor}: desde ese número la numeración la asigna el sistema`,
+        `El número de orden no puede superar ${MAX_ORDER_NUMBER}`,
       );
     }
     return n;
   }
 
   /**
-   * Valida un número de orden MANUAL (órdenes viejas que se registran ahora).
-   * Debe ser entero ≥ 1, estrictamente menor a `ORDER_NUMBER_START` — ese rango
-   * el sistema nunca lo asigna, así que queda reservado para lo histórico — y
-   * estar libre (ninguna orden ni orden interna lo usa, incluidas las que están
-   * en papelera). `excludeOrderId` ignora los números de la propia orden cuando
-   * se renumera un borrador. Devuelve el número normalizado.
+   * Disponibilidad de un número de orden para el Paso 1. `count` = cantidad de
+   * proveedores distintos de la orden: cada uno consume un número consecutivo
+   * (las órdenes internas del Paso 2), así que se consulta el BLOQUE completo.
+   *
+   *  - `suggestion`: número por defecto = el mayor en uso + 1.
+   *  - `taken`: números del bloque que ya están ocupados.
+   *  - `nextFree`: primer número ≥ el pedido cuyo bloque completo está libre
+   *    (cae en `suggestion` si no hay hueco cerca).
+   *
+   * `orderId` excluye los números que ya tiene esa orden (renumerar un borrador).
    */
-  private async assertCustomOrderNumber(
-    mgr: EntityManager,
-    value: number,
-    excludeOrderId?: string,
+  async numberAvailability(opts: {
+    number?: number;
+    count?: number;
+    orderId?: string;
+  }): Promise<{
+    count: number;
+    suggestion: number;
+    number: number | null;
+    available: boolean | null;
+    taken: number[];
+    nextFree: number;
+  }> {
+    const count = Math.min(Math.max(Math.trunc(opts.count ?? 1) || 1, 1), 50);
+    const suggestion = await this.nextAutoNumber();
+    if (opts.number == null) {
+      return {
+        count,
+        suggestion,
+        number: null,
+        available: null,
+        taken: [],
+        nextFree: suggestion,
+      };
+    }
+    const number = this.assertOrderNumberRange(opts.number);
+    const taken = await this.takenInBlock(
+      this.dataSource.manager,
+      number,
+      count,
+      opts.orderId,
+    );
+    const available = taken.length === 0;
+    return {
+      count,
+      suggestion,
+      number,
+      available,
+      taken,
+      nextFree: available
+        ? number
+        : await this.firstFreeBlock(number, count, opts.orderId, suggestion),
+    };
+  }
+
+  /**
+   * Primer número ≥ `from` cuyo bloque de `count` números consecutivos está
+   * completamente libre, buscando en una ventana acotada. Sin hueco en la
+   * ventana devuelve `fallback` (el número automático).
+   */
+  private async firstFreeBlock(
+    from: number,
+    count: number,
+    excludeOrderId: string | undefined,
+    fallback: number,
   ): Promise<number> {
-    const n = this.assertCustomNumberRange(value);
-    await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
-    const rows = await mgr.query<{ taken: number }[]>(
-      `SELECT 1 AS taken
-         FROM "order_internal_orders"
-        WHERE "internalNumber" = $1
-          AND ($2::uuid IS NULL OR "orderId" <> $2::uuid)
-       UNION ALL
-       SELECT 1
-         FROM "orders"
-        WHERE "orderNumber" = $1
-          AND ($2::uuid IS NULL OR id <> $2::uuid)
-        LIMIT 1`,
-      [String(n), excludeOrderId ?? null],
+    const WINDOW = 5000;
+    const rows = await this.dataSource.query<{ n: string }[]>(
+      `SELECT n FROM (
+         SELECT "internalNumber"::bigint AS n
+           FROM "order_internal_orders"
+          WHERE "internalNumber" ~ '^[0-9]+$'
+            AND ($3::uuid IS NULL OR "orderId" <> $3::uuid)
+         UNION
+         SELECT "orderNumber"::bigint
+           FROM "orders"
+          WHERE "orderNumber" ~ '^[0-9]+$'
+            AND ($3::uuid IS NULL OR id <> $3::uuid)
+       ) t
+        WHERE n >= $1::bigint AND n < $1::bigint + $2::bigint`,
+      [String(from), String(WINDOW), excludeOrderId ?? null],
     );
-    if (rows.length) {
-      throw new BadRequestException(`El número de orden ${n} ya está en uso`);
+    const taken = new Set(rows.map((r) => Number(r.n)));
+    for (let base = from; base + count - 1 < from + WINDOW; base += 1) {
+      let free = true;
+      for (let i = 0; i < count; i += 1) {
+        if (taken.has(base + i)) {
+          free = false;
+          break;
+        }
+      }
+      if (free) return base;
     }
-    return n;
+    return fallback;
   }
 
   /**
-   * Numeración manual: el número dado es el BASE (proveedor 1) y el resto de
-   * proveedores toma los siguientes números libres del MISMO rango histórico
-   * (< `ORDER_NUMBER_START`), para que la orden vieja no mezcle numeraciones.
-   */
-  private async drawCustomOrderNumbers(
-    mgr: EntityManager,
-    custom: number,
-    n: number,
-    excludeOrderId?: string,
-  ): Promise<string[]> {
-    const base = await this.assertCustomOrderNumber(
-      mgr,
-      custom,
-      excludeOrderId,
-    );
-    const rest = await this.drawOrderNumbers(mgr, Math.max(0, n - 1), {
-      from: base + 1,
-      maxExclusive: this.orderNumberFloor(),
-    });
-    return [String(base), ...rest];
-  }
-
-  /**
-   * Renumera por completo una orden en borrador con numeración manual: el
-   * número dado pasa a ser el BASE y los demás proveedores toman los siguientes
-   * libres del rango histórico. Primero libera los números actuales de la orden
-   * poniendo valores temporales NO numéricos (el pool sólo mira números), para
-   * que reasignar un número entre proveedores de la misma orden no choque con
-   * el UNIQUE de `internalNumber`.
+   * Renumera por completo una orden en borrador: el número dado pasa a ser el
+   * BASE y los proveedores toman el bloque consecutivo que arranca ahí.
+   *
+   * Primero aparca los números actuales de la orden en la banda temporal
+   * ({@link RENUMBER_TEMP_BASE}), para que reasignar un número entre proveedores
+   * de la misma orden no choque con el UNIQUE de `internalNumber`. Los temporales
+   * son NUMÉRICOS a propósito: `order_internal_orders."internalNumber"` tiene un
+   * índice por expresión que castea el valor, así que un texto no numérico
+   * revienta el UPDATE. El lock se toma ANTES de escribirlos para que dos
+   * renumeraciones concurrentes no peleen por la misma banda.
    */
   private async renumberOrder(
     mgr: EntityManager,
     orderId: string,
-    custom: number,
+    base: number,
   ): Promise<void> {
+    await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
     const rows = await mgr.query<Array<{ id: string }>>(
       `SELECT id FROM "order_internal_orders"
         WHERE "orderId" = $1 ORDER BY "sequencePosition"`,
       [orderId],
     );
-    const temp = `'t' || left(replace(id::text, '-', ''), 12)`;
-    await mgr.query(
-      `UPDATE "order_internal_orders" SET "internalNumber" = ${temp} WHERE "orderId" = $1`,
-      [orderId],
-    );
-    await mgr.query(
-      `UPDATE "orders" SET "orderNumber" = ${temp} WHERE id = $1`,
-      [orderId],
-    );
-    const numbers = await this.drawCustomOrderNumbers(
-      mgr,
-      custom,
-      Math.max(1, rows.length),
+    for (let i = 0; i < rows.length; i += 1) {
+      await mgr.query(
+        `UPDATE "order_internal_orders" SET "internalNumber" = $1 WHERE id = $2`,
+        [String(RENUMBER_TEMP_BASE + i), rows[i].id],
+      );
+    }
+    await mgr.query(`UPDATE "orders" SET "orderNumber" = $1 WHERE id = $2`, [
+      String(RENUMBER_TEMP_BASE + rows.length),
       orderId,
-    );
+    ]);
+    const numbers = await this.drawOrderNumbers(mgr, Math.max(1, rows.length), {
+      base,
+      excludeOrderId: orderId,
+    });
     for (let i = 0; i < rows.length; i += 1) {
       await mgr.query(
         `UPDATE "order_internal_orders" SET "internalNumber" = $1 WHERE id = $2`,
@@ -707,6 +845,7 @@ export class OrdersService implements OnModuleInit {
       createdBy: true,
       amountAuthorizedBy: true,
       priceAdjustedBy: true,
+      cancelledBy: true,
       payments: { exchangeRate: true },
       billingExchangeRate: true,
       fixedExchangeRate: true,
@@ -1177,6 +1316,10 @@ export class OrdersService implements OnModuleInit {
       amountValue: p.amountValue.toFixed(2),
       amountInUsd: '0',
     };
+    // Tasa USD/Bs de referencia para convertir. La tasa elegida en el propio
+    // pago (Bs) manda sobre la de facturación: el pago pudo hacerse otro día,
+    // a otra tasa.
+    let usdCtxId = usdExchangeRateId ?? null;
 
     const needsPaymentAccount =
       p.type === 'mobile_payment' ||
@@ -1229,6 +1372,7 @@ export class OrdersService implements OnModuleInit {
       if (rate.currency !== 'USD')
         throw new BadRequestException('Pago en BS requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+      usdCtxId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
       if (!p.exchangeRateId)
         throw new BadRequestException('exchangeRateId requerido');
@@ -1241,6 +1385,7 @@ export class OrdersService implements OnModuleInit {
       if (rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+      usdCtxId = p.exchangeRateId;
     } else if (p.type === 'bank_transfer_usd') {
       if (!p.referenceNumber)
         throw new BadRequestException('referenceNumber requerido');
@@ -1285,6 +1430,7 @@ export class OrdersService implements OnModuleInit {
         if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
           throw new BadRequestException('other en EUR requiere tasa EUR/Bs');
         out.exchangeRateId = p.exchangeRateId;
+        if (p.amountCurrency === 'BS') usdCtxId = p.exchangeRateId;
       }
     }
 
@@ -1295,7 +1441,7 @@ export class OrdersService implements OnModuleInit {
         exchangeRateId: p.exchangeRateId ?? null,
       },
       this.ratesRepo,
-      { usdExchangeRateId: usdExchangeRateId ?? null },
+      { usdExchangeRateId: usdCtxId },
     );
     out.amountInUsd = usdAmount.toFixed(2);
     return out;
@@ -1314,7 +1460,11 @@ export class OrdersService implements OnModuleInit {
           exchangeRateId: p.exchangeRateId ?? null,
         },
         this.ratesRepo,
-        { usdExchangeRateId: null },
+        {
+          // Bs: la tasa elegida en el pago es la USD/Bs con la que se cuadra.
+          usdExchangeRateId:
+            p.amountCurrency === 'BS' ? p.exchangeRateId ?? null : null,
+        },
       );
     }
     return Math.round(total * 100) / 100;
@@ -1410,17 +1560,18 @@ export class OrdersService implements OnModuleInit {
   async create(dto: CreateOrderDto, user: AuthenticatedUser): Promise<Order> {
     await this.validateCoreReferences(dto, user);
 
-    // Número manual (orden vieja que se registra ahora): permiso dedicado.
+    // Número de orden elegido en el Paso 1 (por defecto el FE propone el mayor
+    // + 1). Cualquier entero libre es válido, pero fijarlo requiere permiso.
     if (
       dto.customOrderNumber != null &&
       !this.userHasPermission(user, PERMISSIONS.ORDERS.CUSTOM_NUMBER)
     ) {
       throw new ForbiddenException(
-        'No tienes permiso para asignar el número de orden manualmente',
+        'No tienes permiso para asignar el número de orden',
       );
     }
     if (dto.customOrderNumber != null) {
-      this.assertCustomNumberRange(dto.customOrderNumber);
+      this.assertOrderNumberRange(dto.customOrderNumber);
     }
 
     // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado" ⇒ fija en Bs a la tasa de la orden).
@@ -1486,11 +1637,9 @@ export class OrdersService implements OnModuleInit {
       const distinct = this.distinctProvidersFromRows(dto.serviceTypes);
       const numbers =
         dto.customOrderNumber != null
-          ? await this.drawCustomOrderNumbers(
-              mgr,
-              dto.customOrderNumber,
-              distinct.length,
-            )
+          ? await this.drawOrderNumbers(mgr, distinct.length, {
+              base: dto.customOrderNumber,
+            })
           : await this.drawOrderNumbers(mgr, distinct.length);
       const orderNumber = numbers[0];
       const entity = mgr.create(Order, {
@@ -1674,9 +1823,9 @@ export class OrdersService implements OnModuleInit {
    *    se renumera).
    *  - Quitado (proveedor ya no está): se BORRA su fila → su número queda como
    *    hueco definitivo (no se reutiliza).
-   *  - Nuevo: toma el siguiente número de la marca de agua (`drawOrderNumbers`)
-   *    y crea su fila (posición al final). En una orden histórica sí se rellenan
-   *    huecos, pero sólo dentro del rango viejo (`legacyBase`).
+   *  - Nuevo: toma el primer número LIBRE después del base de la orden
+   *    (`contiguousBase`) para quedar contiguo a sus hermanas, o el siguiente de
+   *    la marca de agua si la orden no tiene base numérico.
    *
    * `orders.orderNumber` (base) NO se toca aquí: queda congelado aun si el
    * proveedor de la posición 1 se quita (política FREEZE).
@@ -1689,7 +1838,7 @@ export class OrdersService implements OnModuleInit {
       providerId: string;
       key: ProviderKey;
     }>,
-    legacyBase: number | null = null,
+    contiguousBase: number | null = null,
   ): Promise<Map<ProviderKey, { id: string; internalNumber: string }>> {
     const existing = await mgr.query<
       Array<{
@@ -1723,15 +1872,12 @@ export class OrdersService implements OnModuleInit {
     }
     for (const { providerType, providerId, key } of distinct) {
       if (map.has(key)) continue;
-      // Orden histórica (número base por debajo del piso del sistema): los
-      // proveedores nuevos también toman número de ese rango, para no mezclar
-      // numeración vieja y automática en la misma orden.
+      // Contiguo al base de la orden: primer libre ≥ base + 1 (rellena los
+      // huecos propios de la orden en vez de saltar a la marca de agua).
       const [internalNumber] = await this.drawOrderNumbers(
         mgr,
         1,
-        legacyBase != null
-          ? { from: legacyBase + 1, maxExclusive: this.orderNumberFloor() }
-          : undefined,
+        contiguousBase != null ? { from: contiguousBase + 1 } : undefined,
       );
       maxPos += 1;
       const inserted = await mgr.query<{ id: string }[]>(
@@ -1783,6 +1929,7 @@ export class OrdersService implements OnModuleInit {
     user: AuthenticatedUser,
   ): Promise<Order> {
     const order = await this.findOne(id, user);
+    this.assertNotCancelled(order);
     if (!['draft', 'in_progress', 'attended'].includes(order.status)) {
       throw new BadRequestException(
         'La orden no puede pasar a atendida desde su estado actual',
@@ -1821,6 +1968,7 @@ export class OrdersService implements OnModuleInit {
     // `otherStudies`, observaciones por proveedor y adjuntos son editables
     // retroactivamente. Solo se bloquea `draft`/`in_progress` (orden aún sin
     // atender — no tiene sentido emitir informe).
+    this.assertNotCancelled(order);
     if (order.status === 'draft' || order.status === 'in_progress') {
       throw new BadRequestException(
         'La orden debe estar atendida para emitir informe',
@@ -1958,7 +2106,7 @@ export class OrdersService implements OnModuleInit {
     const order = await this.findOne(id, user);
     if (order.status !== 'draft') {
       throw new BadRequestException(
-        'Solo se puede autorizar el monto mientras la orden está en borrador',
+        'Solo se puede autorizar el monto mientras la orden está en el Paso 1 (orden creada, sin atender)',
       );
     }
     this.assertStep1Editable(order, user);
@@ -2043,6 +2191,7 @@ export class OrdersService implements OnModuleInit {
     user: AuthenticatedUser,
   ): Promise<Order> {
     const order = await this.findOne(id, user);
+    this.assertNotCancelled(order);
     if (order.status !== 'report_issued') {
       throw new BadRequestException(
         'La orden debe tener informe emitido para pasar a facturación',
@@ -2102,6 +2251,9 @@ export class OrdersService implements OnModuleInit {
         );
     }
 
+    // Fecha a mostrar en la factura. Sin enviar → la fecha de la orden.
+    const invoiceDate = (dto.invoiceDate ?? order.orderDate).slice(0, 10);
+
     // Total USD + validación cap.
     const priceAmount = Number(order.priceAmount);
     let totalUsd = 0;
@@ -2152,6 +2304,7 @@ export class OrdersService implements OnModuleInit {
           billingExchangeRateId: dto.billingExchangeRateId,
           invoiceNumber: dto.invoiceNumber.trim(),
           controlNumber: dto.controlNumber.trim(),
+          invoiceDate,
           status: 'finalized',
         },
       );
@@ -2189,6 +2342,7 @@ export class OrdersService implements OnModuleInit {
         },
         invoiceNumber: { to: dto.invoiceNumber.trim() },
         controlNumber: { to: dto.controlNumber.trim() },
+        invoiceDate: { to: invoiceDate },
       });
     });
     return this.findOne(id, user);
@@ -2456,23 +2610,27 @@ export class OrdersService implements OnModuleInit {
     user: AuthenticatedUser,
   ): Promise<Order> {
     const existing = await this.findOne(id, user);
+    this.assertNotCancelled(existing);
     if (existing.status !== 'draft')
-      throw new BadRequestException('Solo se puede editar órdenes en borrador');
+      throw new BadRequestException(
+        'Solo se puede editar el Paso 1 de una orden creada (antes de atenderla)',
+      );
     this.assertStep1Editable(existing, user);
 
-    // Número manual (orden vieja registrada ahora). `undefined` = no tocar la
-    // numeración; sólo se puede corregir mientras la orden siga en borrador.
+    // Número de orden. `undefined` = no tocar la numeración; sólo se puede
+    // cambiar mientras la orden siga en borrador y con el permiso dedicado.
     const customNumber = dto.customOrderNumber ?? null;
     if (
       customNumber != null &&
+      String(customNumber) !== existing.orderNumber &&
       !this.userHasPermission(user, PERMISSIONS.ORDERS.CUSTOM_NUMBER)
     ) {
       throw new ForbiddenException(
-        'No tienes permiso para asignar el número de orden manualmente',
+        'No tienes permiso para cambiar el número de orden',
       );
     }
     if (customNumber != null) {
-      this.assertCustomNumberRange(customNumber);
+      this.assertOrderNumberRange(customNumber);
     }
 
     const existingPathologyIds = (existing.pathologies ?? []).map((p) => p.id);
@@ -2681,23 +2839,20 @@ export class OrdersService implements OnModuleInit {
       //   1) borrar todas las OST (libera las referencias a las internas),
       //   2) reconciliar order_internal_orders (sobrevive/quema/agrega número),
       //   3) reinsertar OST ligadas a su orden interna.
-      // Orden histórica: base por debajo del piso ⇒ los proveedores nuevos
-      // también toman número del rango viejo (no mezclar numeraciones).
+      // Proveedor agregado a una orden ya numerada: toma el primer número libre
+      // después del BASE, para que las órdenes internas de la orden queden
+      // contiguas (y se rellenen sus propios huecos) en vez de saltar a la marca
+      // de agua global.
       const currentBase = Number(existing.orderNumber);
-      const legacyBase =
-        customNumber != null
-          ? customNumber
-          : Number.isFinite(currentBase) &&
-              currentBase < this.orderNumberFloor()
-            ? currentBase
-            : null;
+      const contiguousBase =
+        customNumber ?? (Number.isFinite(currentBase) ? currentBase : null);
       const distinct = this.distinctProvidersFromRows(merged.serviceTypes);
       await mgr.delete(OrderServiceType, { orderId: existing.id });
       const iioByKey = await this.reconcileInternalOrders(
         mgr,
         existing.id,
         distinct,
-        legacyBase,
+        contiguousBase,
       );
       await this.persistOrderServiceTypes(
         mgr,
@@ -2826,6 +2981,88 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(id, user);
   }
 
+  /**
+   * Lanza si la orden está cancelada. La cancelación congela el flujo: hay que
+   * reactivarla antes de atender, informar, facturar o editar.
+   */
+  private assertNotCancelled(order: Order): void {
+    if (order.status === 'cancelled') {
+      throw new BadRequestException(
+        'La orden está cancelada. Reactívala para continuar con el flujo.',
+      );
+    }
+  }
+
+  /**
+   * Cancela la orden: conserva su número y todo su contenido, pero la saca del
+   * flujo (no se puede editar, atender, informar ni facturar). Es la
+   * alternativa al borrado para no abrir huecos en la numeración.
+   *
+   * No se permite cancelar una orden `finalized`: ya tiene factura emitida y
+   * alimenta cuentas por cobrar/pagar. Guarda el estado previo para poder
+   * revertir con {@link uncancel}.
+   */
+  async cancel(
+    id: string,
+    dto: CancelOrderDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (order.status === 'cancelled') {
+      throw new BadRequestException('La orden ya está cancelada');
+    }
+    if (order.status === 'finalized') {
+      throw new BadRequestException(
+        'La orden ya está finalizada (factura emitida). No se puede cancelar.',
+      );
+    }
+    await this.assertNotInBatch(id);
+    const reason = dto.reason.trim();
+    await this.repo.update(
+      { id: order.id },
+      {
+        status: 'cancelled',
+        statusBeforeCancel: order.status,
+        cancelledAt: new Date(),
+        cancelledById: user.id,
+        cancelReason: reason,
+      },
+    );
+    await this.logChange(null, order.id, user.id, 'cancel', {
+      status: { from: order.status, to: 'cancelled' },
+      cancelReason: { to: reason },
+    });
+    return this.findOne(id, user);
+  }
+
+  /**
+   * Revierte la cancelación: la orden vuelve al estado que tenía antes de
+   * cancelarse (`draft` si no hay snapshot — órdenes canceladas antes de la
+   * migración) y se limpian las columnas de cancelación. El rastro queda en el
+   * historial (`cancel` / `uncancel`).
+   */
+  async uncancel(id: string, user: AuthenticatedUser): Promise<Order> {
+    const order = await this.findOne(id, user);
+    if (order.status !== 'cancelled') {
+      throw new BadRequestException('La orden no está cancelada');
+    }
+    const restored: OrderStatus = order.statusBeforeCancel ?? 'draft';
+    await this.repo.update(
+      { id: order.id },
+      {
+        status: restored,
+        statusBeforeCancel: null,
+        cancelledAt: null,
+        cancelledById: null,
+        cancelReason: null,
+      },
+    );
+    await this.logChange(null, order.id, user.id, 'uncancel', {
+      status: { from: 'cancelled', to: restored },
+    });
+    return this.findOne(id, user);
+  }
+
   // ------- Payments subresource -------
 
   async addPayment(
@@ -2836,7 +3073,7 @@ export class OrdersService implements OnModuleInit {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
       throw new BadRequestException(
-        'Solo se permiten pagos en órdenes en borrador',
+        'Solo se permiten pagos en el Paso 1 (orden creada, sin atender)',
       );
     if (order.type !== 'cash')
       throw new BadRequestException(
@@ -2864,7 +3101,7 @@ export class OrdersService implements OnModuleInit {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
       throw new BadRequestException(
-        'Solo se permiten pagos en órdenes en borrador',
+        'Solo se permiten pagos en el Paso 1 (orden creada, sin atender)',
       );
     this.assertStep1Editable(order, user);
     const payment = await this.paymentsRepo.findOne({
@@ -2907,7 +3144,7 @@ export class OrdersService implements OnModuleInit {
     const order = await this.findOne(orderId, user);
     if (order.status !== 'draft')
       throw new BadRequestException(
-        'Solo se permiten cambios de pagos en borrador',
+        'Solo se permiten cambios de pagos en el Paso 1 (orden creada, sin atender)',
       );
     this.assertStep1Editable(order, user);
     const payment = await this.paymentsRepo.findOne({

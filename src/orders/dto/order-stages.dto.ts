@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
@@ -19,6 +19,19 @@ import {
 } from 'class-validator';
 
 export const PROVIDER_TYPES_FOR_BILLING = ['doctor', 'care_center'] as const;
+
+/**
+ * Cancelación de una orden (no borra: conserva el número y el contenido).
+ * El motivo es obligatorio y queda en la orden + en el historial.
+ */
+export class CancelOrderDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'El motivo de la cancelación es obligatorio' })
+  @MinLength(3, { message: 'El motivo debe tener al menos 3 caracteres' })
+  @MaxLength(500)
+  reason: string;
+}
 
 /** Paso 2 — Atención del paciente. */
 export class AttendOrderDto {
@@ -111,6 +124,14 @@ export class BillingOrderDto {
   @IsNotEmpty({ message: 'El número de control es obligatorio' })
   @MaxLength(50)
   controlNumber: string;
+
+  /**
+   * Fecha a mostrar en la factura (date-only `YYYY-MM-DD`). Sin enviar, el
+   * service usa la `orderDate` de la orden.
+   */
+  @IsOptional()
+  @IsISO8601()
+  invoiceDate?: string;
 }
 
 /**

@@ -320,6 +320,37 @@ export class Order {
   @Column({ type: 'varchar', length: 50, nullable: true })
   controlNumber?: string | null;
 
+  /**
+   * Fecha que se imprime en la factura ("Fecha de Emisión"). Se captura en el
+   * Paso 4 y por defecto es la `orderDate` del Paso 1 — puede diferir cuando
+   * la factura se emite otro día.
+   */
+  @Column({ type: 'date', nullable: true })
+  invoiceDate?: string | null;
+
+  /**
+   * Cancelación de la orden (reversible). Alternativa al borrado: la orden
+   * conserva su número y contenido, pero queda fuera del flujo. `cancelledAt`
+   * no nulo ⇔ `status='cancelled'`. `statusBeforeCancel` guarda el estado del
+   * que se canceló para restaurarlo al reactivar; las cuatro columnas se
+   * limpian al revertir (el rastro queda en `order_change_logs`).
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  cancelledAt?: Date | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  cancelReason?: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  cancelledById?: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'cancelledById' })
+  cancelledBy?: User | null;
+
+  @Column({ type: 'varchar', length: 24, nullable: true })
+  statusBeforeCancel?: OrderStatus | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

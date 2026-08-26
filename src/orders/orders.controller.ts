@@ -15,11 +15,13 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
+import { QueryOrderNumberDto } from './dto/query-order-number.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
 import {
   AttendOrderDto,
   AuthorizeOrderAmountDto,
   BillingOrderDto,
+  CancelOrderDto,
   ReportOrderDto,
 } from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -54,6 +56,18 @@ export class OrdersController {
   @Get('config/number-start')
   numberStart() {
     return this.service.orderNumberStart();
+  }
+
+  /**
+   * Disponibilidad de números de orden para el Paso 1. Sin `number` devuelve la
+   * sugerencia (mayor en uso + 1); con `number` + `count` (proveedores de la
+   * orden) dice si el bloque consecutivo está libre, qué números están tomados y
+   * el primer bloque libre. Sólo JWT: es información de numeración, la usa el
+   * formulario mientras el usuario escribe.
+   */
+  @Get('numbers/availability')
+  numberAvailability(@Query() query: QueryOrderNumberDto) {
+    return this.service.numberAvailability(query);
   }
 
   /** Historial de cambios por usuario de la orden (más reciente primero). */
@@ -118,6 +132,30 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.restore(id, user);
+  }
+
+  /**
+   * Cancela la orden sin borrarla: conserva su número (no abre huecos en la
+   * numeración) y congela el flujo. Reversible vía `uncancel`.
+   */
+  @RequirePermissions(PERMISSIONS.ORDERS.CANCEL)
+  @Patch(':id/cancel')
+  cancel(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: CancelOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.cancel(id, dto, user);
+  }
+
+  /** Revierte la cancelación: la orden vuelve al estado que tenía antes. */
+  @RequirePermissions(PERMISSIONS.ORDERS.CANCEL)
+  @Patch(':id/uncancel')
+  uncancel(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.uncancel(id, user);
   }
 
   // --- Paso 1: autorización de monto por validador ---

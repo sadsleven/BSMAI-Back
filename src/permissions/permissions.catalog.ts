@@ -349,7 +349,17 @@ const ordersPermissions: PermissionDefinition[] = [
     resource: 'orders',
     action: 'update',
     label: 'Editar órdenes',
-    description: 'Permite modificar órdenes en borrador (incluye gestión de pagos)',
+    description:
+      'Permite modificar el Paso 1 de órdenes creadas y sin atender (incluye gestión de pagos)',
+    group: ORDERS_GROUP,
+  },
+  {
+    name: 'orders.cancel',
+    resource: 'orders',
+    action: 'cancel',
+    label: 'Cancelar y reactivar órdenes',
+    description:
+      'Permite cancelar una orden (conserva su número y detiene el flujo) y revertir la cancelación',
     group: ORDERS_GROUP,
   },
   {
@@ -413,9 +423,9 @@ const ordersPermissions: PermissionDefinition[] = [
     name: 'orders.custom-number',
     resource: 'orders',
     action: 'custom-number',
-    label: 'Número de orden manual (Paso 1)',
+    label: 'Elegir el número de orden (Paso 1)',
     description:
-      'Permite asignar manualmente el número de una orden histórica (siempre menor al número inicial del sistema)',
+      'Permite fijar el número de la orden en el Paso 1 (cualquier número libre; por defecto el sistema propone el siguiente)',
     group: ORDERS_GROUP,
   },
   {
@@ -766,6 +776,7 @@ export const PERMISSIONS = {
     LIST: 'orders.list',
     CREATE: 'orders.create',
     UPDATE: 'orders.update',
+    CANCEL: 'orders.cancel',
     SOFT_DELETE: 'orders.soft-delete',
     HARD_DELETE: 'orders.hard-delete',
     RESTORE: 'orders.restore',

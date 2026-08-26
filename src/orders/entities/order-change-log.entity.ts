@@ -22,7 +22,9 @@ export type OrderChangeAction =
   | 'payment_update'
   | 'payment_remove'
   | 'soft_delete'
-  | 'restore';
+  | 'restore'
+  | 'cancel'
+  | 'uncancel';
 
 /**
  * Historial de cambios por usuario de una orden. Una fila por acción relevante

@@ -221,7 +221,7 @@ export class SearchService {
 
   private orderStatusBadge(status: string): string {
     const map: Record<string, string> = {
-      draft: 'Borrador',
+      draft: 'Orden creada',
       in_progress: 'En curso',
       attended: 'Atendida',
       report_issued: 'Con informe',
