@@ -55,8 +55,12 @@ export class Order {
    * `sequencePosition = 1` (ver {@link OrderInternalOrder}). Congelado de por
    * vida (nunca se regenera al editar, aun si ese proveedor se quita). Lo usan
    * cuentas por cobrar, título de la orden y el buscador como ancla por-orden.
+   *
+   * UNIQUE PARCIAL (`uq_orders_order_number_active`, `WHERE status <> 'cancelled'`):
+   * el número de una orden cancelada se puede reutilizar a mano, así que una
+   * cancelada y una viva pueden compartirlo.
    */
-  @Column({ type: 'varchar', length: 32, unique: true })
+  @Column({ type: 'varchar', length: 32 })
   orderNumber: string;
 
   @Column({ type: 'uuid' })
@@ -302,8 +306,9 @@ export class Order {
   doctorAmount?: string | null;
 
   /**
-   * Snapshot de la tasa USD/Bs vigente al facturar. Sirve para convertir pagos
-   * BS/EUR a USD a posteriori sin depender de tasas posteriores.
+   * Snapshot de la tasa USD/Bs de la facturación. Desde el Paso 4 con tasa
+   * seleccionable es la MISMA tasa elegida para la factura. Sirve para convertir
+   * pagos BS/EUR a USD y los brutos de CxP / retenciones / reportes.
    */
   @Column({ type: 'uuid', nullable: true })
   billingExchangeRateId?: string | null;
@@ -311,6 +316,18 @@ export class Order {
   @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'billingExchangeRateId' })
   billingExchangeRate?: ExchangeRate | null;
+
+  /**
+   * Tasa USD/Bs elegida en el Paso 4 para EMITIR la factura. Manda sobre
+   * cualquier otra al imprimir el documento. `NULL` en órdenes facturadas antes
+   * de que la tasa fuese seleccionable (conservan su precedencia histórica).
+   */
+  @Column({ type: 'uuid', nullable: true })
+  invoiceExchangeRateId?: string | null;
+
+  @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'invoiceExchangeRateId' })
+  invoiceExchangeRate?: ExchangeRate | null;
 
   /** Número de factura fiscal capturado al facturar (Paso 4). */
   @Column({ type: 'varchar', length: 50, nullable: true })

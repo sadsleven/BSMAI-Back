@@ -45,6 +45,7 @@ import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { ServiceType } from '../service-types/entities/service-type.entity';
 import { Pathology } from '../pathologies/entities/pathology.entity';
+import { Specialty } from '../specialties/entities/specialty.entity';
 import { InsuranceServicePrice } from '../insurances/entities/insurance-service-price.entity';
 import { DoctorServicePrice } from '../doctors/entities/doctor-service-price.entity';
 import { CareCenterServicePrice } from '../care-centers/entities/care-center-service-price.entity';
@@ -75,6 +76,22 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 void ALLOWED_TRANSITIONS;
 
 type ProviderKey = `doctor:${string}` | `care_center:${string}`;
+
+/**
+ * Clave `providerType:providerId:specialtyId` de una fila ST. Sirve para saber
+ * si el par proveedor↔especialidad ya estaba persistido en la orden (ver
+ * `grandfatheredProviderSpecialties` en `validateCoreReferences`).
+ */
+function providerSpecialtyKey(row: {
+  providerType: 'doctor' | 'care_center';
+  doctorId?: string | null;
+  careCenterId?: string | null;
+  specialtyId?: string | null;
+}): string {
+  const pid =
+    row.providerType === 'doctor' ? row.doctorId : row.careCenterId;
+  return `${row.providerType}:${pid ?? ''}:${row.specialtyId ?? ''}`;
+}
 
 /**
  * Tope defensivo del número de orden elegido en el Paso 1. El campo acepta
@@ -136,6 +153,8 @@ export class OrdersService implements OnModuleInit {
     private readonly serviceTypesRepo: Repository<ServiceType>,
     @InjectRepository(Pathology)
     private readonly pathologiesRepo: Repository<Pathology>,
+    @InjectRepository(Specialty)
+    private readonly specialtiesRepo: Repository<Specialty>,
     @InjectRepository(InsuranceServicePrice)
     private readonly insurancePricesRepo: Repository<InsuranceServicePrice>,
     @InjectRepository(DoctorServicePrice)
@@ -469,6 +488,12 @@ export class OrdersService implements OnModuleInit {
    *  - sin opciones (numeración automática): `n` consecutivos desde la marca de
    *    agua (`orders_seq`), que sólo avanza — esos números no se reutilizan.
    *
+   * "En uso" = en manos de una orden VIVA. Una orden CANCELADA conserva su
+   * número impreso pero lo libera (los UNIQUE son parciales, ver la migración
+   * `ReuseCancelledOrderNumbers`), así que se puede volver a elegir a mano. La
+   * numeración automática igual lo salta: su marca de agua cuenta las
+   * canceladas.
+   *
    * `excludeOrderId` ignora los números que ya tiene la propia orden (usado al
    * renumerar).
    *
@@ -493,15 +518,47 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Números del bloque `[base, base + n - 1]` que ya están en uso, sea como
-   * número base de una orden o como orden interna. Cuenta también las órdenes en
-   * papelera (conservan su número porque son restaurables).
+   * Números del bloque `[base, base + n - 1]` en manos de órdenes VIVAS (no
+   * canceladas), sea como número base de una orden o como orden interna: los
+   * que NO se pueden volver a usar. Cuenta también las órdenes en papelera
+   * (conservan su número porque son restaurables) y NO cuenta las canceladas
+   * (su número queda libre para reutilizarlo a mano).
    */
   private async takenInBlock(
     mgr: EntityManager,
     base: number,
     n: number,
     excludeOrderId?: string,
+  ): Promise<number[]> {
+    return this.numbersInBlock(mgr, base, n, excludeOrderId, false);
+  }
+
+  /**
+   * Números del bloque que sólo tiene alguna orden CANCELADA. Están libres (se
+   * pueden reutilizar), pero siguen impresos en esa orden: se devuelven aparte
+   * para que el Paso 1 lo avise.
+   */
+  private async cancelledInBlock(
+    mgr: EntityManager,
+    base: number,
+    n: number,
+    excludeOrderId?: string,
+  ): Promise<number[]> {
+    return this.numbersInBlock(mgr, base, n, excludeOrderId, true);
+  }
+
+  /**
+   * Números del bloque `[base, base + n - 1]` en uso por órdenes canceladas
+   * (`cancelled = true`) o por órdenes vivas (`false`). Los UNIQUE de
+   * `internalNumber`/`orderNumber` son parciales sobre las vivas, así que sólo
+   * esas bloquean la asignación.
+   */
+  private async numbersInBlock(
+    mgr: EntityManager,
+    base: number,
+    n: number,
+    excludeOrderId: string | undefined,
+    cancelled: boolean,
   ): Promise<number[]> {
     const rows = await mgr.query<{ n: string }[]>(
       `WITH block AS (
@@ -512,15 +569,17 @@ export class OrdersService implements OnModuleInit {
         WHERE EXISTS (
                 SELECT 1 FROM "order_internal_orders" iio
                  WHERE iio."internalNumber" = b.n::text
+                   AND iio."cancelled" = $4::boolean
                    AND ($3::uuid IS NULL OR iio."orderId" <> $3::uuid)
               )
            OR EXISTS (
                 SELECT 1 FROM "orders" o
                  WHERE o."orderNumber" = b.n::text
+                   AND (o.status = 'cancelled') = $4::boolean
                    AND ($3::uuid IS NULL OR o.id <> $3::uuid)
               )
         ORDER BY b.n`,
-      [String(base), String(n), excludeOrderId ?? null],
+      [String(base), String(n), excludeOrderId ?? null, cancelled],
     );
     return rows.map((r) => Number(r.n));
   }
@@ -567,12 +626,14 @@ export class OrdersService implements OnModuleInit {
          SELECT "internalNumber"::bigint AS n
            FROM "order_internal_orders"
           WHERE "internalNumber" ~ '^[0-9]+$'
+            AND "cancelled" = false
             AND "internalNumber"::bigint >= $1::bigint
             AND ($3::uuid IS NULL OR "orderId" <> $3::uuid)
          UNION
          SELECT "orderNumber"::bigint
            FROM "orders"
           WHERE "orderNumber" ~ '^[0-9]+$'
+            AND status <> 'cancelled'
             AND "orderNumber"::bigint >= $1::bigint
             AND ($3::uuid IS NULL OR id <> $3::uuid)
        ),
@@ -632,6 +693,10 @@ export class OrdersService implements OnModuleInit {
    * mayor entre la marca de agua de `orders_seq`, el mayor número en uso + 1 y
    * el piso del env (cubre secuencias atrasadas o restauraciones de BD). Es el
    * valor que el Paso 1 propone por defecto.
+   *
+   * A propósito cuenta también las órdenes CANCELADAS: aunque su número esté
+   * libre para reutilizarlo A MANO, el rango automático nunca lo reparte (así
+   * no aparece de sorpresa un número que otra orden todavía muestra).
    */
   private async nextAutoNumber(mgr?: EntityManager): Promise<number> {
     const runner = mgr ?? this.dataSource.manager;
@@ -682,7 +747,9 @@ export class OrdersService implements OnModuleInit {
    * (las órdenes internas del Paso 2), así que se consulta el BLOQUE completo.
    *
    *  - `suggestion`: número por defecto = el mayor en uso + 1.
-   *  - `taken`: números del bloque que ya están ocupados.
+   *  - `taken`: números del bloque que ya están ocupados por órdenes vivas.
+   *  - `cancelled`: números del bloque libres porque su orden fue CANCELADA
+   *    (se pueden reutilizar; el Paso 1 lo avisa).
    *  - `nextFree`: primer número ≥ el pedido cuyo bloque completo está libre
    *    (cae en `suggestion` si no hay hueco cerca).
    *
@@ -698,6 +765,7 @@ export class OrdersService implements OnModuleInit {
     number: number | null;
     available: boolean | null;
     taken: number[];
+    cancelled: number[];
     nextFree: number;
   }> {
     const count = Math.min(Math.max(Math.trunc(opts.count ?? 1) || 1, 1), 50);
@@ -709,6 +777,7 @@ export class OrdersService implements OnModuleInit {
         number: null,
         available: null,
         taken: [],
+        cancelled: [],
         nextFree: suggestion,
       };
     }
@@ -720,12 +789,23 @@ export class OrdersService implements OnModuleInit {
       opts.orderId,
     );
     const available = taken.length === 0;
+    // Números que sólo tiene una orden cancelada: libres, pero conviene avisar
+    // que ya se imprimieron en esa orden.
+    const cancelled = (
+      await this.cancelledInBlock(
+        this.dataSource.manager,
+        number,
+        count,
+        opts.orderId,
+      )
+    ).filter((n) => !taken.includes(n));
     return {
       count,
       suggestion,
       number,
       available,
       taken,
+      cancelled,
       nextFree: available
         ? number
         : await this.firstFreeBlock(number, count, opts.orderId, suggestion),
@@ -749,11 +829,13 @@ export class OrdersService implements OnModuleInit {
          SELECT "internalNumber"::bigint AS n
            FROM "order_internal_orders"
           WHERE "internalNumber" ~ '^[0-9]+$'
+            AND "cancelled" = false
             AND ($3::uuid IS NULL OR "orderId" <> $3::uuid)
          UNION
          SELECT "orderNumber"::bigint
            FROM "orders"
           WHERE "orderNumber" ~ '^[0-9]+$'
+            AND status <> 'cancelled'
             AND ($3::uuid IS NULL OR id <> $3::uuid)
        ) t
         WHERE n >= $1::bigint AND n < $1::bigint + $2::bigint`,
@@ -837,6 +919,7 @@ export class OrdersService implements OnModuleInit {
       specialty: true,
       orderServiceTypes: {
         serviceType: true,
+        specialty: true,
         doctor: true,
         careCenter: true,
         internalOrder: true,
@@ -849,6 +932,7 @@ export class OrdersService implements OnModuleInit {
       cancelledBy: true,
       payments: { exchangeRate: true },
       billingExchangeRate: true,
+      invoiceExchangeRate: true,
       fixedExchangeRate: true,
       servicePricing: true,
       providerReports: { doctor: true, careCenter: true },
@@ -961,8 +1045,15 @@ export class OrdersService implements OnModuleInit {
         'EXISTS (SELECT 1 FROM order_service_types fst WHERE fst."orderId" = o.id AND fst."careCenterId" = :careCenterId)',
         { careCenterId },
       );
+    // La especialidad vive por fila ST (una orden puede combinar varias), así
+    // que el filtro busca cualquier fila con esa especialidad — no sólo la
+    // principal (`o.specialtyId`), o las órdenes mixtas se perderían.
     if (specialtyId)
-      qb.andWhere('o.specialtyId = :specialtyId', { specialtyId });
+      qb.andWhere(
+        `EXISTS (SELECT 1 FROM order_service_types sst
+                  WHERE sst."orderId" = o.id AND sst."specialtyId" = :specialtyId)`,
+        { specialtyId },
+      );
     if (orderDateFrom)
       qb.andWhere('o.orderDate >= :odf', { odf: orderDateFrom });
     if (orderDateTo) qb.andWhere('o.orderDate <= :odt', { odt: orderDateTo });
@@ -1099,17 +1190,26 @@ export class OrdersService implements OnModuleInit {
   /**
    * Valida referencias core. Provider validation per ST row: cada fila debe
    * tener exactamente uno de doctorId/careCenterId coherente con providerType,
-   * y el proveedor debe tener la especialidad de la orden.
+   * y el proveedor debe tener la especialidad de ESA fila (una orden puede
+   * combinar especialidades: ej. laboratorio en un centro + rayos X en otro).
    */
   private async validateCoreReferences(
     dto: Partial<CreateOrderDto>,
     user: AuthenticatedUser,
+    opts?: {
+      /**
+       * Pares `providerType:providerId:specialtyId` ya persistidos en la orden.
+       * Se les perdona la validación proveedor↔especialidad: las órdenes creadas
+       * antes de la especialidad por fila heredaron la principal de la orden sin
+       * que nadie chequeara que el proveedor la tuviera asignada, y editar otra
+       * cosa del Paso 1 (fecha, monto, pagos) no debe quedar bloqueado por eso.
+       * Un par NUEVO o CAMBIADO sí se valida.
+       */
+      grandfatheredProviderSpecialties?: Set<string>;
+    },
   ): Promise<{ holder: Patient }> {
     if (!dto.branchId) throw new BadRequestException('branchId requerido');
     await this.assertBranchVisibility(dto.branchId, user);
-
-    if (!dto.specialtyId)
-      throw new BadRequestException('specialtyId requerido');
 
     const holder = await this.patientsRepo.findOne({
       where: { id: dto.holderId!, deletedAt: IsNull() },
@@ -1215,6 +1315,32 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
+    // Especialidad por fila: obligatoria, existente y activa. Una orden puede
+    // combinar varias (laboratorio + rayos X); `orders.specialtyId` se deriva
+    // de la primera fila (especialidad principal).
+    if (rows.some((r) => !r.specialtyId)) {
+      throw new BadRequestException(
+        'Cada tipo de servicio requiere su especialidad',
+      );
+    }
+    const specialtyIds = Array.from(new Set(rows.map((r) => r.specialtyId)));
+    const specialties = await this.specialtiesRepo.find({
+      where: { id: In(specialtyIds), deletedAt: IsNull() },
+      select: ['id', 'name', 'isActive'],
+    });
+    if (
+      specialties.length !== specialtyIds.length ||
+      specialties.some((s) => !s.isActive)
+    ) {
+      throw new BadRequestException(
+        'Alguna especialidad no existe o está deshabilitada',
+      );
+    }
+    const specialtyNameById = new Map(specialties.map((s) => [s.id, s.name]));
+    const grandfathered = opts?.grandfatheredProviderSpecialties;
+    const isGrandfathered = (row: OrderServiceTypeRowDto): boolean =>
+      !!grandfathered?.has(providerSpecialtyKey(row));
+
     // Validate provider per row.
     const doctorIds = Array.from(
       new Set(
@@ -1262,6 +1388,16 @@ export class OrdersService implements OnModuleInit {
           throw new BadRequestException(
             `Doctor de un tipo de servicio no encontrado o deshabilitado`,
           );
+        if (
+          !isGrandfathered(row) &&
+          !(d.specialties ?? []).some((s) => s.id === row.specialtyId)
+        ) {
+          throw new BadRequestException(
+            `El doctor ${d.firstName} ${d.lastName} no tiene la especialidad ${
+              specialtyNameById.get(row.specialtyId) ?? ''
+            }`.trim(),
+          );
+        }
       } else {
         if (!row.careCenterId) {
           throw new BadRequestException(
@@ -1276,6 +1412,16 @@ export class OrdersService implements OnModuleInit {
           throw new BadRequestException(
             `Centro de un tipo de servicio no encontrado o deshabilitado`,
           );
+        if (
+          !isGrandfathered(row) &&
+          !(cc.specialties ?? []).some((s) => s.id === row.specialtyId)
+        ) {
+          throw new BadRequestException(
+            `El centro ${cc.businessName} no tiene la especialidad ${
+              specialtyNameById.get(row.specialtyId) ?? ''
+            }`.trim(),
+          );
+        }
       }
     }
 
@@ -1526,10 +1672,40 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
+   * Última tasa USD/Bs activa con fecha efectiva ≤ `at` (fallback: la más
+   * reciente que exista). Sirve de provisional para la tasa fija de una orden
+   * de seguro no indexado mientras no se factura.
+   */
+  private async usdRateAt(at?: string | Date | null): Promise<string | null> {
+    const qb = this.ratesRepo
+      .createQueryBuilder('r')
+      .where('r.currency = :c', { c: 'USD' })
+      .andWhere('r.isActive = true')
+      .orderBy('r.effectiveDate', 'DESC')
+      .limit(1);
+    if (at) {
+      // `orderDate` viene date-only: se compara contra el FIN de ese día en
+      // Venezuela (UTC-04:00), sino la tasa publicada ese mismo día queda fuera.
+      const raw = typeof at === 'string' ? at : at.toISOString();
+      const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+        ? `${raw}T23:59:59-04:00`
+        : raw;
+      const found = await qb
+        .clone()
+        .andWhere('r.effectiveDate <= :at', { at: iso })
+        .getOne();
+      if (found) return found.id;
+    }
+    return (await qb.getOne())?.id ?? null;
+  }
+
+  /**
    * Deriva el modo tasa fija de la orden a partir del seguro:
-   *  - Seguro `isIndexed=true` (UI: "No indexado") → `useFixedRate=true` y requiere
-   *    `fixedExchangeRateId` (la tasa del día de la orden, seleccionada en el
-   *    Paso 1; debe ser USD/Bs).
+   *  - Seguro `isIndexed=true` (UI: "No indexado") → `useFixedRate=true` con
+   *    `fixedExchangeRateId` (tasa USD/Bs). **La tasa definitiva se elige en el
+   *    Paso 4 junto con la de la factura**; en el Paso 1 se deja la del día de
+   *    la orden como provisional (la orden todavía no entra a Cuentas por
+   *    cobrar: eso ocurre al finalizar).
    *  - Seguro `isIndexed=false` (UI: "Indexado") / no-seguro → `useFixedRate=false`,
    *    sin tasa fija (se cobra a la tasa del día del cobro).
    */
@@ -1537,6 +1713,7 @@ export class OrdersService implements OnModuleInit {
     type: 'cash' | 'credit' | 'insurance' | 'cashea',
     insuranceId: string | null | undefined,
     requestedRateId: string | null | undefined,
+    orderDate?: string | Date | null,
   ): Promise<{ useFixedRate: boolean; fixedExchangeRateId: string | null }> {
     if (type !== 'insurance' || !insuranceId) {
       return { useFixedRate: false, fixedExchangeRateId: null };
@@ -1544,9 +1721,13 @@ export class OrdersService implements OnModuleInit {
     const indexed = await this.insuranceIsIndexed(insuranceId);
     if (!indexed) return { useFixedRate: false, fixedExchangeRateId: null };
     if (!requestedRateId) {
-      throw new BadRequestException(
-        'Seguro no indexado: selecciona la tasa de la orden',
-      );
+      const provisional = await this.usdRateAt(orderDate);
+      if (!provisional) {
+        throw new BadRequestException(
+          'No hay tasa de cambio USD cargada. Carga una en Tasas de cambio antes de crear la orden.',
+        );
+      }
+      return { useFixedRate: true, fixedExchangeRateId: provisional };
     }
     const rate = await this.ratesRepo.findOne({
       where: { id: requestedRateId },
@@ -1575,11 +1756,13 @@ export class OrdersService implements OnModuleInit {
       this.assertOrderNumberRange(dto.customOrderNumber);
     }
 
-    // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado" ⇒ fija en Bs a la tasa de la orden).
+    // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado"). La tasa
+    // definitiva la elige el Paso 4 con la de la factura; aquí queda provisional.
     const fixed = await this.resolveFixedRate(
       dto.type,
       dto.insuranceId ?? null,
       dto.fixedExchangeRateId ?? null,
+      dto.orderDate,
     );
 
     // Monto base (catálogo) + ajuste con motivo. Sin orders.edit-amount el
@@ -1659,7 +1842,7 @@ export class OrdersService implements OnModuleInit {
             ? dto.serviceKey.trim()
             : null,
         isReimbursement: dto.type === 'credit' ? !!dto.isReimbursement : false,
-        specialtyId: dto.specialtyId,
+        specialtyId: this.primarySpecialtyId(dto.serviceTypes),
         orderDate: dto.orderDate,
         appointmentDate: new Date(dto.appointmentDate),
         priceAmount: effectivePriceAmount.toFixed(2),
@@ -1799,6 +1982,7 @@ export class OrdersService implements OnModuleInit {
         orderId,
         serviceTypeId: r.serviceTypeId,
         providerType: r.providerType,
+        specialtyId: r.specialtyId,
         doctorId: r.providerType === 'doctor' ? (r.doctorId ?? null) : null,
         careCenterId:
           r.providerType === 'care_center' ? (r.careCenterId ?? null) : null,
@@ -1899,6 +2083,21 @@ export class OrdersService implements OnModuleInit {
     return map;
   }
 
+  /**
+   * Especialidad PRINCIPAL de la orden = la de la primera fila ST. `orders.
+   * specialtyId` es derivada (la especialidad real vive por fila en
+   * `order_service_types`); la usan el filtro del listado, el dashboard y los
+   * reportes, que siguen mostrando una sola por orden.
+   */
+  private primarySpecialtyId(rows: OrderServiceTypeRowDto[]): string {
+    const id = rows[0]?.specialtyId;
+    if (!id)
+      throw new BadRequestException(
+        'Cada tipo de servicio requiere su especialidad',
+      );
+    return id;
+  }
+
   /** Set único de proveedores activos en la orden. Preserva orden de aparición. */
   private distinctProvidersFromRows(rows: OrderServiceTypeRowDto[]): Array<{
     providerType: 'doctor' | 'care_center';
@@ -1983,6 +2182,7 @@ export class OrdersService implements OnModuleInit {
       (order.orderServiceTypes ?? []).map((ost) => ({
         serviceTypeId: ost.serviceTypeId,
         providerType: ost.providerType,
+        specialtyId: ost.specialtyId,
         doctorId: ost.doctorId ?? undefined,
         careCenterId: ost.careCenterId ?? undefined,
         customName: ost.customName ?? '',
@@ -2184,7 +2384,11 @@ export class OrdersService implements OnModuleInit {
    * - Cada `amount` está en USD; cap global `Σ amount ≤ priceAmount`.
    * - Snapshot replace-all de `kind ∈ {doctor, care_center}` por ST.
    * - `doctorAmount` = total USD; `doctorAmountSuggested` = suma sugeridos USD.
-   * - `billingExchangeRateId` debe ser tasa USD/Bs (snapshot al facturar).
+   * - `billingExchangeRateId` es la tasa USD/Bs **elegida** al facturar (debe ser
+   *   USD). Se escribe en tres columnas: `billingExchangeRateId` (conversión de
+   *   CxP / retenciones / reportes), `invoiceExchangeRateId` (la que se imprime
+   *   en la factura) y, si la orden es de seguro no indexado (`useFixedRate`),
+   *   `fixedExchangeRateId` (target Bs de la cuenta por cobrar).
    */
   async billing(
     id: string,
@@ -2209,6 +2413,7 @@ export class OrdersService implements OnModuleInit {
     const orderRows = (order.orderServiceTypes ?? []).map((ost) => ({
       serviceTypeId: ost.serviceTypeId,
       providerType: ost.providerType,
+      specialtyId: ost.specialtyId,
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
       customName: ost.customName ?? '',
@@ -2303,6 +2508,13 @@ export class OrdersService implements OnModuleInit {
           doctorAmountSuggested: suggestedSum.toFixed(2),
           doctorAmount: totalUsd.toFixed(2),
           billingExchangeRateId: dto.billingExchangeRateId,
+          // Tasa elegida en el Paso 4: manda al imprimir la factura.
+          invoiceExchangeRateId: dto.billingExchangeRateId,
+          // Seguro no indexado: la misma tasa fija la cuenta por cobrar en Bs
+          // (el campo que antes se elegía en el Paso 1).
+          ...(order.useFixedRate
+            ? { fixedExchangeRateId: dto.billingExchangeRateId }
+            : {}),
           invoiceNumber: dto.invoiceNumber.trim(),
           controlNumber: dto.controlNumber.trim(),
           invoiceDate,
@@ -2344,6 +2556,10 @@ export class OrdersService implements OnModuleInit {
         invoiceNumber: { to: dto.invoiceNumber.trim() },
         controlNumber: { to: dto.controlNumber.trim() },
         invoiceDate: { to: invoiceDate },
+        invoiceExchangeRateId: {
+          from: order.invoiceExchangeRateId ?? null,
+          to: dto.billingExchangeRateId,
+        },
       });
     });
     return this.findOne(id, user);
@@ -2466,6 +2682,8 @@ export class OrdersService implements OnModuleInit {
       /** Monto base efectivo ("123.00") y motivo del ajuste post-normalización. */
       priceBaseAmount: string;
       priceAdjustmentNote: string | null;
+      /** Especialidad principal derivada de la primera fila ST. */
+      specialtyId: string;
       dtoPayments?: CreateOrderPaymentDto[];
     },
   ): Record<string, { from?: unknown; to?: unknown }> {
@@ -2495,7 +2713,7 @@ export class OrdersService implements OnModuleInit {
     );
     put('serviceKey', existing.serviceKey ?? null, fin.serviceKey);
     put('isReimbursement', existing.isReimbursement, fin.isReimbursement);
-    put('specialtyId', existing.specialtyId, merged.specialtyId);
+    put('specialtyId', existing.specialtyId, fin.specialtyId);
     put(
       'orderDate',
       String(existing.orderDate).slice(0, 10),
@@ -2543,6 +2761,7 @@ export class OrdersService implements OnModuleInit {
     const normRow = (r: {
       serviceTypeId: string;
       providerType: 'doctor' | 'care_center';
+      specialtyId?: string | null;
       doctorId?: string | null;
       careCenterId?: string | null;
       quantity?: number | null;
@@ -2552,6 +2771,7 @@ export class OrdersService implements OnModuleInit {
       [
         r.serviceTypeId,
         r.providerType,
+        r.specialtyId ?? '',
         r.providerType === 'doctor'
           ? (r.doctorId ?? '')
           : (r.careCenterId ?? ''),
@@ -2640,10 +2860,12 @@ export class OrdersService implements OnModuleInit {
     ).map((ost) => ({
       serviceTypeId: ost.serviceTypeId,
       providerType: ost.providerType,
+      specialtyId: ost.specialtyId,
       doctorId: ost.doctorId ?? undefined,
       careCenterId: ost.careCenterId ?? undefined,
       quantity: ost.quantity ?? 1,
       customName: ost.customName ?? '',
+      isIndexed: ost.isIndexed,
     }));
 
     const merged: CreateOrderDto = {
@@ -2664,7 +2886,6 @@ export class OrdersService implements OnModuleInit {
         dto.isReimbursement !== undefined
           ? dto.isReimbursement
           : existing.isReimbursement,
-      specialtyId: dto.specialtyId ?? existing.specialtyId,
       serviceTypes: dto.serviceTypes ?? existingRows,
       pathologyIds: dto.pathologyIds ?? existingPathologyIds,
       orderDate: dto.orderDate ?? existing.orderDate,
@@ -2679,13 +2900,28 @@ export class OrdersService implements OnModuleInit {
       fixedExchangeRateId:
         dto.fixedExchangeRateId ?? existing.fixedExchangeRateId ?? undefined,
     };
-    await this.validateCoreReferences(merged, user);
+    await this.validateCoreReferences(merged, user, {
+      // Pares proveedor↔especialidad que la orden ya tenía guardados: no se
+      // revalidan (las órdenes previas a la especialidad por fila heredaron la
+      // principal sin chequear que el proveedor la tuviera).
+      grandfatheredProviderSpecialties: new Set(
+        (existing.orderServiceTypes ?? []).map((ost) =>
+          providerSpecialtyKey(ost),
+        ),
+      ),
+    });
 
-    // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado" ⇒ fija en Bs a la tasa de la orden).
+    // Especialidad principal derivada: la de la primera fila ST (la especialidad
+    // real vive por fila; la orden guarda la principal para filtro/reportes).
+    const mergedSpecialtyId = this.primarySpecialtyId(merged.serviceTypes);
+
+    // Tasa fija derivada del seguro (isIndexed=true, UI "No indexado"). La tasa
+    // definitiva la elige el Paso 4 con la de la factura; aquí queda provisional.
     const fixedUpd = await this.resolveFixedRate(
       merged.type,
       merged.insuranceId ?? null,
       merged.fixedExchangeRateId ?? null,
+      merged.orderDate,
     );
 
     // Monto base (catálogo) + ajuste con motivo. Sin orders.edit-amount el
@@ -2786,6 +3022,7 @@ export class OrdersService implements OnModuleInit {
       fixedExchangeRateId: fixedUpd.fixedExchangeRateId,
       priceBaseAmount: priceAdjUpd.priceBaseAmount,
       priceAdjustmentNote: priceAdjUpd.priceAdjustmentNote,
+      specialtyId: mergedSpecialtyId,
       dtoPayments: dto.payments,
     });
     if (customNumber != null && String(customNumber) !== existing.orderNumber) {
@@ -2815,7 +3052,7 @@ export class OrdersService implements OnModuleInit {
             : null,
         isReimbursement:
           merged.type === 'credit' ? !!merged.isReimbursement : false,
-        specialtyId: merged.specialtyId,
+        specialtyId: mergedSpecialtyId,
         orderDate: merged.orderDate,
         appointmentDate: new Date(merged.appointmentDate),
         priceAmount: merged.priceAmount.toFixed(2),
@@ -3040,6 +3277,11 @@ export class OrdersService implements OnModuleInit {
    * orden ya metida en un lote de cuentas por pagar/cobrar: hay que anular el
    * lote primero para no dejar el lote apuntando a una orden fuera de circuito.
    * Guarda el estado previo para poder revertir con {@link uncancel}.
+   *
+   * Además LIBERA sus números: la orden los sigue mostrando, pero se pueden
+   * volver a elegir a mano en otra orden (los UNIQUE de `orderNumber` /
+   * `internalNumber` son parciales sobre las órdenes vivas; el espejo
+   * `order_internal_orders.cancelled` se escribe en la misma transacción).
    */
   async cancel(
     id: string,
@@ -3052,16 +3294,22 @@ export class OrdersService implements OnModuleInit {
     }
     await this.assertNotInBatch(id, 'cancelar');
     const reason = dto.reason.trim();
-    await this.repo.update(
-      { id: order.id },
-      {
-        status: 'cancelled',
-        statusBeforeCancel: order.status,
-        cancelledAt: new Date(),
-        cancelledById: user.id,
-        cancelReason: reason,
-      },
-    );
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.getRepository(Order).update(
+        { id: order.id },
+        {
+          status: 'cancelled',
+          statusBeforeCancel: order.status,
+          cancelledAt: new Date(),
+          cancelledById: user.id,
+          cancelReason: reason,
+        },
+      );
+      await mgr.query(
+        `UPDATE "order_internal_orders" SET "cancelled" = true WHERE "orderId" = $1`,
+        [order.id],
+      );
+    });
     await this.logChange(null, order.id, user.id, 'cancel', {
       status: { from: order.status, to: 'cancelled' },
       cancelReason: { to: reason },
@@ -3074,6 +3322,11 @@ export class OrdersService implements OnModuleInit {
    * cancelarse (`draft` si no hay snapshot — órdenes canceladas antes de la
    * migración) y se limpian las columnas de cancelación. El rastro queda en el
    * historial (`cancel` / `uncancel`).
+   *
+   * Sus números volvieron a estar "en uso", así que primero se verifica que
+   * nadie los haya tomado mientras estuvo cancelada. Si alguno está ocupado se
+   * rechaza diciendo qué orden lo tiene: nada se renumera solo (la orden pudo
+   * haber salido impresa con ese número).
    */
   async uncancel(id: string, user: AuthenticatedUser): Promise<Order> {
     const order = await this.findOne(id, user);
@@ -3081,20 +3334,79 @@ export class OrdersService implements OnModuleInit {
       throw new BadRequestException('La orden no está cancelada');
     }
     const restored: OrderStatus = order.statusBeforeCancel ?? 'draft';
-    await this.repo.update(
-      { id: order.id },
-      {
-        status: restored,
-        statusBeforeCancel: null,
-        cancelledAt: null,
-        cancelledById: null,
-        cancelReason: null,
-      },
-    );
+    await this.dataSource.transaction(async (mgr) => {
+      // Mismo lock que el reparto de números: evita reactivar y crear en paralelo.
+      await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
+      const clashes = await this.numbersTakenByOthers(mgr, order.id);
+      if (clashes.length) {
+        const detail = clashes
+          .map((c) => `${c.number} (orden N° ${c.takenBy})`)
+          .join(', ');
+        throw new BadRequestException(
+          clashes.length === 1
+            ? `No puedes reactivar la orden: su N° ${detail} ya lo tiene otra orden. Cambia el número de esa orden y vuelve a intentarlo.`
+            : `No puedes reactivar la orden: sus números ya los tienen otras órdenes — ${detail}. Cambia el número de esas órdenes y vuelve a intentarlo.`,
+        );
+      }
+      await mgr.getRepository(Order).update(
+        { id: order.id },
+        {
+          status: restored,
+          statusBeforeCancel: null,
+          cancelledAt: null,
+          cancelledById: null,
+          cancelReason: null,
+        },
+      );
+      await mgr.query(
+        `UPDATE "order_internal_orders" SET "cancelled" = false WHERE "orderId" = $1`,
+        [order.id],
+      );
+    });
     await this.logChange(null, order.id, user.id, 'uncancel', {
       status: { from: 'cancelled', to: restored },
     });
     return this.findOne(id, user);
+  }
+
+  /**
+   * Números de la orden (base + órdenes internas) que hoy tiene OTRA orden viva.
+   * Sólo puede pasar con una orden cancelada: al cancelarla sus números quedaron
+   * libres. `takenBy` = número base de la orden que lo tomó.
+   */
+  private async numbersTakenByOthers(
+    mgr: EntityManager,
+    orderId: string,
+  ): Promise<Array<{ number: string; takenBy: string }>> {
+    return mgr.query<Array<{ number: string; takenBy: string }>>(
+      `WITH mine AS (
+         SELECT "internalNumber" AS n
+           FROM "order_internal_orders" WHERE "orderId" = $1
+         UNION
+         SELECT "orderNumber" FROM "orders" WHERE id = $1
+       )
+       SELECT m.n AS "number", t."takenBy" AS "takenBy"
+         FROM mine m
+         CROSS JOIN LATERAL (
+           SELECT COALESCE(
+             (SELECT o2."orderNumber"
+                FROM "order_internal_orders" iio
+                JOIN "orders" o2 ON o2.id = iio."orderId"
+               WHERE iio."internalNumber" = m.n
+                 AND iio."cancelled" = false
+                 AND iio."orderId" <> $1
+               LIMIT 1),
+             (SELECT o3."orderNumber" FROM "orders" o3
+               WHERE o3."orderNumber" = m.n
+                 AND o3.status <> 'cancelled'
+                 AND o3.id <> $1
+               LIMIT 1)
+           ) AS "takenBy"
+         ) t
+        WHERE t."takenBy" IS NOT NULL
+        ORDER BY CASE WHEN m.n ~ '^[0-9]+$' THEN m.n::bigint ELSE 0 END`,
+      [orderId],
+    );
   }
 
   // ------- Payments subresource -------

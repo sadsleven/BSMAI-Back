@@ -23,6 +23,14 @@ export class OrderServiceTypeRowDto {
   @IsIn(PROVIDER_TYPES)
   providerType: 'doctor' | 'care_center';
 
+  /**
+   * Especialidad de esta fila. Una orden puede combinar especialidades (ej.
+   * laboratorio + rayos X); el proveedor de la fila debe tenerla asignada.
+   * `orders.specialtyId` se deriva de la primera fila.
+   */
+  @IsUUID('4')
+  specialtyId: string;
+
   @ValidateIf((o) => o.providerType === 'doctor')
   @IsUUID('4')
   doctorId?: string;

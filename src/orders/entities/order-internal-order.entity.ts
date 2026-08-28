@@ -26,7 +26,9 @@ import type { ProviderType } from './order.entity';
  * Tabla "dura" (sin `deletedAt`): quitar un proveedor en borrador BORRA la fila
  * y QUEMA su número (gap aceptable; la secuencia nunca retrocede, jamás se
  * reutiliza). XOR `doctorId`/`careCenterId` (CHECK `CHK_iio_provider_xor`);
- * unique parcial por (orden, proveedor); `internalNumber` UNIQUE global.
+ * unique parcial por (orden, proveedor); `internalNumber` UNIQUE entre las
+ * filas VIVAS (`WHERE NOT cancelled`) — el número de una orden CANCELADA queda
+ * libre para reutilizarlo a mano en otra orden.
  */
 @Entity({ name: 'order_internal_orders' })
 @Index('IDX_iio_order', ['orderId'])
@@ -58,9 +60,23 @@ export class OrderInternalOrder {
   @JoinColumn({ name: 'careCenterId' })
   careCenter?: CareCenter | null;
 
-  /** Número de orden interna de este proveedor. Extraído de `orders_seq`. UNIQUE global. */
+  /**
+   * Número de orden interna de este proveedor. Extraído de `orders_seq`.
+   * UNIQUE entre las filas VIVAS (`uq_iio_internal_number_active`,
+   * `WHERE NOT cancelled`): el número de una orden cancelada se puede
+   * reutilizar a mano en otra orden.
+   */
   @Column({ type: 'varchar', length: 32 })
   internalNumber: string;
+
+  /**
+   * Espejo de `orders.status = 'cancelled'` de la orden dueña. Existe sólo
+   * para que el UNIQUE parcial de `internalNumber` pueda excluir las
+   * canceladas (un índice parcial no puede mirar otra tabla). Lo mantienen
+   * `OrdersService.cancel` / `uncancel`; nunca llega desde un DTO.
+   */
+  @Column({ type: 'boolean', default: false })
+  cancelled: boolean;
 
   /**
    * Monto a pagar a este proveedor en USD. Se popula en el Paso 4

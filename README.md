@@ -347,7 +347,7 @@ CRUD simple paralelo a Especialidades: name (único) + description + isActive + 
 
 ### Órdenes (`orders`) — Paso 1 (registro)
 
-Entity con FKs: `branchId`, `holderId`, `patientId` (ambos a `patients`, pueden coincidir), `contractorId?`, `insuranceId?`, `providerType ∈ {doctor, care_center}` con `doctorId?`/`careCenterId?` (exactamente uno según `providerType`), `specialtyId`, `orderDate`, `appointmentDate`, `priceCurrency`, `priceAmount`, `createdById`. **`serviceTypes` y `pathologies` son M2M** (no FKs escalares).
+Entity con FKs: `branchId`, `holderId`, `patientId` (ambos a `patients`, pueden coincidir), `contractorId?`, `insuranceId?`, `providerType ∈ {doctor, care_center}` con `doctorId?`/`careCenterId?` (exactamente uno según `providerType`), `specialtyId` (principal derivada — la especialidad real vive por fila en `order_service_types`), `orderDate`, `appointmentDate`, `priceCurrency`, `priceAmount`, `createdById`. **`serviceTypes` y `pathologies` son M2M** (no FKs escalares).
 
 - Pivot `order_service_types(orderId, serviceTypeId)` — **N tipos de servicio (≥1)**. FK orderId CASCADE, serviceTypeId RESTRICT.
 - Pivot `order_pathologies(orderId, pathologyId)` — **0..N patologías**. Mismo esquema FK.
@@ -365,7 +365,7 @@ Las órdenes **históricas** (las que ya existían en papel y se registran ahora
 
 **Validaciones cruzadas** en `validateCoreReferences`:
 - Doctor o centro mutuamente excluyentes según `providerType`.
-- `specialtyId` debe estar entre las del proveedor (`doctor.specialties` o `careCenter.specialties`).
+- **Especialidad por fila ST** (`order_service_types.specialtyId`, NOT NULL, FK RESTRICT): una orden puede combinar especialidades (ej. laboratorio en un centro + rayos X en otro) y cada orden interna del Paso 2 imprime la de sus propias filas. Cada especialidad debe existir, estar activa, y **el proveedor de esa fila debe tenerla asignada** (`doctor.specialties` / `careCenter.specialties`). Excepción: los pares proveedor↔especialidad **ya persistidos** en la orden no se revalidan al editar (las órdenes previas a la migración `1782009300000` heredaron la especialidad única sin ese chequeo). `orders.specialtyId` queda como especialidad **principal derivada** = la de la primera fila (la usan el filtro del listado —vía `EXISTS` sobre todas las filas—, el dashboard y los reportes); ya **no** se envía en el DTO.
 - `serviceTypeIds` (≥1) — todos deben existir, no estar borrados y `isActive=true`.
 - `pathologyIds` (0..N) — si vienen, validados igual que service types.
 - Si `type === 'insurance'`: `contractorId` e `insuranceId` requeridos. `contractorId` debe estar entre `holder.contractors`. **`insuranceId` debe pertenecer al contractor seleccionado** (`contractor.insurances`), no a los seguros del holder directamente. Para otros tipos, ambos campos deben estar ausentes.

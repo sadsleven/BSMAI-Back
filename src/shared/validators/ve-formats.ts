@@ -2,16 +2,23 @@
  * Formatos venezolanos compartidos entre Pacientes, Doctores y Centros de Atención.
  *
  * Cédula: `V-XX.XXX.XXX` o `E-XX.XXX.XXX` (prefijo + 7-8 dígitos con puntos de miles).
+ *         Los pacientes admiten además el prefijo `M` (menores de edad), que
+ *         convive con una `V` del mismo número: `V-20.233.123` y `M-20.233.123`
+ *         son cédulas distintas.
  * RIF:    `J-XXXXXXXX-X` (prefijo J/G/V/E + 7-8 dígitos SIN puntos + guión + dígito verificador).
  * Phone:  exactamente 11 dígitos numéricos.
  */
 
 export const CEDULA_PATTERN = /^[VEve]-\d{1,2}\.\d{3}\.\d{3}$/;
+/** Cédula de paciente: acepta `M` (menor de edad) además de `V`/`E`. */
+export const PATIENT_CEDULA_PATTERN = /^[VEMvem]-\d{1,2}\.\d{3}\.\d{3}$/;
 export const RIF_PATTERN = /^[JGVEjgve]-\d{7,8}-\d$/;
 export const PHONE_PATTERN = /^\d{11}$/;
 
 export const CEDULA_MESSAGE =
   'La cédula debe tener formato V-XX.XXX.XXX o E-XX.XXX.XXX';
+export const PATIENT_CEDULA_MESSAGE =
+  'La cédula debe tener formato V-XX.XXX.XXX, E-XX.XXX.XXX o M-XX.XXX.XXX';
 export const RIF_MESSAGE =
   'El RIF debe tener formato J-XXXXXXXX-X (sin puntos; prefijos J, G, V o E)';
 export const PHONE_MESSAGE = 'El teléfono debe tener exactamente 11 dígitos';

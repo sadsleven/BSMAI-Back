@@ -11,6 +11,7 @@ import {
 import { Order } from './order.entity';
 import { OrderInternalOrder } from './order-internal-order.entity';
 import { ServiceType } from '../../service-types/entities/service-type.entity';
+import { Specialty } from '../../specialties/entities/specialty.entity';
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import type { ProviderType } from './order.entity';
@@ -26,6 +27,7 @@ import type { ProviderType } from './order.entity';
 @Index('IDX_ost_doctor', ['doctorId'])
 @Index('IDX_ost_careCenter', ['careCenterId'])
 @Index('IDX_ost_internalOrder', ['internalOrderId'])
+@Index('IDX_ost_specialty', ['specialtyId'])
 export class OrderServiceType {
   @PrimaryColumn({ type: 'uuid' })
   orderId: string;
@@ -43,6 +45,19 @@ export class OrderServiceType {
 
   @Column({ type: 'varchar', length: 16 })
   providerType: ProviderType;
+
+  /**
+   * Especialidad de ESTA fila. Una orden puede combinar especialidades (ej.
+   * laboratorio en un centro + rayos X en otro); la orden interna del Paso 2
+   * imprime la(s) especialidad(es) de las filas de su proveedor.
+   * `orders.specialtyId` queda como principal derivada (la de la primera fila).
+   */
+  @Column({ type: 'uuid' })
+  specialtyId: string;
+
+  @ManyToOne(() => Specialty, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'specialtyId' })
+  specialty: Specialty;
 
   /**
    * Orden interna (número por proveedor) a la que pertenece esta fila. FK real

@@ -114,8 +114,10 @@ export class BillingProviderDto {
  * Paso 4 — Facturación y liquidación.
  *
  * Acepta una lista `providers[]` con un pago USD por proveedor distinto que
- * participa en la orden. `billingExchangeRateId` es la tasa **USD/Bs** vigente
- * al facturar — snapshot para convertir pagos BS/EUR a USD a posteriori.
+ * participa en la orden. `billingExchangeRateId` es la tasa **USD/Bs elegida
+ * por el usuario** para emitir la factura: se imprime en el documento, convierte
+ * los brutos de CxP / retenciones / reportes y, en órdenes de seguro no
+ * indexado, fija el monto en Bs de la cuenta por cobrar.
  *
  * `doctorAmount` queda como total agregado USD (derivado en service).
  */

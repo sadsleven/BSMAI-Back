@@ -16,8 +16,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
-  CEDULA_MESSAGE,
-  CEDULA_PATTERN,
+  PATIENT_CEDULA_MESSAGE,
+  PATIENT_CEDULA_PATTERN,
   RIF_MESSAGE,
   RIF_PATTERN,
 } from '../../shared/validators/ve-formats';
@@ -36,7 +36,7 @@ export class CreatePatientDto {
   @IsOptional()
   @ValidateIf((o) => o.cedula !== undefined && o.cedula !== null && o.cedula !== '')
   @IsString()
-  @Matches(CEDULA_PATTERN, { message: CEDULA_MESSAGE })
+  @Matches(PATIENT_CEDULA_PATTERN, { message: PATIENT_CEDULA_MESSAGE })
   cedula?: string;
 
   @ValidateIf((o) => o.personType === 'natural')

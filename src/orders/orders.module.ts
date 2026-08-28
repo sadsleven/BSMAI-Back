@@ -17,6 +17,7 @@ import { Bank } from '../banks/entities/bank.entity';
 import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { ServiceType } from '../service-types/entities/service-type.entity';
 import { Pathology } from '../pathologies/entities/pathology.entity';
+import { Specialty } from '../specialties/entities/specialty.entity';
 import { Insurance } from '../insurances/entities/insurance.entity';
 import { InsuranceServicePrice } from '../insurances/entities/insurance-service-price.entity';
 import { DoctorServicePrice } from '../doctors/entities/doctor-service-price.entity';
@@ -48,6 +49,7 @@ import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.m
       ExchangeRate,
       ServiceType,
       Pathology,
+      Specialty,
       Insurance,
       InsuranceServicePrice,
       DoctorServicePrice,

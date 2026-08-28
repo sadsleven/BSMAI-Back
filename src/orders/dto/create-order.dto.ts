@@ -72,9 +72,6 @@ export class CreateOrderDto {
   @IsBoolean()
   isReimbursement?: boolean;
 
-  @IsUUID()
-  specialtyId: string;
-
   /**
    * Número de orden elegido en el Paso 1. Cualquier entero ≥ 1 que esté LIBRE:
    * el formulario propone por defecto el mayor en uso + 1, y con varios
@@ -145,8 +142,9 @@ export class CreateOrderDto {
   /**
    * Tasa de la orden (USD/Bs) para seguros `isIndexed=true` (UI: "No indexado").
    * `useFixedRate` ya no se envía: el service lo deriva del flag del seguro.
-   * Cuando el flag es true, esta tasa (día de la orden) es obligatoria; si no,
-   * se ignora.
+   * **Opcional**: la tasa definitiva se elige en el Paso 4 junto con la de la
+   * factura; sin enviarla el service deja como provisional la del día de la
+   * orden. Cuando el flag es false se ignora.
    */
   @IsOptional()
   @IsUUID()
