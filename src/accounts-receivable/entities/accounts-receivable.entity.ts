@@ -14,6 +14,7 @@ import {
 } from 'typeorm';
 import { Insurance } from '../../insurances/entities/insurance.entity';
 import { Patient } from '../../patients/entities/patient.entity';
+import { User } from '../../users/entities/user.entity';
 import { AccountsReceivablePayment } from './accounts-receivable-payment.entity';
 import { AccountsReceivableOrder } from './accounts-receivable-order.entity';
 
@@ -69,6 +70,29 @@ export class AccountsReceivable {
   @Column({ type: 'timestamptz', nullable: true })
   collectedAt?: Date | null;
 
+  /**
+   * Ajuste firmado sobre el total a cobrar, en la MONEDA DEL LOTE (Bs si
+   * `mode='fixed'`, USD si `mode='usd'`). Negativo = resta (el seguro paga
+   * menos de lo facturado), positivo = suma. NULL/0 = sin ajuste.
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  adjustmentAmount?: string | null;
+
+  /** Motivo del ajuste. Obligatorio cuando `adjustmentAmount` ≠ 0. */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  adjustmentNote?: string | null;
+
+  /** Usuario que aplicó el ajuste vigente. */
+  @Column({ type: 'uuid', nullable: true })
+  adjustedById?: string | null;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'adjustedById' })
+  adjustedBy?: User | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  adjustedAt?: Date | null;
+
   /** Órdenes incluidas en el lote (pivot con snapshot de modo y target). */
   @OneToMany(() => AccountsReceivableOrder, (o) => o.receivable, { cascade: false })
   orders: AccountsReceivableOrder[];
@@ -93,10 +117,14 @@ export class AccountsReceivable {
   // --- Transient (NO columnas). Calculados por el servicio al listar/ver. ---
   /** Modo de cobro del lote: 'fixed' (Bs tasa fija) o 'usd'. Uniforme por lote. */
   mode?: 'usd' | 'fixed';
-  /** Target USD del lote (modo usd). */
+  /** Target USD del lote (modo usd), YA con el ajuste aplicado. */
   targetUsd?: number;
-  /** Target Bs del lote (modo fixed). */
+  /** Target Bs del lote (modo fixed), YA con el ajuste aplicado. */
   targetBs?: number;
+  /** Target USD sin ajuste (Σ snapshot del pivot). */
+  targetBaseUsd?: number;
+  /** Target Bs sin ajuste (Σ snapshot del pivot). */
+  targetBaseBs?: number;
   /** Cobrado USD (Σ cobros). */
   collectedUsd?: number;
   /** Cobrado Bs (Σ cobros). */

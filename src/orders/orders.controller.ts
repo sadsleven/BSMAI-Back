@@ -16,13 +16,17 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryOrderNumberDto } from './dto/query-order-number.dto';
+import { QueryInvoiceNumberDto } from './dto/query-invoice-number.dto';
+import { QueryServiceKeyDto } from './dto/query-service-key.dto';
 import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
 import {
   AttendOrderDto,
   AuthorizeOrderAmountDto,
   BillingOrderDto,
   CancelOrderDto,
+  CancelOrderInvoiceDto,
   ChangeOrderNumberDto,
+  IssueOrderInvoiceDto,
   ReportOrderDto,
 } from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -69,6 +73,27 @@ export class OrdersController {
   @Get('numbers/availability')
   numberAvailability(@Query() query: QueryOrderNumberDto) {
     return this.service.numberAvailability(query);
+  }
+
+  /**
+   * Disponibilidad de un N° de factura (Paso 4). Sin `number` devuelve la
+   * sugerencia (el mayor emitido + 1). Los números no se reutilizan: un número
+   * de factura anulada sigue ocupado. Sólo JWT (lo consulta el formulario
+   * mientras el usuario escribe).
+   */
+  @Get('invoices/availability')
+  invoiceNumberAvailability(@Query() query: QueryInvoiceNumberDto) {
+    return this.service.invoiceNumberAvailability(query);
+  }
+
+  /**
+   * Disponibilidad de una clave de servicio (Paso 1). Única entre órdenes
+   * vivas: sólo se libera si la orden que la tenía fue cancelada. Sólo JWT (la
+   * consulta el formulario mientras el usuario escribe).
+   */
+  @Get('service-keys/availability')
+  serviceKeyAvailability(@Query() query: QueryServiceKeyDto) {
+    return this.service.serviceKeyAvailability(query);
   }
 
   /** Historial de cambios por usuario de la orden (más reciente primero). */
@@ -219,6 +244,32 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.billing(id, dto, user);
+  }
+
+  /**
+   * Emite una factura NUEVA para una orden finalizada cuya factura vigente fue
+   * anulada (la orden sigue activa; sólo cambia el documento fiscal).
+   */
+  @RequirePermissions(PERMISSIONS.ORDERS.STAGE_BILLING)
+  @Post(':id/invoices')
+  issueInvoice(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: IssueOrderInvoiceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.issueInvoice(id, dto, user);
+  }
+
+  /** Anula una factura de la orden (NO la orden). Su número queda quemado. */
+  @RequirePermissions(PERMISSIONS.ORDERS.STAGE_BILLING)
+  @Patch(':id/invoices/:invoiceId/cancel')
+  cancelInvoice(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @Body() dto: CancelOrderInvoiceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.cancelInvoice(id, invoiceId, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.ORDERS.UPDATE)

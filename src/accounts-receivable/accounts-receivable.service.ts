@@ -405,6 +405,8 @@ export class AccountsReceivableService {
       relations: {
         insurance: true,
         holder: { phones: true },
+        // Autor del ajuste del total (card "Ajuste" del detalle).
+        adjustedBy: true,
         // holder/patient/fixedExchangeRate de cada orden: los usa el estado de
         // cuenta Excel del lote de seguro en el FE.
         orders: {
@@ -433,23 +435,81 @@ export class AccountsReceivableService {
     const pivots = batch.orders ?? [];
     const mode: 'usd' | 'fixed' = pivots.some((o) => o.useFixedRate) ? 'fixed' : 'usd';
     batch.mode = mode;
+    // Ajuste firmado en la moneda del lote (negativo resta, positivo suma).
+    // El target efectivo nunca baja de 0.
+    const adjustment = round2(Number(batch.adjustmentAmount ?? 0) || 0);
     if (mode === 'fixed') {
-      const targetBs = round2(pivots.reduce((s, o) => s + Number(o.targetBs || 0), 0));
+      const baseBs = round2(pivots.reduce((s, o) => s + Number(o.targetBs || 0), 0));
+      const targetBs = Math.max(0, round2(baseBs + adjustment));
       const collectedBs = round2(
         (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
       );
+      batch.targetBaseBs = baseBs;
       batch.targetBs = targetBs;
       batch.collectedBs = collectedBs;
       batch.pendingBs = Math.max(0, round2(targetBs - collectedBs));
     } else {
-      const targetUsd = round2(pivots.reduce((s, o) => s + Number(o.targetUsd || 0), 0));
+      const baseUsd = round2(pivots.reduce((s, o) => s + Number(o.targetUsd || 0), 0));
+      const targetUsd = Math.max(0, round2(baseUsd + adjustment));
       const collectedUsd = round2(
         (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInUsd || 0), 0),
       );
+      batch.targetBaseUsd = baseUsd;
       batch.targetUsd = targetUsd;
       batch.collectedUsd = collectedUsd;
       batch.pendingUsd = Math.max(0, round2(targetUsd - collectedUsd));
     }
+  }
+
+  /**
+   * Ajusta (resta o suma) el total a cobrar del lote. Pensado para seguros que
+   * pagan menos de lo facturado: con el ajuste el lote puede quedar `collected`
+   * sin sobre/sub-cobro artificial. El monto va en la moneda del lote (Bs en
+   * modo tasa fija, USD en modo USD); `amount = 0` limpia el ajuste. Espeja el
+   * ajuste de monto del Paso 1: con ajuste ≠ 0 el motivo es obligatorio y queda
+   * el autor + la fecha.
+   */
+  async setAdjustment(
+    id: string,
+    amount: number,
+    note: string | undefined,
+    user: AuthenticatedUser,
+  ): Promise<AccountsReceivable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+
+    const value = round2(Number(amount) || 0);
+    if (!Number.isFinite(value)) {
+      throw new BadRequestException('Monto del ajuste inválido');
+    }
+    const trimmed = (note ?? '').trim();
+    const clear = Math.abs(value) < 0.005;
+    if (!clear && trimmed.length < 3) {
+      throw new BadRequestException(
+        'Indica el motivo del ajuste (mínimo 3 caracteres)',
+      );
+    }
+    // El ajuste no puede dejar el total a cobrar en negativo.
+    this.computeFigures(batch);
+    const base =
+      batch.mode === 'fixed' ? (batch.targetBaseBs ?? 0) : (batch.targetBaseUsd ?? 0);
+    if (!clear && round2(base + value) < 0) {
+      throw new BadRequestException(
+        'El ajuste no puede dejar el total a cobrar en negativo',
+      );
+    }
+
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(AccountsReceivable, id, {
+        adjustmentAmount: clear ? null : value.toFixed(2),
+        adjustmentNote: clear ? null : trimmed,
+        adjustedById: clear ? null : user.id,
+        adjustedAt: clear ? null : new Date(),
+      });
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
   }
 
   // ---------------------------------------------------------------------------

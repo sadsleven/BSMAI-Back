@@ -581,6 +581,7 @@ export class ReportsService {
         receivableStatus: string | null;
         arTargetUsd: string | null;
         arTargetBs: string | null;
+        arAdjustment: string | null;
       }>
     >(
       // Expansión por porciones (espeja el listado de Pendientes de AR): una
@@ -609,7 +610,8 @@ export class ReportsService {
               fx."amountBs"::text AS "fixedRateBs",
               pt.portion AS "portion", ix."indexedUsd"::text AS "indexedUsd",
               ar.id AS "receivableId", ar."receivableNumber", ar.status AS "receivableStatus",
-              aro."targetUsd"::text AS "arTargetUsd", aro."targetBs"::text AS "arTargetBs"
+              aro."targetUsd"::text AS "arTargetUsd", aro."targetBs"::text AS "arTargetBs",
+              ar."adjustmentAmount"::text AS "arAdjustment"
        FROM "orders" o
        LEFT JOIN "branches" b ON b.id = o."branchId"
        LEFT JOIN "insurances" i ON i.id = o."insuranceId"
@@ -650,6 +652,9 @@ export class ReportsService {
     const loteMode = new Map<string, 'usd' | 'fixed'>();
     const loteTargetUsd = new Map<string, number>();
     const loteTargetBs = new Map<string, number>();
+    // Ajuste del lote (resta/suma sobre el total a cobrar), en la moneda del
+    // lote. Es a nivel de LOTE: no se reparte por orden, se suma una vez.
+    const loteAdjustment = new Map<string, number>();
     // Modo efectivo de la fila: la porción manda sobre el flag de la orden
     // (porción indexada de una orden tasa fija = modo USD).
     const rowFixed = (r: { portion: string; useFixedRate: boolean }): boolean =>
@@ -667,6 +672,16 @@ export class ReportsService {
         r.receivableId,
         (loteTargetBs.get(r.receivableId) ?? 0) + num(r.arTargetBs),
       );
+      loteAdjustment.set(r.receivableId, num(r.arAdjustment));
+    }
+    // El ajuste entra una sola vez al target del lote, en su moneda.
+    for (const [lote, adj] of loteAdjustment) {
+      if (!adj) continue;
+      if (loteMode.get(lote) === 'fixed') {
+        loteTargetBs.set(lote, Math.max(0, (loteTargetBs.get(lote) ?? 0) + adj));
+      } else {
+        loteTargetUsd.set(lote, Math.max(0, (loteTargetUsd.get(lote) ?? 0) + adj));
+      }
     }
 
     const perOrderRows = orders.map((r) => {
@@ -732,6 +747,7 @@ export class ReportsService {
       loteMode,
       loteTargetUsd,
       loteTargetBs,
+      loteAdjustment,
     });
 
     if (query.groupBy !== 'insurance' && query.groupBy !== 'holder') {
@@ -923,6 +939,8 @@ export class ReportsService {
       loteMode: Map<string, 'usd' | 'fixed'>;
       loteTargetUsd: Map<string, number>;
       loteTargetBs: Map<string, number>;
+      /** Ajuste por lote (resta/suma) en la moneda del lote. */
+      loteAdjustment?: Map<string, number>;
     },
   ): Record<string, number> {
     let targetUsd = 0;
@@ -930,6 +948,13 @@ export class ReportsService {
     for (const row of perOrderRows) {
       targetUsd += num(row.targetUsd);
       targetBs += num(row.targetBs);
+    }
+    // Los targets por fila son el snapshot por orden (sin ajuste): el ajuste
+    // vive en el lote, así que se suma una vez por lote en su moneda.
+    for (const [lote, adj] of ctx.loteAdjustment ?? []) {
+      if (!adj) continue;
+      if (ctx.loteMode.get(lote) === 'fixed') targetBs += adj;
+      else targetUsd += adj;
     }
     let collectedUsd = 0;
     let collectedBs = 0;

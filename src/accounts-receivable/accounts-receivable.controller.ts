@@ -13,6 +13,7 @@ import {
 import { AccountsReceivableService } from './accounts-receivable.service';
 import {
   AccountsReceivablePaymentDto,
+  AdjustAccountsReceivableDto,
   CreateAccountsReceivableBatchDto,
   MutateAccountsReceivableOrdersDto,
   QueryAccountsReceivableDto,
@@ -82,6 +83,20 @@ export class AccountsReceivableController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.removeOrders(id, dto.orderIds, user);
+  }
+
+  /**
+   * Ajusta (resta o suma) el total a cobrar del lote — p. ej. el seguro paga
+   * menos de lo facturado. Monto en la moneda del lote; 0 limpia el ajuste.
+   */
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.UPDATE)
+  @Patch(':id/adjustment')
+  setAdjustment(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AdjustAccountsReceivableDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setAdjustment(id, dto.amount, dto.note, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.UPDATE)

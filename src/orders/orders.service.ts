@@ -14,6 +14,7 @@ import { OrderPayment } from './entities/order-payment.entity';
 import { OrderServiceType } from './entities/order-service-type.entity';
 import { OrderProviderReport } from './entities/order-provider-report.entity';
 import { OrderInternalOrder } from './entities/order-internal-order.entity';
+import { OrderInvoice } from './entities/order-invoice.entity';
 import {
   OrderChangeAction,
   OrderChangeLog,
@@ -32,7 +33,10 @@ import {
   BillingOrderDto,
   BillingProviderDto,
   CancelOrderDto,
+  CancelOrderInvoiceDto,
   ChangeOrderNumberDto,
+  IssueOrderInvoiceDto,
+  MAX_INVOICE_NUMBER,
   ReportOrderDto,
 } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
@@ -76,6 +80,28 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 void ALLOWED_TRANSITIONS;
 
 type ProviderKey = `doctor:${string}` | `care_center:${string}`;
+
+/** Dígitos con los que se imprime el N° de factura (`4912` → `04912`). */
+const INVOICE_NUMBER_PAD = 5;
+/** El N° de control va 50 por delante del de factura. */
+const INVOICE_CONTROL_OFFSET = 50;
+/** …y con dos ceros extra adelante (`04912` → `0004962`). */
+const INVOICE_CONTROL_PREFIX = '00';
+
+/** N° de factura impreso: entero con ceros a la izquierda. */
+export function formatInvoiceNumber(n: number): string {
+  return String(Math.trunc(n)).padStart(INVOICE_NUMBER_PAD, '0');
+}
+
+/**
+ * N° de control DERIVADO del de factura: mismo número + 50, con la misma
+ * cantidad de dígitos y dos ceros delante. `04912` → `0004962`.
+ */
+export function deriveControlNumber(n: number): string {
+  return (
+    INVOICE_CONTROL_PREFIX + formatInvoiceNumber(Math.trunc(n) + INVOICE_CONTROL_OFFSET)
+  );
+}
 
 /**
  * Clave `providerType:providerId:specialtyId` de una fila ST. Sirve para saber
@@ -813,6 +839,69 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
+   * La clave de servicio (autorización del seguro) es ÚNICA entre órdenes
+   * vivas y NO se reutiliza: sólo vuelve a quedar libre si la orden que la
+   * tenía fue cancelada (misma regla que el N° de orden; el índice parcial
+   * `ux_orders_service_key_active` lo garantiza). Se valida dentro de la
+   * transacción para dar un mensaje claro antes de que salte el índice.
+   */
+  private async assertServiceKeyAvailable(
+    mgr: EntityManager,
+    serviceKey: string | null,
+    excludeOrderId?: string,
+  ): Promise<void> {
+    if (!serviceKey) return;
+    const rows = await mgr.query<{ orderNumber: string }[]>(
+      `SELECT "orderNumber" FROM "orders"
+        WHERE "serviceKey" = $1
+          AND "status" <> 'cancelled'
+          AND ($2::uuid IS NULL OR id <> $2::uuid)
+        LIMIT 1`,
+      [serviceKey, excludeOrderId ?? null],
+    );
+    if (rows.length) {
+      throw new BadRequestException(
+        `La clave de servicio "${serviceKey}" ya está en uso por la orden N° ${rows[0].orderNumber}. Sólo queda libre si esa orden se cancela.`,
+      );
+    }
+  }
+
+  /**
+   * Disponibilidad de una clave de servicio (feedback en vivo del Paso 1).
+   * `cancelled: true` = está libre porque su orden fue cancelada (ya se
+   * imprimió en esa orden).
+   */
+  async serviceKeyAvailability(opts: { key?: string; orderId?: string }): Promise<{
+    key: string | null;
+    available: boolean | null;
+    usedByOrderNumber: string | null;
+    cancelled: boolean;
+  }> {
+    const key = (opts.key ?? '').trim();
+    if (!key) {
+      return { key: null, available: null, usedByOrderNumber: null, cancelled: false };
+    }
+    const rows = await this.dataSource.manager.query<
+      { orderNumber: string; status: string }[]
+    >(
+      `SELECT "orderNumber", "status" FROM "orders"
+        WHERE "serviceKey" = $1
+          AND ($2::uuid IS NULL OR id <> $2::uuid)
+        ORDER BY ("status" <> 'cancelled') DESC
+        LIMIT 1`,
+      [key, opts.orderId ?? null],
+    );
+    const row = rows[0];
+    const taken = !!row && row.status !== 'cancelled';
+    return {
+      key,
+      available: !taken,
+      usedByOrderNumber: row ? row.orderNumber : null,
+      cancelled: !!row && row.status === 'cancelled',
+    };
+  }
+
+  /**
    * Primer número ≥ `from` cuyo bloque de `count` números consecutivos está
    * completamente libre, buscando en una ventana acotada. Sin hueco en la
    * ventana devuelve `fallback` (el número automático).
@@ -974,7 +1063,8 @@ export class OrdersService implements OnModuleInit {
       orderDateTo,
       appointmentDateFrom,
       appointmentDateTo,
-      sortBy = 'createdAt',
+      // El listado ordena por N° de orden por defecto (no por fecha de creación).
+      sortBy = 'orderNumber',
       sortDir = 'DESC',
       withDeleted,
       onlyDeleted,
@@ -999,8 +1089,22 @@ export class OrdersService implements OnModuleInit {
       // Órdenes internas (números por proveedor) para mostrar todos en el listado.
       .leftJoinAndSelect('o.internalOrders', 'orderInternalOrders')
       // Creador de la orden (columna "Creado por" del listado).
-      .leftJoinAndSelect('o.createdBy', 'createdBy')
-      .orderBy(`o.${sortBy}`, sortDir);
+      .leftJoinAndSelect('o.createdBy', 'createdBy');
+
+    // `orderNumber` es varchar: ordenar como texto pone 100 antes que 99. Se
+    // ordena por su valor numérico (los no numéricos van al final). El orden va
+    // por ALIAS de un addSelect, no por una expresión cruda: la paginación de
+    // TypeORM (take/skip + DISTINCT sobre los ids) no sabe traducir expresiones.
+    if (sortBy === 'orderNumber') {
+      qb.addSelect(
+        `CASE WHEN o."orderNumber" ~ '^[0-9]+$' THEN o."orderNumber"::bigint END`,
+        'order_number_num',
+      )
+        .orderBy('order_number_num', sortDir, 'NULLS LAST')
+        .addOrderBy('o.orderNumber', sortDir);
+    } else {
+      qb.orderBy(`o.${sortBy}`, sortDir);
+    }
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('o.deletedAt IS NOT NULL');
@@ -1130,7 +1234,18 @@ export class OrdersService implements OnModuleInit {
     });
     if (!order) throw new NotFoundException('Orden no encontrada');
     await this.assertOrderVisibility(order, user);
+    order.invoices = await this.loadInvoices(order.id);
     return order;
+  }
+
+  /** Facturas de la orden (vigente + anuladas), más antigua primero. */
+  private async loadInvoices(orderId: string): Promise<OrderInvoice[]> {
+    return this.repo.manager.getRepository(OrderInvoice).find({
+      where: { orderId },
+      relations: { cancelledBy: true, createdBy: true, exchangeRate: true },
+      loadEagerRelations: false,
+      order: { createdAt: 'ASC' },
+    });
   }
 
   /**
@@ -1814,7 +1929,14 @@ export class OrdersService implements OnModuleInit {
       dto.casheaFirstInstallmentAmount,
     );
 
+    const serviceKeyValue =
+      dto.type === 'insurance' && dto.serviceKey?.trim()
+        ? dto.serviceKey.trim()
+        : null;
+
     const savedId = await this.dataSource.transaction(async (mgr) => {
+      // Clave de servicio única entre órdenes vivas (no se reutiliza).
+      await this.assertServiceKeyAvailable(mgr, serviceKeyValue);
       // Una orden interna (= un número) por proveedor distinto. Se extraen todos
       // los números por adelantado; el primero es además el número BASE de la
       // orden (base == proveedor 1). Una orden siempre tiene ≥1 proveedor.
@@ -1837,10 +1959,7 @@ export class OrdersService implements OnModuleInit {
         insuranceId: dto.insuranceId ?? null,
         insuranceSource:
           dto.type === 'insurance' ? (dto.insuranceSource ?? null) : null,
-        serviceKey:
-          dto.type === 'insurance' && dto.serviceKey?.trim()
-            ? dto.serviceKey.trim()
-            : null,
+        serviceKey: serviceKeyValue,
         isReimbursement: dto.type === 'credit' ? !!dto.isReimbursement : false,
         specialtyId: this.primarySpecialtyId(dto.serviceTypes),
         orderDate: dto.orderDate,
@@ -2459,6 +2578,12 @@ export class OrdersService implements OnModuleInit {
 
     // Fecha a mostrar en la factura. Sin enviar → la fecha de la orden.
     const invoiceDate = (dto.invoiceDate ?? order.orderDate).slice(0, 10);
+    const invoiceNumber = this.assertInvoiceNumberRange(dto.invoiceNumber);
+    const invoiceDisplay = formatInvoiceNumber(invoiceNumber);
+    const controlNumber = deriveControlNumber(invoiceNumber);
+    // Switch del Paso 4 (sólo seguros). Sin elección explícita queda `null` y
+    // manda la regla derivada: se imprime salvo en seguro no indexado.
+    const showExchangeRate = dto.showExchangeRate ?? null;
 
     // Total USD + validación cap.
     const priceAmount = Number(order.priceAmount);
@@ -2499,6 +2624,21 @@ export class OrdersService implements OnModuleInit {
 
     // Replace-all snapshots del lado pago + per-account providerAmount.
     await this.dataSource.transaction(async (mgr) => {
+      // La factura nace aquí: número libre (nunca reutilizable) + control
+      // derivado. El lock serializa dos facturaciones simultáneas.
+      await this.lockInvoiceNumbers(mgr);
+      await this.assertInvoiceNumberFree(mgr, invoiceNumber, order.id);
+      await mgr.insert(OrderInvoice, {
+        orderId: order.id,
+        number: String(invoiceNumber),
+        invoiceNumber: invoiceDisplay,
+        controlNumber,
+        invoiceDate,
+        showExchangeRate,
+        exchangeRateId: dto.billingExchangeRateId,
+        status: 'active',
+        createdById: user.id,
+      });
       // `update` por columnas — la orden trae `providerReports` cargada y
       // `save(order)` intentaría sincronizar esa relación (nullear FKs).
       await mgr.update(
@@ -2515,9 +2655,10 @@ export class OrdersService implements OnModuleInit {
           ...(order.useFixedRate
             ? { fixedExchangeRateId: dto.billingExchangeRateId }
             : {}),
-          invoiceNumber: dto.invoiceNumber.trim(),
-          controlNumber: dto.controlNumber.trim(),
+          invoiceNumber: invoiceDisplay,
+          controlNumber,
           invoiceDate,
+          invoiceShowExchangeRate: showExchangeRate,
           status: 'finalized',
         },
       );
@@ -2553,13 +2694,317 @@ export class OrdersService implements OnModuleInit {
           from: order.doctorAmount != null ? Number(order.doctorAmount) : null,
           to: +totalUsd.toFixed(2),
         },
-        invoiceNumber: { to: dto.invoiceNumber.trim() },
-        controlNumber: { to: dto.controlNumber.trim() },
+        invoiceNumber: { to: invoiceDisplay },
+        controlNumber: { to: controlNumber },
         invoiceDate: { to: invoiceDate },
         invoiceExchangeRateId: {
           from: order.invoiceExchangeRateId ?? null,
           to: dto.billingExchangeRateId,
         },
+      });
+    });
+    return this.findOne(id, user);
+  }
+
+  // ---- Facturas del Paso 4 (numeración, emisión y anulación) ----
+
+  /** Rango válido del N° de factura, sin tocar la BD. */
+  private assertInvoiceNumberRange(value: number): number {
+    const n = Math.trunc(value);
+    if (!Number.isFinite(n) || n < 1) {
+      throw new BadRequestException(
+        'El número de factura debe ser mayor o igual a 1',
+      );
+    }
+    if (n > MAX_INVOICE_NUMBER) {
+      throw new BadRequestException(
+        `El número de factura no puede superar ${MAX_INVOICE_NUMBER}`,
+      );
+    }
+    return n;
+  }
+
+  /** Piso de la numeración automática de facturas (env, def 1). */
+  private invoiceNumberFloor(): number {
+    const raw = this.config.get<string>('INVOICE_NUMBER_START');
+    const start = raw ? Number(raw) : 1;
+    if (!Number.isFinite(start) || start < 1) return 1;
+    return Math.trunc(start);
+  }
+
+  /**
+   * Serializa la asignación de números de factura dentro de la transacción
+   * (mismo patrón que `orders_seq`): sin él, dos facturaciones simultáneas
+   * pueden leer el mismo "próximo libre" y una revienta contra el UNIQUE.
+   */
+  private async lockInvoiceNumbers(mgr: EntityManager): Promise<void> {
+    await mgr.query(
+      `SELECT pg_advisory_xact_lock(hashtext('order_invoices_number'))`,
+    );
+  }
+
+  /**
+   * Próximo N° de factura libre = el mayor EMITIDO + 1 (cuenta también las
+   * anuladas: su número ya se usó y no vuelve). Es el valor por defecto del
+   * Paso 4.
+   */
+  private async nextInvoiceNumber(mgr?: EntityManager): Promise<number> {
+    const runner = mgr ?? this.dataSource.manager;
+    const rows = await runner.query<{ next: string }[]>(
+      `SELECT GREATEST(
+         (SELECT COALESCE(MAX("number"), 0) + 1 FROM "order_invoices"),
+         $1::bigint
+       )::text AS next`,
+      [String(this.invoiceNumberFloor())],
+    );
+    const next = Number(rows[0]?.next);
+    if (!Number.isFinite(next)) {
+      throw new BadRequestException(
+        'No se pudo calcular el próximo número de factura',
+      );
+    }
+    return next;
+  }
+
+  /**
+   * Rechaza un N° de factura ya emitido. Los números NO se reutilizan: tampoco
+   * los de las facturas anuladas (ese número ya salió impreso). `selfOrderId`
+   * tolera el de la factura VIGENTE de la propia orden.
+   */
+  private async assertInvoiceNumberFree(
+    mgr: EntityManager,
+    number: number,
+    selfOrderId?: string,
+  ): Promise<void> {
+    const rows = await mgr.query<
+      { id: string; status: string; orderId: string; orderNumber: string }[]
+    >(
+      `SELECT i."id", i."status", i."orderId", o."orderNumber"
+         FROM "order_invoices" i
+         JOIN "orders" o ON o."id" = i."orderId"
+        WHERE i."number" = $1::bigint
+        LIMIT 1`,
+      [String(number)],
+    );
+    const row = rows[0];
+    if (!row) return;
+    if (row.status === 'active' && selfOrderId && row.orderId === selfOrderId) {
+      return;
+    }
+    throw new BadRequestException(
+      row.status === 'cancelled'
+        ? `El número de factura ${formatInvoiceNumber(number)} ya se usó en una factura anulada de la orden N° ${row.orderNumber}. Los números no se reutilizan.`
+        : `El número de factura ${formatInvoiceNumber(number)} ya está en uso en la orden N° ${row.orderNumber}`,
+    );
+  }
+
+  /**
+   * Disponibilidad de un N° de factura para el Paso 4.
+   *
+   *  - `suggestion`: próximo libre (el mayor emitido + 1) = valor por defecto.
+   *  - `available`: `false` si el número ya se emitió (vigente o anulado).
+   *  - `cancelled`: el número lo tiene una factura ANULADA (tampoco se reusa).
+   *  - `nextFree`: primer número libre ≥ el pedido.
+   *  - `invoiceNumber` / `controlNumber`: cómo quedarían impresos.
+   *
+   * `orderId` no marca como ocupada la factura vigente de esa misma orden.
+   */
+  async invoiceNumberAvailability(opts: {
+    number?: number;
+    orderId?: string;
+  }): Promise<{
+    suggestion: number;
+    number: number | null;
+    available: boolean | null;
+    cancelled: boolean;
+    usedByOrderNumber: string | null;
+    nextFree: number;
+    invoiceNumber: string | null;
+    controlNumber: string | null;
+  }> {
+    const suggestion = await this.nextInvoiceNumber();
+    if (opts.number == null) {
+      return {
+        suggestion,
+        number: null,
+        available: null,
+        cancelled: false,
+        usedByOrderNumber: null,
+        nextFree: suggestion,
+        invoiceNumber: null,
+        controlNumber: null,
+      };
+    }
+    const number = this.assertInvoiceNumberRange(opts.number);
+    const rows = await this.dataSource.manager.query<
+      { status: string; orderId: string; orderNumber: string }[]
+    >(
+      `SELECT i."status", i."orderId", o."orderNumber"
+         FROM "order_invoices" i
+         JOIN "orders" o ON o."id" = i."orderId"
+        WHERE i."number" = $1::bigint
+        LIMIT 1`,
+      [String(number)],
+    );
+    const row = rows[0];
+    const isSelf =
+      !!row &&
+      row.status === 'active' &&
+      !!opts.orderId &&
+      row.orderId === opts.orderId;
+    const available = !row || isSelf;
+    const freeRows = available
+      ? []
+      : await this.dataSource.manager.query<{ g: string }[]>(
+          `WITH taken AS (
+             SELECT "number" AS n FROM "order_invoices"
+              WHERE "number" IS NOT NULL AND "number" >= $1::bigint
+           )
+           SELECT g::text AS g
+             FROM generate_series(
+                    $1::bigint,
+                    COALESCE((SELECT MAX(n) FROM taken), $1::bigint) + 1
+                  ) AS g
+            WHERE NOT EXISTS (SELECT 1 FROM taken t WHERE t.n = g)
+            ORDER BY g
+            LIMIT 1`,
+          [String(number)],
+        );
+    const nextFree = available ? number : Number(freeRows[0]?.g ?? suggestion);
+    return {
+      suggestion,
+      number,
+      available,
+      cancelled: !!row && row.status === 'cancelled',
+      usedByOrderNumber: row && !isSelf ? row.orderNumber : null,
+      nextFree: Number.isFinite(nextFree) ? nextFree : suggestion,
+      invoiceNumber: formatInvoiceNumber(number),
+      controlNumber: deriveControlNumber(number),
+    };
+  }
+
+  /**
+   * Emite una factura NUEVA para una orden ya finalizada cuya factura vigente
+   * fue anulada. No toca la liquidación por proveedor ni las conversiones de
+   * CxP/CxC ya cerradas: sólo la tasa con la que se IMPRIME el documento
+   * (`invoiceExchangeRateId`).
+   */
+  async issueInvoice(
+    id: string,
+    dto: IssueOrderInvoiceDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    this.assertNotCancelled(order);
+    if (order.status !== 'finalized') {
+      throw new BadRequestException(
+        'La orden todavía no está facturada: emite la factura desde el Paso 4.',
+      );
+    }
+    const active = (order.invoices ?? []).find((i) => i.status === 'active');
+    if (active) {
+      throw new BadRequestException(
+        `La orden ya tiene la factura N° ${active.invoiceNumber} vigente. Anúlala antes de emitir otra.`,
+      );
+    }
+    const number = this.assertInvoiceNumberRange(dto.invoiceNumber);
+    const invoiceDisplay = formatInvoiceNumber(number);
+    const controlNumber = deriveControlNumber(number);
+    const invoiceDate = (dto.invoiceDate ?? order.orderDate).slice(0, 10);
+    const showExchangeRate =
+      dto.showExchangeRate ?? order.invoiceShowExchangeRate ?? null;
+    const rateId =
+      dto.exchangeRateId ??
+      order.invoiceExchangeRateId ??
+      order.billingExchangeRateId ??
+      null;
+    if (dto.exchangeRateId) {
+      await resolveUsdRate(this.ratesRepo, dto.exchangeRateId);
+    }
+
+    await this.dataSource.transaction(async (mgr) => {
+      await this.lockInvoiceNumbers(mgr);
+      await this.assertInvoiceNumberFree(mgr, number);
+      await mgr.insert(OrderInvoice, {
+        orderId: order.id,
+        number: String(number),
+        invoiceNumber: invoiceDisplay,
+        controlNumber,
+        invoiceDate,
+        showExchangeRate,
+        exchangeRateId: rateId,
+        status: 'active',
+        createdById: user.id,
+      });
+      await mgr.update(
+        Order,
+        { id: order.id },
+        {
+          invoiceNumber: invoiceDisplay,
+          controlNumber,
+          invoiceDate,
+          invoiceShowExchangeRate: showExchangeRate,
+          invoiceExchangeRateId: rateId,
+        },
+      );
+      await this.logChange(mgr, order.id, user.id, 'invoice_issue', {
+        invoiceNumber: { to: invoiceDisplay },
+        controlNumber: { to: controlNumber },
+        invoiceDate: { to: invoiceDate },
+      });
+    });
+    return this.findOne(id, user);
+  }
+
+  /**
+   * Anula una factura de la orden (NO la orden): queda el rastro con motivo,
+   * autor y fecha, y su número se quema para siempre. Si era la vigente, la
+   * orden queda sin factura hasta emitir otra.
+   */
+  async cancelInvoice(
+    id: string,
+    invoiceId: string,
+    dto: CancelOrderInvoiceDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    const invoice = (order.invoices ?? []).find((i) => i.id === invoiceId);
+    if (!invoice) {
+      throw new NotFoundException('Factura no encontrada en esta orden');
+    }
+    if (invoice.status === 'cancelled') {
+      throw new BadRequestException('La factura ya está anulada');
+    }
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(
+        OrderInvoice,
+        { id: invoice.id },
+        {
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancelReason: dto.reason,
+          cancelledById: user.id,
+        },
+      );
+      // El espejo de la orden apunta a la factura vigente: al anularla queda
+      // vacío (reportes y estado de cuenta dejan de mostrar ese número).
+      if (order.invoiceNumber === invoice.invoiceNumber) {
+        await mgr.update(
+          Order,
+          { id: order.id },
+          {
+            invoiceNumber: null,
+            controlNumber: null,
+            invoiceDate: null,
+            invoiceShowExchangeRate: null,
+            invoiceExchangeRateId: null,
+          },
+        );
+      }
+      await this.logChange(mgr, order.id, user.id, 'invoice_cancel', {
+        invoiceNumber: { from: invoice.invoiceNumber, to: null },
+        controlNumber: { from: invoice.controlNumber, to: null },
+        cancelReason: { to: dto.reason },
       });
     });
     return this.findOne(id, user);
@@ -3032,7 +3477,14 @@ export class OrdersService implements OnModuleInit {
       };
     }
 
+    const mergedServiceKey =
+      merged.type === 'insurance' && merged.serviceKey?.trim()
+        ? merged.serviceKey.trim()
+        : null;
+
     await this.dataSource.transaction(async (mgr) => {
+      // Clave de servicio única entre órdenes vivas (la propia orden se excluye).
+      await this.assertServiceKeyAvailable(mgr, mergedServiceKey, existing.id);
       // Importante: NO usar `Object.assign(existing, …)` + `mgr.save(existing)`
       // — la orden viene con las relaciones cargadas (patient/holder/branch/…)
       // y TypeORM deriva las columnas FK del objeto relación, ignorando los IDs
@@ -3046,10 +3498,7 @@ export class OrdersService implements OnModuleInit {
         insuranceId: merged.insuranceId ?? null,
         insuranceSource:
           merged.type === 'insurance' ? (merged.insuranceSource ?? null) : null,
-        serviceKey:
-          merged.type === 'insurance' && merged.serviceKey?.trim()
-            ? merged.serviceKey.trim()
-            : null,
+        serviceKey: mergedServiceKey,
         isReimbursement:
           merged.type === 'credit' ? !!merged.isReimbursement : false,
         specialtyId: mergedSpecialtyId,
@@ -3348,6 +3797,13 @@ export class OrdersService implements OnModuleInit {
             : `No puedes reactivar la orden: sus números ya los tienen otras órdenes — ${detail}. Cambia el número de esas órdenes y vuelve a intentarlo.`,
         );
       }
+      // Su clave de servicio también quedó libre al cancelarla: si otra orden
+      // viva ya la tomó, no se puede reactivar sin resolverlo antes.
+      await this.assertServiceKeyAvailable(
+        mgr,
+        order.serviceKey ?? null,
+        order.id,
+      );
       await mgr.getRepository(Order).update(
         { id: order.id },
         {

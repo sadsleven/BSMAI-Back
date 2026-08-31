@@ -23,6 +23,9 @@ import {
 
 export const PROVIDER_TYPES_FOR_BILLING = ['doctor', 'care_center'] as const;
 
+/** Tope del N° de factura (9 dígitos, igual que el N° de orden). */
+export const MAX_INVOICE_NUMBER = 999_999_999;
+
 /**
  * Cancelación de una orden (no borra: conserva el número y el contenido).
  * El motivo es obligatorio y queda en la orden + en el historial.
@@ -131,15 +134,16 @@ export class BillingOrderDto {
   @IsUUID()
   billingExchangeRateId: string;
 
-  @IsString()
-  @IsNotEmpty({ message: 'El número de factura es obligatorio' })
-  @MaxLength(50)
-  invoiceNumber: string;
-
-  @IsString()
-  @IsNotEmpty({ message: 'El número de control es obligatorio' })
-  @MaxLength(50)
-  controlNumber: string;
+  /**
+   * N° de factura como entero (se imprime con ceros a la izquierda). Debe estar
+   * libre: los números no se reutilizan, tampoco los de facturas anuladas. El
+   * N° de control NO se envía — el service lo deriva (`número + 50`, con dos
+   * ceros delante).
+   */
+  @IsInt({ message: 'El número de factura debe ser un entero' })
+  @Min(1, { message: 'El número de factura debe ser mayor o igual a 1' })
+  @Max(MAX_INVOICE_NUMBER)
+  invoiceNumber: number;
 
   /**
    * Fecha a mostrar en la factura (date-only `YYYY-MM-DD`). Sin enviar, el
@@ -148,6 +152,53 @@ export class BillingOrderDto {
   @IsOptional()
   @IsISO8601()
   invoiceDate?: string;
+
+  /**
+   * ¿La factura imprime la fila "Tasa de cambio BCV"? Sin enviar, vale la regla
+   * derivada (`!useFixedRate`: sale salvo en seguro no indexado).
+   */
+  @IsOptional()
+  @IsBoolean()
+  showExchangeRate?: boolean;
+}
+
+/**
+ * Emisión de una factura NUEVA para una orden ya finalizada cuya factura
+ * vigente fue anulada. Mismos datos que el Paso 4 (número, fecha y tasa), sin
+ * tocar la liquidación por proveedor.
+ */
+export class IssueOrderInvoiceDto {
+  @IsInt({ message: 'El número de factura debe ser un entero' })
+  @Min(1, { message: 'El número de factura debe ser mayor o igual a 1' })
+  @Max(MAX_INVOICE_NUMBER)
+  invoiceNumber: number;
+
+  @IsOptional()
+  @IsISO8601()
+  invoiceDate?: string;
+
+  /** Tasa USD/Bs de la nueva factura. Sin enviar, conserva la de la orden. */
+  @IsOptional()
+  @IsUUID()
+  exchangeRateId?: string;
+
+  /** ¿Imprime la fila "Tasa de cambio BCV"? Sin enviar, la regla derivada. */
+  @IsOptional()
+  @IsBoolean()
+  showExchangeRate?: boolean;
+}
+
+/**
+ * Anulación de una factura (NO de la orden): la orden sigue viva y puede emitir
+ * otra factura. El número de la anulada queda quemado para siempre.
+ */
+export class CancelOrderInvoiceDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'El motivo de la anulación es obligatorio' })
+  @MinLength(3, { message: 'El motivo debe tener al menos 3 caracteres' })
+  @MaxLength(500)
+  reason: string;
 }
 
 /**

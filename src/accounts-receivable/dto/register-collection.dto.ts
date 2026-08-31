@@ -204,3 +204,20 @@ export class QueryAccountsReceivableDto {
   @Matches(/^(ASC|DESC)$/i)
   sortDir?: 'ASC' | 'DESC';
 }
+
+/**
+ * Ajuste (resta o suma) del total a cobrar del lote. El monto va en la moneda
+ * del lote (Bs en modo tasa fija, USD en modo USD): negativo resta, positivo
+ * suma. `amount = 0` limpia el ajuste (y el motivo). Con ajuste ≠ 0 el motivo
+ * es obligatorio.
+ */
+export class AdjustAccountsReceivableDto {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Type(() => Number)
+  amount: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}

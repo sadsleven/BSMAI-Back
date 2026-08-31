@@ -24,7 +24,9 @@ export type OrderChangeAction =
   | 'soft_delete'
   | 'restore'
   | 'cancel'
-  | 'uncancel';
+  | 'uncancel'
+  | 'invoice_issue'
+  | 'invoice_cancel';
 
 /**
  * Historial de cambios por usuario de una orden. Una fila por acción relevante

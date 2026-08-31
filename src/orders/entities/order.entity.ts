@@ -24,6 +24,7 @@ import { OrderServiceType } from './order-service-type.entity';
 import { OrderServicePricing } from './order-service-pricing.entity';
 import { OrderProviderReport } from './order-provider-report.entity';
 import { OrderInternalOrder } from './order-internal-order.entity';
+import { OrderInvoice } from './order-invoice.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type OrderStatus =
@@ -329,6 +330,15 @@ export class Order {
   @JoinColumn({ name: 'invoiceExchangeRateId' })
   invoiceExchangeRate?: ExchangeRate | null;
 
+  /**
+   * Facturas emitidas para la orden (Paso 4): la vigente + las anuladas. Las
+   * columnas `invoiceNumber` / `controlNumber` / `invoiceDate` /
+   * `invoiceExchangeRateId` de abajo son el ESPEJO de la vigente (quedan en
+   * NULL mientras la orden no tenga ninguna activa).
+   */
+  @OneToMany(() => OrderInvoice, (i) => i.order, { cascade: false })
+  invoices?: OrderInvoice[];
+
   /** Número de factura fiscal capturado al facturar (Paso 4). */
   @Column({ type: 'varchar', length: 50, nullable: true })
   invoiceNumber?: string | null;
@@ -344,6 +354,14 @@ export class Order {
    */
   @Column({ type: 'date', nullable: true })
   invoiceDate?: string | null;
+
+  /**
+   * ¿La factura imprime la fila "Tasa de cambio BCV"? Espejo de la elección de
+   * la factura vigente (switch del Paso 4, sólo en órdenes de seguro).
+   * `null` = sin elección explícita ⇒ vale la regla derivada `!useFixedRate`.
+   */
+  @Column({ type: 'boolean', nullable: true })
+  invoiceShowExchangeRate?: boolean | null;
 
   /**
    * Cancelación de la orden (reversible). Alternativa al borrado: la orden
