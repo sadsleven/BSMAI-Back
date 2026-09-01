@@ -972,6 +972,10 @@ export class AccountsReceivableService {
       amountValue: p.amountValue.toFixed(2),
       amountInUsd: '0',
     };
+    // Tasa USD/Bs de referencia para convertir. La tasa elegida en el propio
+    // cobro (Bs) manda sobre la del lote: el cobro pudo hacerse otro día, a
+    // otra tasa. Mismo criterio que Órdenes (Paso 1) y Cuentas por pagar.
+    let usdCtxId = usdExchangeRateId ?? null;
 
     const needsPaymentAccount =
       p.type === 'mobile_payment' ||
@@ -1007,6 +1011,7 @@ export class AccountsReceivableService {
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('Cobro en BS requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+      usdCtxId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
       if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
@@ -1014,6 +1019,7 @@ export class AccountsReceivableService {
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
+      usdCtxId = p.exchangeRateId;
     } else if (p.type === 'bank_transfer_usd') {
       if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency !== 'USD')
@@ -1045,6 +1051,7 @@ export class AccountsReceivableService {
         if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
           throw new BadRequestException('other en EUR requiere tasa EUR/Bs');
         out.exchangeRateId = p.exchangeRateId;
+        if (p.amountCurrency === 'BS') usdCtxId = p.exchangeRateId;
       }
     }
 
@@ -1054,14 +1061,27 @@ export class AccountsReceivableService {
       exchangeRateId: p.exchangeRateId ?? null,
     };
     const usdAmount = await computeAmountInUsd(conversionInput, this.ratesRepo, {
-      usdExchangeRateId: usdExchangeRateId ?? null,
+      usdExchangeRateId: usdCtxId,
     });
     out.amountInUsd = usdAmount.toFixed(2);
     const bsAmount = await computeAmountInBs(conversionInput, this.ratesRepo, {
-      usdExchangeRateId: usdExchangeRateId ?? null,
+      usdExchangeRateId: usdCtxId,
     });
     out.amountInBs = bsAmount.toFixed(2);
     return out;
+  }
+
+  /**
+   * Tasa USD/Bs con la que se convierte un cobro: la del propio cobro cuando
+   * viene en Bs (manda sobre la del lote), sino la de referencia del lote.
+   */
+  private usdCtxIdForPayment(
+    p: AccountsReceivablePaymentDto,
+    usdExchangeRateId: string | null,
+  ): string | null {
+    return p.amountCurrency === 'BS'
+      ? p.exchangeRateId ?? usdExchangeRateId
+      : usdExchangeRateId;
   }
 
   private async computePaymentsTotalBs(
@@ -1077,7 +1097,7 @@ export class AccountsReceivableService {
           exchangeRateId: p.exchangeRateId ?? null,
         },
         this.ratesRepo,
-        { usdExchangeRateId },
+        { usdExchangeRateId: this.usdCtxIdForPayment(p, usdExchangeRateId) },
       );
     }
     return round2(total);
@@ -1096,7 +1116,7 @@ export class AccountsReceivableService {
           exchangeRateId: p.exchangeRateId ?? null,
         },
         this.ratesRepo,
-        { usdExchangeRateId },
+        { usdExchangeRateId: this.usdCtxIdForPayment(p, usdExchangeRateId) },
       );
     }
     return round2(total);
