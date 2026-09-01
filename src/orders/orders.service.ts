@@ -839,11 +839,15 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * La clave de servicio (autorización del seguro) es ÚNICA entre órdenes
+   * La clave de servicio (autorización del seguro) no se repite entre órdenes
    * vivas y NO se reutiliza: sólo vuelve a quedar libre si la orden que la
-   * tenía fue cancelada (misma regla que el N° de orden; el índice parcial
-   * `ux_orders_service_key_active` lo garantiza). Se valida dentro de la
-   * transacción para dar un mensaje claro antes de que salte el índice.
+   * tenía fue cancelada (misma regla que el N° de orden).
+   *
+   * **La regla es de aplicación, no de base de datos**: no hay índice único
+   * (los datos históricos ya traen claves repetidas y un UNIQUE dejaría esas
+   * órdenes sin poder editarse). Por eso sólo se valida cuando la clave se
+   * está escribiendo o cambiando — create, y update con clave distinta a la
+   * guardada. Las órdenes viejas duplicadas quedan grandfathered.
    */
   private async assertServiceKeyAvailable(
     mgr: EntityManager,
@@ -1935,7 +1939,7 @@ export class OrdersService implements OnModuleInit {
         : null;
 
     const savedId = await this.dataSource.transaction(async (mgr) => {
-      // Clave de servicio única entre órdenes vivas (no se reutiliza).
+      // Clave de servicio no repetida entre órdenes vivas (no se reutiliza).
       await this.assertServiceKeyAvailable(mgr, serviceKeyValue);
       // Una orden interna (= un número) por proveedor distinto. Se extraen todos
       // los números por adelantado; el primero es además el número BASE de la
@@ -3482,9 +3486,15 @@ export class OrdersService implements OnModuleInit {
         ? merged.serviceKey.trim()
         : null;
 
+    // Sólo se valida si la clave CAMBIA: una orden vieja con clave repetida
+    // (datos previos a la regla) tiene que poder seguir editándose.
+    const serviceKeyChanged = mergedServiceKey !== (existing.serviceKey ?? null);
+
     await this.dataSource.transaction(async (mgr) => {
-      // Clave de servicio única entre órdenes vivas (la propia orden se excluye).
-      await this.assertServiceKeyAvailable(mgr, mergedServiceKey, existing.id);
+      // Clave de servicio no repetida entre órdenes vivas (la propia se excluye).
+      if (serviceKeyChanged) {
+        await this.assertServiceKeyAvailable(mgr, mergedServiceKey, existing.id);
+      }
       // Importante: NO usar `Object.assign(existing, …)` + `mgr.save(existing)`
       // — la orden viene con las relaciones cargadas (patient/holder/branch/…)
       // y TypeORM deriva las columnas FK del objeto relación, ignorando los IDs
@@ -3797,13 +3807,11 @@ export class OrdersService implements OnModuleInit {
             : `No puedes reactivar la orden: sus números ya los tienen otras órdenes — ${detail}. Cambia el número de esas órdenes y vuelve a intentarlo.`,
         );
       }
-      // Su clave de servicio también quedó libre al cancelarla: si otra orden
-      // viva ya la tomó, no se puede reactivar sin resolverlo antes.
-      await this.assertServiceKeyAvailable(
-        mgr,
-        order.serviceKey ?? null,
-        order.id,
-      );
+      // La clave de servicio NO bloquea reactivar: la orden ya la traía y
+      // reactivar no la reescribe (si otra orden la tomó mientras tanto,
+      // quedan repetidas — igual que los duplicados históricos). Sin índice
+      // único en la base, bloquear aquí sólo dejaría la orden atascada: una
+      // cancelada tampoco se puede editar para cambiarle la clave.
       await mgr.getRepository(Order).update(
         { id: order.id },
         {
