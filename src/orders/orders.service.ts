@@ -99,7 +99,8 @@ export function formatInvoiceNumber(n: number): string {
  */
 export function deriveControlNumber(n: number): string {
   return (
-    INVOICE_CONTROL_PREFIX + formatInvoiceNumber(Math.trunc(n) + INVOICE_CONTROL_OFFSET)
+    INVOICE_CONTROL_PREFIX +
+    formatInvoiceNumber(Math.trunc(n) + INVOICE_CONTROL_OFFSET)
   );
 }
 
@@ -114,8 +115,7 @@ function providerSpecialtyKey(row: {
   careCenterId?: string | null;
   specialtyId?: string | null;
 }): string {
-  const pid =
-    row.providerType === 'doctor' ? row.doctorId : row.careCenterId;
+  const pid = row.providerType === 'doctor' ? row.doctorId : row.careCenterId;
   return `${row.providerType}:${pid ?? ''}:${row.specialtyId ?? ''}`;
 }
 
@@ -512,7 +512,9 @@ export class OrdersService implements OnModuleInit {
    *    números LIBRES ≥ `from`, para que las órdenes internas de una misma
    *    orden queden contiguas y se rellenen sus propios huecos.
    *  - sin opciones (numeración automática): `n` consecutivos desde la marca de
-   *    agua (`orders_seq`), que sólo avanza — esos números no se reutilizan.
+   *    agua (`orders_seq`), que sólo avanza mientras los números que repartió sigan
+   *    en uso: borrar PERMANENTEMENTE la orden más alta los devuelve
+   *    ({@link resyncSequenceToNumbersInUse}).
    *
    * "En uso" = en manos de una orden VIVA. Una orden CANCELADA conserva su
    * número impreso pero lo libera (los UNIQUE son parciales, ver la migración
@@ -697,6 +699,39 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
+   * Baja la marca de agua de `orders_seq` hasta el mayor número EN USO (o el
+   * piso del env, lo que sea mayor). Es la contraparte de
+   * {@link advanceSequenceTo}: se llama cuando un número deja de existir
+   * (borrado PERMANENTE) o deja de estar en la parte alta del rango
+   * (renumerar), para que la numeración automática vuelva a seguir la serie
+   * real y no un salto que ya nadie muestra.
+   *
+   * Existe por el caso del número tecleado mal en el Paso 1: si la orden que
+   * seguía era la 5054 y alguien escribe 50544, la marca de agua se iba a
+   * 50544 y ahí se quedaba — borrar esa orden permanentemente no la bajaba y
+   * el sistema seguía proponiendo 50545.
+   *
+   * "En uso" incluye las órdenes en PAPELERA (restaurables) y las CANCELADAS
+   * (conservan su número impreso), igual que {@link nextAutoNumber}: sólo el
+   * borrado permanente devuelve el número al rango automático.
+   */
+  private async resyncSequenceToNumbersInUse(
+    mgr: EntityManager,
+  ): Promise<void> {
+    await mgr.query(
+      `SELECT setval('orders_seq', GREATEST(
+         (SELECT COALESCE(MAX("internalNumber"::bigint), 0)
+            FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
+         (SELECT COALESCE(MAX("orderNumber"::bigint), 0)
+            FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
+         $1::bigint,
+         1
+       ), true)`,
+      [String(Math.max(1, this.orderNumberFloor() - 1))],
+    );
+  }
+
+  /**
    * Rango automático: `n` números CONSECUTIVOS desde la marca de agua. Nunca
    * mira los huecos. El `setval` final deja la marca en el último entregado:
    * sólo avanza, nunca retrocede al borrar.
@@ -875,7 +910,10 @@ export class OrdersService implements OnModuleInit {
    * `cancelled: true` = está libre porque su orden fue cancelada (ya se
    * imprimió en esa orden).
    */
-  async serviceKeyAvailability(opts: { key?: string; orderId?: string }): Promise<{
+  async serviceKeyAvailability(opts: {
+    key?: string;
+    orderId?: string;
+  }): Promise<{
     key: string | null;
     available: boolean | null;
     usedByOrderNumber: string | null;
@@ -883,7 +921,12 @@ export class OrdersService implements OnModuleInit {
   }> {
     const key = (opts.key ?? '').trim();
     if (!key) {
-      return { key: null, available: null, usedByOrderNumber: null, cancelled: false };
+      return {
+        key: null,
+        available: null,
+        usedByOrderNumber: null,
+        cancelled: false,
+      };
     }
     const rows = await this.dataSource.manager.query<
       { orderNumber: string; status: string }[]
@@ -995,6 +1038,10 @@ export class OrdersService implements OnModuleInit {
       numbers[0],
       orderId,
     ]);
+    // El número viejo pudo ser el más alto en uso (p. ej. renumerar un 50544
+    // tecleado mal a 5054): la marca de agua baja para que el rango automático
+    // no siga saltado detrás de un número que ya nadie tiene.
+    await this.resyncSequenceToNumbersInUse(mgr);
   }
 
   /** Número desde el cual el sistema asigna automáticamente (`ORDER_NUMBER_START`). */
@@ -1729,7 +1776,7 @@ export class OrdersService implements OnModuleInit {
         {
           // Bs: la tasa elegida en el pago es la USD/Bs con la que se cuadra.
           usdExchangeRateId:
-            p.amountCurrency === 'BS' ? p.exchangeRateId ?? null : null,
+            p.amountCurrency === 'BS' ? (p.exchangeRateId ?? null) : null,
         },
       );
     }
@@ -2165,6 +2212,7 @@ export class OrdersService implements OnModuleInit {
     const keepKeys = new Set(distinct.map((p) => p.key));
     const map = new Map<ProviderKey, { id: string; internalNumber: string }>();
     let maxPos = 0;
+    let removed = false;
     for (const r of existing) {
       if (r.sequencePosition > maxPos) maxPos = r.sequencePosition;
       const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
@@ -2172,10 +2220,12 @@ export class OrdersService implements OnModuleInit {
       if (keepKeys.has(key)) {
         map.set(key, { id: r.id, internalNumber: r.internalNumber });
       } else {
-        // Proveedor quitado: borra su orden interna → su número queda quemado.
+        // Proveedor quitado: borra su orden interna. Su número queda como
+        // hueco salvo que fuera el más alto en uso (ver el resync al final).
         await mgr.query(`DELETE FROM "order_internal_orders" WHERE id = $1`, [
           r.id,
         ]);
+        removed = true;
       }
     }
     for (const { providerType, providerId, key } of distinct) {
@@ -2203,6 +2253,9 @@ export class OrdersService implements OnModuleInit {
       );
       map.set(key, { id: inserted[0].id, internalNumber });
     }
+    // Si se quitó un proveedor, el número que soltó pudo ser el más alto en
+    // uso: baja la marca de agua para no dejar el rango automático saltado.
+    if (removed) await this.resyncSequenceToNumbersInUse(mgr);
     return map;
   }
 
@@ -3517,12 +3570,17 @@ export class OrdersService implements OnModuleInit {
 
     // Sólo se valida si la clave CAMBIA: una orden vieja con clave repetida
     // (datos previos a la regla) tiene que poder seguir editándose.
-    const serviceKeyChanged = mergedServiceKey !== (existing.serviceKey ?? null);
+    const serviceKeyChanged =
+      mergedServiceKey !== (existing.serviceKey ?? null);
 
     await this.dataSource.transaction(async (mgr) => {
       // Clave de servicio no repetida entre órdenes vivas (la propia se excluye).
       if (serviceKeyChanged) {
-        await this.assertServiceKeyAvailable(mgr, mergedServiceKey, existing.id);
+        await this.assertServiceKeyAvailable(
+          mgr,
+          mergedServiceKey,
+          existing.id,
+        );
       }
       // Importante: NO usar `Object.assign(existing, …)` + `mgr.save(existing)`
       // — la orden viene con las relaciones cargadas (patient/holder/branch/…)
@@ -3693,14 +3751,23 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Hard-delete: borra la orden y sus órdenes internas (CASCADE). Sus números
-   * NO se reciclan: quedan como hueco definitivo y la numeración sigue desde el
-   * último emitido (`orders_seq` sólo avanza).
+   * Hard-delete: borra la orden y sus órdenes internas (CASCADE) y DEVUELVE sus
+   * números al rango automático bajando la marca de agua al mayor número que
+   * sigue en uso ({@link resyncSequenceToNumbersInUse}). Si la orden borrada
+   * era la de los números más altos, la numeración automática retoma la serie
+   * real (es la salida de un número tecleado mal); si no lo era, la marca no se
+   * mueve y su número queda como hueco (sólo se puede reutilizar a mano).
    */
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user, true);
     await this.assertNotInBatch(id);
-    await this.repo.delete(id);
+    await this.dataSource.transaction(async (mgr) => {
+      // Mismo lock que el reparto de números: evita borrar mientras otra
+      // transacción está tomando números de la marca de agua.
+      await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
+      await mgr.getRepository(Order).delete(id);
+      await this.resyncSequenceToNumbersInUse(mgr);
+    });
   }
 
   async restore(id: string, user: AuthenticatedUser): Promise<Order> {
