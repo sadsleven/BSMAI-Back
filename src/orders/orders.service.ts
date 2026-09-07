@@ -206,7 +206,9 @@ export class OrdersService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.bumpSequence('orders_seq', 'ORDER_NUMBER_START');
+    // `orders_seq` ya no se usa: los números de orden salen del mayor en uso + 1
+    // ({@link nextAutoNumber}), no de una secuencia. `ORDER_NUMBER_START` sigue
+    // siendo el piso y lo aplica esa consulta.
     await this.bumpSequence('accounts_payable_seq', 'PAYABLE_NUMBER_START');
     await this.bumpSequence(
       'accounts_receivable_seq',
@@ -511,16 +513,16 @@ export class OrdersService implements OnModuleInit {
    *  - `from` (proveedor agregado a una orden ya numerada): los `n` menores
    *    números LIBRES ≥ `from`, para que las órdenes internas de una misma
    *    orden queden contiguas y se rellenen sus propios huecos.
-   *  - sin opciones (numeración automática): `n` consecutivos desde la marca de
-   *    agua (`orders_seq`), que sólo avanza mientras los números que repartió sigan
-   *    en uso: borrar PERMANENTEMENTE la orden más alta los devuelve
-   *    ({@link resyncSequenceToNumbersInUse}).
+   *  - sin opciones (numeración automática): `n` consecutivos desde el mayor
+   *    número EN USO + 1 ({@link nextAutoNumber}). Sin secuencia ni marca de
+   *    agua: lo que ya no existe (borrado permanente) o está cancelado deja de
+   *    contar y la serie se autocorrige.
    *
-   * "En uso" = en manos de una orden VIVA. Una orden CANCELADA conserva su
-   * número impreso pero lo libera (los UNIQUE son parciales, ver la migración
-   * `ReuseCancelledOrderNumbers`), así que se puede volver a elegir a mano. La
-   * numeración automática igual lo salta: su marca de agua cuenta las
-   * canceladas.
+   * "En uso" = en manos de una orden VIVA (papelera incluida: es restaurable).
+   * Una orden CANCELADA conserva su número impreso pero lo LIBERA (los UNIQUE
+   * son parciales, ver la migración `ReuseCancelledOrderNumbers`): se puede
+   * volver a elegir a mano y la numeración automática también lo reparte de
+   * nuevo si era el más alto.
    *
    * `excludeOrderId` ignora los números que ya tiene la propia orden (usado al
    * renumerar).
@@ -615,8 +617,7 @@ export class OrdersService implements OnModuleInit {
   /**
    * Bloque consecutivo desde un número elegido a mano. Todos los números del
    * bloque deben estar libres: una orden con K proveedores ocupa
-   * `[base, base + K - 1]`. Sube la marca de agua para que la numeración
-   * automática no vuelva a entregar esos números.
+   * `[base, base + K - 1]`.
    */
   private async drawBlockFrom(
     mgr: EntityManager,
@@ -633,7 +634,6 @@ export class OrdersService implements OnModuleInit {
           : `La orden necesita ${n} números consecutivos desde ${start} (uno por proveedor) y ya están en uso: ${taken.join(', ')}`,
       );
     }
-    await this.advanceSequenceTo(mgr, start + n - 1);
     return Array.from({ length: n }, (_, i) => String(start + i));
   }
 
@@ -679,96 +679,54 @@ export class OrdersService implements OnModuleInit {
       );
     }
     const numbers = rows.map((r) => Number(r.n));
-    await this.advanceSequenceTo(mgr, Math.max(...numbers));
     return numbers.map((v) => String(v));
   }
 
-  /** Sube la marca de agua de `orders_seq` hasta `value`. Nunca la baja. */
-  private async advanceSequenceTo(
-    mgr: EntityManager,
-    value: number,
-  ): Promise<void> {
-    await mgr.query(
-      `SELECT setval('orders_seq', GREATEST(
-         (SELECT CASE WHEN is_called THEN last_value ELSE last_value - 1 END
-            FROM orders_seq),
-         $1::bigint
-       ), true)`,
-      [String(Math.max(1, Math.trunc(value)))],
-    );
-  }
-
   /**
-   * Baja la marca de agua de `orders_seq` hasta el mayor número EN USO (o el
-   * piso del env, lo que sea mayor). Es la contraparte de
-   * {@link advanceSequenceTo}: se llama cuando un número deja de existir
-   * (borrado PERMANENTE) o deja de estar en la parte alta del rango
-   * (renumerar), para que la numeración automática vuelva a seguir la serie
-   * real y no un salto que ya nadie muestra.
-   *
-   * Existe por el caso del número tecleado mal en el Paso 1: si la orden que
-   * seguía era la 5054 y alguien escribe 50544, la marca de agua se iba a
-   * 50544 y ahí se quedaba — borrar esa orden permanentemente no la bajaba y
-   * el sistema seguía proponiendo 50545.
-   *
-   * "En uso" incluye las órdenes en PAPELERA (restaurables) y las CANCELADAS
-   * (conservan su número impreso), igual que {@link nextAutoNumber}: sólo el
-   * borrado permanente devuelve el número al rango automático.
-   */
-  private async resyncSequenceToNumbersInUse(
-    mgr: EntityManager,
-  ): Promise<void> {
-    await mgr.query(
-      `SELECT setval('orders_seq', GREATEST(
-         (SELECT COALESCE(MAX("internalNumber"::bigint), 0)
-            FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
-         (SELECT COALESCE(MAX("orderNumber"::bigint), 0)
-            FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
-         $1::bigint,
-         1
-       ), true)`,
-      [String(Math.max(1, this.orderNumberFloor() - 1))],
-    );
-  }
-
-  /**
-   * Rango automático: `n` números CONSECUTIVOS desde la marca de agua. Nunca
-   * mira los huecos. El `setval` final deja la marca en el último entregado:
-   * sólo avanza, nunca retrocede al borrar.
+   * Rango automático: `n` números CONSECUTIVOS desde el mayor número en uso + 1
+   * ({@link nextAutoNumber}). Ya NO hay marca de agua ni secuencia: la serie
+   * sale siempre de las órdenes que existen, así que un número que dejó de
+   * existir (borrado permanente, orden cancelada, transacción fallida) no
+   * arrastra la numeración hacia arriba para siempre.
    */
   private async drawAutoOrderNumbers(
     mgr: EntityManager,
     n: number,
   ): Promise<string[]> {
     const start = await this.nextAutoNumber(mgr);
-    // `setval` no es transaccional: si la creación falla después, el número
-    // queda quemado (hueco) en vez de reasignarse a otra orden.
-    await mgr.query(`SELECT setval('orders_seq', $1::bigint, true)`, [
-      String(start + n - 1),
-    ]);
     return Array.from({ length: n }, (_, i) => String(start + i));
   }
 
   /**
-   * Próximo número que entregaría la numeración automática = "el mayor + 1":
-   * mayor entre la marca de agua de `orders_seq`, el mayor número en uso + 1 y
-   * el piso del env (cubre secuencias atrasadas o restauraciones de BD). Es el
-   * valor que el Paso 1 propone por defecto.
+   * Próximo número que entregaría la numeración automática = el mayor número
+   * EN USO + 1 (o el piso del env si es mayor). Es el valor que el Paso 1
+   * propone por defecto.
    *
-   * A propósito cuenta también las órdenes CANCELADAS: aunque su número esté
-   * libre para reutilizarlo A MANO, el rango automático nunca lo reparte (así
-   * no aparece de sorpresa un número que otra orden todavía muestra).
+   * "En uso" = número de una orden que EXISTE y NO está cancelada, incluidas
+   * las de la PAPELERA: son restaurables y los UNIQUE parciales
+   * (`uq_orders_order_number_active` / `uq_iio_internal_number_active`) las
+   * cuentan, así que repartir su número reventaría el INSERT. Quedan fuera las
+   * CANCELADAS (su número ya está liberado, ver `ReuseCancelledOrderNumbers`) y
+   * las borradas permanentemente.
+   *
+   * Consecuencia buscada: la serie se autocorrige. Si alguien teclea 50544 en
+   * vez de 5054, la numeración sigue detrás de esa orden sólo mientras exista;
+   * al borrarla permanentemente (o cancelarla) la siguiente vuelve a 5055.
+   *
+   * Concurrencia: quien reparte números toma antes
+   * `pg_advisory_xact_lock(hashtext('orders_seq'))`, así que el MAX se lee
+   * serializado y dos creaciones simultáneas no sacan el mismo número.
    */
   private async nextAutoNumber(mgr?: EntityManager): Promise<number> {
     const runner = mgr ?? this.dataSource.manager;
     const rows = await runner.query<{ next: string }[]>(
       `SELECT GREATEST(
-         (SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END
-            FROM orders_seq),
          (SELECT COALESCE(MAX("internalNumber"::bigint), 0) + 1
-            FROM "order_internal_orders" WHERE "internalNumber" ~ '^[0-9]+$'),
+            FROM "order_internal_orders"
+           WHERE "internalNumber" ~ '^[0-9]+$' AND "cancelled" = false),
          (SELECT COALESCE(MAX("orderNumber"::bigint), 0) + 1
-            FROM "orders" WHERE "orderNumber" ~ '^[0-9]+$'),
+            FROM "orders"
+           WHERE "orderNumber" ~ '^[0-9]+$' AND status <> 'cancelled'),
          $1::bigint
        )::text AS next`,
       [String(this.orderNumberFloor())],
@@ -1038,10 +996,6 @@ export class OrdersService implements OnModuleInit {
       numbers[0],
       orderId,
     ]);
-    // El número viejo pudo ser el más alto en uso (p. ej. renumerar un 50544
-    // tecleado mal a 5054): la marca de agua baja para que el rango automático
-    // no siga saltado detrás de un número que ya nadie tiene.
-    await this.resyncSequenceToNumbersInUse(mgr);
   }
 
   /** Número desde el cual el sistema asigna automáticamente (`ORDER_NUMBER_START`). */
@@ -2176,11 +2130,12 @@ export class OrdersService implements OnModuleInit {
    *
    *  - Sobreviviente (proveedor sigue): se mantiene su fila y su número (NUNCA
    *    se renumera).
-   *  - Quitado (proveedor ya no está): se BORRA su fila → su número queda como
-   *    hueco definitivo (no se reutiliza).
+   *  - Quitado (proveedor ya no está): se BORRA su fila → su número vuelve a
+   *    estar libre (lo reparte el automático si era el más alto; si no, queda
+   *    como hueco que sólo se reutiliza a mano).
    *  - Nuevo: toma el primer número LIBRE después del base de la orden
-   *    (`contiguousBase`) para quedar contiguo a sus hermanas, o el siguiente de
-   *    la marca de agua si la orden no tiene base numérico.
+   *    (`contiguousBase`) para quedar contiguo a sus hermanas, o el mayor número
+   *    en uso + 1 si la orden no tiene base numérico.
    *
    * `orders.orderNumber` (base) NO se toca aquí: queda congelado aun si el
    * proveedor de la posición 1 se quita (política FREEZE).
@@ -2212,7 +2167,6 @@ export class OrdersService implements OnModuleInit {
     const keepKeys = new Set(distinct.map((p) => p.key));
     const map = new Map<ProviderKey, { id: string; internalNumber: string }>();
     let maxPos = 0;
-    let removed = false;
     for (const r of existing) {
       if (r.sequencePosition > maxPos) maxPos = r.sequencePosition;
       const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
@@ -2220,18 +2174,17 @@ export class OrdersService implements OnModuleInit {
       if (keepKeys.has(key)) {
         map.set(key, { id: r.id, internalNumber: r.internalNumber });
       } else {
-        // Proveedor quitado: borra su orden interna. Su número queda como
-        // hueco salvo que fuera el más alto en uso (ver el resync al final).
+        // Proveedor quitado: borra su orden interna → su número vuelve a estar
+        // libre (la numeración automática lo reparte si era el más alto).
         await mgr.query(`DELETE FROM "order_internal_orders" WHERE id = $1`, [
           r.id,
         ]);
-        removed = true;
       }
     }
     for (const { providerType, providerId, key } of distinct) {
       if (map.has(key)) continue;
       // Contiguo al base de la orden: primer libre ≥ base + 1 (rellena los
-      // huecos propios de la orden en vez de saltar a la marca de agua).
+      // huecos propios de la orden en vez de saltar al final de la serie).
       const [internalNumber] = await this.drawOrderNumbers(
         mgr,
         1,
@@ -2253,9 +2206,6 @@ export class OrdersService implements OnModuleInit {
       );
       map.set(key, { id: inserted[0].id, internalNumber });
     }
-    // Si se quitó un proveedor, el número que soltó pudo ser el más alto en
-    // uso: baja la marca de agua para no dejar el rango automático saltado.
-    if (removed) await this.resyncSequenceToNumbersInUse(mgr);
     return map;
   }
 
@@ -3751,23 +3701,15 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Hard-delete: borra la orden y sus órdenes internas (CASCADE) y DEVUELVE sus
-   * números al rango automático bajando la marca de agua al mayor número que
-   * sigue en uso ({@link resyncSequenceToNumbersInUse}). Si la orden borrada
-   * era la de los números más altos, la numeración automática retoma la serie
-   * real (es la salida de un número tecleado mal); si no lo era, la marca no se
-   * mueve y su número queda como hueco (sólo se puede reutilizar a mano).
+   * Hard-delete: borra la orden y sus órdenes internas (CASCADE). Sus números
+   * dejan de existir, así que vuelven al circuito: la numeración automática
+   * los reparte de nuevo si eran los más altos ({@link nextAutoNumber}) y en
+   * cualquier caso se pueden elegir a mano en el Paso 1.
    */
   async hardDelete(id: string, user: AuthenticatedUser): Promise<void> {
     await this.findOne(id, user, true);
     await this.assertNotInBatch(id);
-    await this.dataSource.transaction(async (mgr) => {
-      // Mismo lock que el reparto de números: evita borrar mientras otra
-      // transacción está tomando números de la marca de agua.
-      await mgr.query("SELECT pg_advisory_xact_lock(hashtext('orders_seq'))");
-      await mgr.getRepository(Order).delete(id);
-      await this.resyncSequenceToNumbersInUse(mgr);
-    });
+    await this.repo.delete(id);
   }
 
   async restore(id: string, user: AuthenticatedUser): Promise<Order> {
