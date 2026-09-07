@@ -12,9 +12,9 @@ import { veDayOf } from './ve-date.util';
 import { Currency } from '../entities/exchange-rate.entity';
 
 export interface BcvScrapedRates {
-  /** Bs por 1 USD, redondeado a 2 decimales (precisión de `exchange_rates.amountBs`). */
+  /** Bs por 1 USD, a 2 decimales TRUNCADOS (`423,4562772` → `423.45`). */
   usdBs: number;
-  /** Bs por 1 EUR, redondeado a 2 decimales. */
+  /** Bs por 1 EUR, a 2 decimales TRUNCADOS. */
   eurBs: number;
   /** `Fecha Valor` del BCV como ISO 8601 con offset de Venezuela. */
   effectiveDate: string;
@@ -138,18 +138,27 @@ export class BcvScraperService {
   }
 
   /**
-   * `"772,54410000"` → `772.54`. El BCV usa formato venezolano: punto como
-   * separador de miles y coma como decimal. Se redondea a 2 decimales porque
-   * `exchange_rates.amountBs` es `numeric(14,2)`.
+   * `"423,4562772"` → `423.45`. El BCV usa formato venezolano: punto como
+   * separador de miles y coma como decimal.
+   *
+   * Los decimales sobrantes se **TRUNCAN, no se redondean**: la tasa se registra
+   * como `423,45`, nunca como `423,46` (`exchange_rates.amountBs` es
+   * `numeric(14,2)`).
+   *
+   * El recorte se hace sobre el STRING, antes de convertir a número: en `float`
+   * `Math.trunc(v * 100) / 100` falla con valores como `8.29`
+   * (`8.29 * 100 === 828.9999999999999` → `8.28`).
    */
   private parseVeAmount(raw: string): number | null {
     const cleaned = raw
       .replace(/[\s ]/g, '')
       .replace(/\./g, '')
       .replace(',', '.');
-    const value = Number(cleaned);
+    const dot = cleaned.indexOf('.');
+    const truncated = dot === -1 ? cleaned : cleaned.slice(0, dot + 3);
+    const value = Number(truncated);
     if (!Number.isFinite(value) || value <= 0) return null;
-    return Math.round(value * 100) / 100;
+    return value;
   }
 
   /**

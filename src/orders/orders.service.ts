@@ -2508,10 +2508,13 @@ export class OrdersService implements OnModuleInit {
    * - Snapshot replace-all de `kind ∈ {doctor, care_center}` por ST.
    * - `doctorAmount` = total USD; `doctorAmountSuggested` = suma sugeridos USD.
    * - `billingExchangeRateId` es la tasa USD/Bs **elegida** al facturar (debe ser
-   *   USD). Se escribe en tres columnas: `billingExchangeRateId` (conversión de
-   *   CxP / retenciones / reportes), `invoiceExchangeRateId` (la que se imprime
-   *   en la factura) y, si la orden es de seguro no indexado (`useFixedRate`),
-   *   `fixedExchangeRateId` (target Bs de la cuenta por cobrar).
+   *   USD). Se escribe en `billingExchangeRateId` (conversión de CxP /
+   *   retenciones / reportes), en `invoiceExchangeRateId` cuando se emite
+   *   factura (la que se imprime) y, si la orden es de seguro no indexado
+   *   (`useFixedRate`), en `fixedExchangeRateId` (target Bs de la CxC).
+   * - `generateInvoice`: la factura es obligatoria en seguro y OPCIONAL en
+   *   contado / crédito / cashea (por defecto no se emite). Sin factura la
+   *   orden finaliza igual y puede emitirla después (`issueInvoice`).
    */
   async billing(
     id: string,
@@ -2580,11 +2583,25 @@ export class OrdersService implements OnModuleInit {
         );
     }
 
+    // ¿Se emite factura? En seguro siempre; en contado / crédito / cashea es
+    // opcional y por defecto NO se emite (se puede emitir después con
+    // `POST /orders/:id/invoices`).
+    const generateInvoice =
+      order.type === 'insurance' ? true : (dto.generateInvoice ?? false);
+    if (generateInvoice && dto.invoiceNumber == null) {
+      throw new BadRequestException(
+        'Ingresa el número de factura para emitirla',
+      );
+    }
     // Fecha a mostrar en la factura. Sin enviar → la fecha de la orden.
     const invoiceDate = (dto.invoiceDate ?? order.orderDate).slice(0, 10);
-    const invoiceNumber = this.assertInvoiceNumberRange(dto.invoiceNumber);
-    const invoiceDisplay = formatInvoiceNumber(invoiceNumber);
-    const controlNumber = deriveControlNumber(invoiceNumber);
+    const invoiceNumber = generateInvoice
+      ? this.assertInvoiceNumberRange(dto.invoiceNumber!)
+      : null;
+    const invoiceDisplay =
+      invoiceNumber !== null ? formatInvoiceNumber(invoiceNumber) : null;
+    const controlNumber =
+      invoiceNumber !== null ? deriveControlNumber(invoiceNumber) : null;
     // Switch del Paso 4 (sólo seguros). Sin elección explícita queda `null` y
     // manda la regla derivada: se imprime salvo en seguro no indexado.
     const showExchangeRate = dto.showExchangeRate ?? null;
@@ -2629,20 +2646,23 @@ export class OrdersService implements OnModuleInit {
     // Replace-all snapshots del lado pago + per-account providerAmount.
     await this.dataSource.transaction(async (mgr) => {
       // La factura nace aquí: número libre (nunca reutilizable) + control
-      // derivado. El lock serializa dos facturaciones simultáneas.
-      await this.lockInvoiceNumbers(mgr);
-      await this.assertInvoiceNumberFree(mgr, invoiceNumber, order.id);
-      await mgr.insert(OrderInvoice, {
-        orderId: order.id,
-        number: String(invoiceNumber),
-        invoiceNumber: invoiceDisplay,
-        controlNumber,
-        invoiceDate,
-        showExchangeRate,
-        exchangeRateId: dto.billingExchangeRateId,
-        status: 'active',
-        createdById: user.id,
-      });
+      // derivado. El lock serializa dos facturaciones simultáneas. Sin factura
+      // (contado / crédito / cashea sin activar) la orden finaliza igual.
+      if (invoiceNumber !== null) {
+        await this.lockInvoiceNumbers(mgr);
+        await this.assertInvoiceNumberFree(mgr, invoiceNumber, order.id);
+        await mgr.insert(OrderInvoice, {
+          orderId: order.id,
+          number: String(invoiceNumber),
+          invoiceNumber: invoiceDisplay!,
+          controlNumber: controlNumber!,
+          invoiceDate,
+          showExchangeRate,
+          exchangeRateId: dto.billingExchangeRateId,
+          status: 'active',
+          createdById: user.id,
+        });
+      }
       // `update` por columnas — la orden trae `providerReports` cargada y
       // `save(order)` intentaría sincronizar esa relación (nullear FKs).
       await mgr.update(
@@ -2652,17 +2672,22 @@ export class OrdersService implements OnModuleInit {
           doctorAmountSuggested: suggestedSum.toFixed(2),
           doctorAmount: totalUsd.toFixed(2),
           billingExchangeRateId: dto.billingExchangeRateId,
-          // Tasa elegida en el Paso 4: manda al imprimir la factura.
-          invoiceExchangeRateId: dto.billingExchangeRateId,
           // Seguro no indexado: la misma tasa fija la cuenta por cobrar en Bs
           // (el campo que antes se elegía en el Paso 1).
           ...(order.useFixedRate
             ? { fixedExchangeRateId: dto.billingExchangeRateId }
             : {}),
-          invoiceNumber: invoiceDisplay,
-          controlNumber,
-          invoiceDate,
-          invoiceShowExchangeRate: showExchangeRate,
+          // Espejo de la factura vigente: sin emitirla, la orden queda sin
+          // datos fiscales (se llenan al emitirla después).
+          ...(invoiceNumber !== null
+            ? {
+                invoiceNumber: invoiceDisplay,
+                controlNumber,
+                invoiceDate,
+                invoiceShowExchangeRate: showExchangeRate,
+                invoiceExchangeRateId: dto.billingExchangeRateId,
+              }
+            : {}),
           status: 'finalized',
         },
       );
@@ -2698,13 +2723,17 @@ export class OrdersService implements OnModuleInit {
           from: order.doctorAmount != null ? Number(order.doctorAmount) : null,
           to: +totalUsd.toFixed(2),
         },
-        invoiceNumber: { to: invoiceDisplay },
-        controlNumber: { to: controlNumber },
-        invoiceDate: { to: invoiceDate },
-        invoiceExchangeRateId: {
-          from: order.invoiceExchangeRateId ?? null,
-          to: dto.billingExchangeRateId,
-        },
+        ...(invoiceNumber !== null
+          ? {
+              invoiceNumber: { to: invoiceDisplay },
+              controlNumber: { to: controlNumber },
+              invoiceDate: { to: invoiceDate },
+              invoiceExchangeRateId: {
+                from: order.invoiceExchangeRateId ?? null,
+                to: dto.billingExchangeRateId,
+              },
+            }
+          : { invoiceNumber: { to: null } }),
       });
     });
     return this.findOne(id, user);

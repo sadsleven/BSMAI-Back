@@ -12,7 +12,9 @@ import { BaremosSeedService } from './baremos-seed.service';
 
 /**
  * Módulo del seeder de baremos. Independiente de SeedModule: no corre en el
- * `npm run seed` general; se ejecuta aparte con `npm run seed:baremos`.
+ * `npm run seed` general; se ejecuta aparte con `npm run seed:baremos` (o
+ * `seed:baremos:insurances` / `:doctors` / `:care-centers`, con `-- "<nombre>"`
+ * para uno solo y `--update-prices` para pisar los precios que cambiaron).
  */
 @Module({
   imports: [

@@ -135,15 +135,26 @@ export class BillingOrderDto {
   billingExchangeRateId: string;
 
   /**
+   * ¿Se emite factura al finalizar? Sólo aplica a contado / crédito / cashea:
+   * en las órdenes de seguro la factura es obligatoria y el service fuerza
+   * `true`. Sin enviar, la orden se finaliza SIN factura (se puede emitir
+   * después con `POST /orders/:id/invoices`).
+   */
+  @IsOptional()
+  @IsBoolean()
+  generateInvoice?: boolean;
+
+  /**
    * N° de factura como entero (se imprime con ceros a la izquierda). Debe estar
    * libre: los números no se reutilizan, tampoco los de facturas anuladas. El
    * N° de control NO se envía — el service lo deriva (`número + 50`, con dos
-   * ceros delante).
+   * ceros delante). Sólo requerido cuando la orden emite factura.
    */
+  @ValidateIf((o) => o.generateInvoice !== false)
   @IsInt({ message: 'El número de factura debe ser un entero' })
   @Min(1, { message: 'El número de factura debe ser mayor o igual a 1' })
   @Max(MAX_INVOICE_NUMBER)
-  invoiceNumber: number;
+  invoiceNumber?: number;
 
   /**
    * Fecha a mostrar en la factura (date-only `YYYY-MM-DD`). Sin enviar, el

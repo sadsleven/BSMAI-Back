@@ -72,11 +72,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ANALISIS DE CAPAS DE FIBRAS NERVIOSAS (ACFN)",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "ANGIOGRAFIA POR FLUORESCEINA",
-        "priceUsd": 120
+        "priceUsd": 150
       },
       {
         "name": "ANTI CARDIOLOPINA ( IGG + IGM )",
@@ -132,11 +132,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ARTROCENTESIS (1 ARTICULACION)",
-        "priceUsd": 100
+        "priceUsd": 160
       },
       {
         "name": "ARTROCENTESIS (2 o MAS ARTICULACIONES)",
-        "priceUsd": 150
+        "priceUsd": 180
       },
       {
         "name": "BILIRRUBINA TOTAL Y FRACCIONADA",
@@ -144,27 +144,27 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "BIOMETRIA",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "BIOPSIA DE CUELLO UTERINO POR ASA Y CAUTERIZACION",
-        "priceUsd": 200
+        "priceUsd": 240
       },
       {
         "name": "BIOPSIA DE ENDOMETRIO Ó CUELLO",
-        "priceUsd": 80
+        "priceUsd": 120
       },
       {
         "name": "BIOPSIA DE ENDOMETRIO Ó CUELLO POR ASA",
-        "priceUsd": 200
+        "priceUsd": 240
       },
       {
         "name": "BIOPSIA POR PUNCIÓN CON AGUJA FINA GUIADAS POR ULTRASONIDO",
-        "priceUsd": 400
+        "priceUsd": 350
       },
       {
         "name": "BIOPSIA POR PUNCIÓN CON AGUJA TRUCUT GUIADA POR ULTRASONIDO",
-        "priceUsd": 700
+        "priceUsd": 550
       },
       {
         "name": "BUN (UREA)",
@@ -196,11 +196,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "CAMPO VISUAL COMPUTARIZADO",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "CAMPO VISUAL DE COLORES",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "CAPACIDAD DE FIJACION DE HIERRO",
@@ -208,15 +208,15 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "CAPSULOTOMÍA YAG LASER BILATERAL",
-        "priceUsd": 523
+        "priceUsd": 570
       },
       {
         "name": "CAPSULOTOMÍA YAG LASER UNILATERAL",
-        "priceUsd": 400
+        "priceUsd": 490
       },
       {
         "name": "CARCINOMA BASOCELULAR",
-        "priceUsd": 350
+        "priceUsd": 320
       },
       {
         "name": "CARCINOMA ESPINOCELULAR",
@@ -260,15 +260,15 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "COLOCACIÓN DE HORMONOTERAPIA/BIFOSFONATOS PARA CANCER DE PROSTATA AVANZADO",
-        "priceUsd": 80
+        "priceUsd": 110
       },
       {
         "name": "COLOCACION DE PROTESIS ESOFAGICAS (INCLUYE PROTESIS)",
-        "priceUsd": 1600
+        "priceUsd": 1300
       },
       {
         "name": "COLOCACIÓN Y/O CAMBIO DE SONDA DE FOLEY TRANS URETRAL (INCLUYE MATERIAL)",
-        "priceUsd": 150
+        "priceUsd": 110
       },
       {
         "name": "COMPLEMENTO C3",
@@ -284,107 +284,107 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "CONSULTA + CITOLOGÍA (INCLUYE EL ESTUDIO) + ECO TRANSVAGINAL",
-        "priceUsd": 150
-      },
-      {
-        "name": "CONSULTA + CITOLOGÍA (INCLUYE EL ESTUDIO) + ECO TRANSVAGINAL + COLPOSCOPIA TOMA DE BIOPSIA",
         "priceUsd": 200
       },
       {
+        "name": "CONSULTA + CITOLOGÍA (INCLUYE EL ESTUDIO) + ECO TRANSVAGINAL + COLPOSCOPIA TOMA DE BIOPSIA",
+        "priceUsd": 240
+      },
+      {
         "name": "CONSULTA: CARDIOLOGIA / VASCULAR PERIFERICO / CARDIOVASCULAR",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: CIRUGIA GENERAL",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: DERMATOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: ENDOCRINOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: FISIATRIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: GASTROENTEROLOGIA / PROCTOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: GINECOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: INMUNOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: MEDICINA GENERAL",
-        "priceUsd": 50
+        "priceUsd": 80
       },
       {
         "name": "CONSULTA: MEDICINA INTERNA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: NEFROLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: NEUMONOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: NEUROLOGIA / NEUROCIRUGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: NUTRICION / DIETETICA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: ODONTOLIGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: OFTALMOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: ONCOLOGIA / MASTOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: OTORRINOLARINGOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: PEDIATRIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: PSIQUIATRIA / PSICOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: REUMATOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: TRAUMATOLOGIA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONSULTA: UROLOGÍA",
-        "priceUsd": 50
+        "priceUsd": 100
       },
       {
         "name": "CONTAJE DE CELULAS ENDOTELIALES / BIOMICROSCOPICA",
-        "priceUsd": 75
+        "priceUsd": 120
       },
       {
         "name": "COPROCULTIVO",
@@ -408,7 +408,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "CRIOCIRUGIA: Sesion CRIOSPRAY LESIONES BENIGNAS",
-        "priceUsd": 200
+        "priceUsd": 220
       },
       {
         "name": "CULTIVO DE SECRECIONES",
@@ -416,11 +416,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "CURAS DE QUEMADURAS",
-        "priceUsd": 200
+        "priceUsd": 110
       },
       {
         "name": "CURETAJE DE LESIONES (SESION)",
-        "priceUsd": 150
+        "priceUsd": 160
       },
       {
         "name": "CURVA DE INSULINA ( INCLUYE 3 TOMAS )",
@@ -448,11 +448,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "DEBRIDAMIENTO ULCERAS",
-        "priceUsd": 150
+        "priceUsd": 160
       },
       {
         "name": "DENSITOMETRIA",
-        "priceUsd": 35
+        "priceUsd": 60
       },
       {
         "name": "DEPURACION DE CREATININA",
@@ -468,235 +468,235 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "DILATACION DE PUNTOS LAGRIMALES + EXPLORACION DE VIAS LAGRIMAL",
-        "priceUsd": 330
+        "priceUsd": 350
       },
       {
         "name": "DILATACION DE PUNTOS LAGRIMALES + EXPLORACION DE VIAS LAGRIMAL+ PLUG PERFORADO",
-        "priceUsd": 430
+        "priceUsd": 490
       },
       {
         "name": "DILATACION DE PUNTOS LAGRIMALES + EXPLORACION DE VIAS LAGRIMAL+ PLVG PERFORADO (BILATERAL)",
-        "priceUsd": 645
+        "priceUsd": 700
       },
       {
         "name": "DILATACIONES URETRALES CON ANESTESIA LOCAL",
-        "priceUsd": 150
+        "priceUsd": 220
       },
       {
         "name": "DRENAJE DE ABSCESOS",
-        "priceUsd": 150
-      },
-      {
-        "name": "DRENAJE DE HEMATOMAS",
-        "priceUsd": 100
-      },
-      {
-        "name": "DRENAJE DE QUISTES PARPADOS",
-        "priceUsd": 330
-      },
-      {
-        "name": "DRENAJES DE ABSCESOS CON ANESTESIA LOCAL",
-        "priceUsd": 85
-      },
-      {
-        "name": "ECO 1ER TRIMESTRE",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO 1ER TRIMESTRE GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO 2DO TRIMESTRE",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO 2DO TRIMESTRE GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO 3D",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO 3D GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO 4D",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO 4D GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO ANEPLOIDIAS",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO ANEPLOIDIAS GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO CARDIOGRAMA",
-        "priceUsd": 80
-      },
-      {
-        "name": "ECO CARDIOGRAMA FETAL",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO CARDIOGRAMA FETAL GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO CON BURBUJAS",
-        "priceUsd": 80
-      },
-      {
-        "name": "ECO DE ESFUERZO",
-        "priceUsd": 130
-      },
-      {
-        "name": "ECO DOPPLER ABDOMINAL (HEPATICO, RENAL, PANCREATICO, GRANDES VASOS..)",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER ARTERIAL Y/O VENOSO DOS MIEMBROS",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER ARTERIAL Y/O VENOSO UN MIEMBRO",
-        "priceUsd": 70
-      },
-      {
-        "name": "ECO DOPPLER CARDIACO",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO DOPPLER CAROTIDEO",
-        "priceUsd": 80
-      },
-      {
-        "name": "ECO DOPPLER CEREBRAL",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER CUELLO (CAROTIDAS, TIROIDES..)",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER DE MAMA",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER DE PELVIS",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER GINECOLOGICO (ENDOMETRIO, OVARIOS..)",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER MATERNO FETAL",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER MATERNO FETAL GEMELAR",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER OBSTETRICO / PERFIL HEMODINAMICO MATERNO FETAL",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER PARTES BLANDAS",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER PROSTATICO",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER TESTICULAR",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO DOPPLER TRANSVAGINAL",
-        "priceUsd": 100
-      },
-      {
-        "name": "ECO GENETICO",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO GENETICO GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO MADUREZ FETAL",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO MADUREZ FETAL GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO MORFOLOGICO",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO MORFOLOGICO GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO PERFIL BIOFISICO",
-        "priceUsd": 90
-      },
-      {
-        "name": "ECO PERFIL BIOFISICO GEMELAR",
-        "priceUsd": 120
-      },
-      {
-        "name": "ECO PULMONAR",
-        "priceUsd": 80
-      },
-      {
-        "name": "ECO STRESS CON DOBUTAMINA",
         "priceUsd": 160
       },
       {
-        "name": "ECO TRANSFONTANELAR",
+        "name": "DRENAJE DE HEMATOMAS",
+        "priceUsd": 160
+      },
+      {
+        "name": "DRENAJE DE QUISTES PARPADOS",
+        "priceUsd": 350
+      },
+      {
+        "name": "DRENAJES DE ABSCESOS CON ANESTESIA LOCAL",
         "priceUsd": 120
       },
       {
+        "name": "ECO 1ER TRIMESTRE",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO 1ER TRIMESTRE GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO 2DO TRIMESTRE",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO 2DO TRIMESTRE GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO 3D",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO 3D GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO 4D",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO 4D GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO ANEPLOIDIAS",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO ANEPLOIDIAS GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO CARDIOGRAMA",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO CARDIOGRAMA FETAL",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO CARDIOGRAMA FETAL GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO CON BURBUJAS",
+        "priceUsd": 120
+      },
+      {
+        "name": "ECO DE ESFUERZO",
+        "priceUsd": 120
+      },
+      {
+        "name": "ECO DOPPLER ABDOMINAL (HEPATICO, RENAL, PANCREATICO, GRANDES VASOS..)",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER ARTERIAL Y/O VENOSO DOS MIEMBROS",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER ARTERIAL Y/O VENOSO UN MIEMBRO",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO DOPPLER CARDIACO",
+        "priceUsd": 120
+      },
+      {
+        "name": "ECO DOPPLER CAROTIDEO",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO DOPPLER CEREBRAL",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER CUELLO (CAROTIDAS, TIROIDES..)",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER DE MAMA",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER DE PELVIS",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER GINECOLOGICO (ENDOMETRIO, OVARIOS..)",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER MATERNO FETAL",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER MATERNO FETAL GEMELAR",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER OBSTETRICO / PERFIL HEMODINAMICO MATERNO FETAL",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER PARTES BLANDAS",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER PROSTATICO",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER TESTICULAR",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO DOPPLER TRANSVAGINAL",
+        "priceUsd": 130
+      },
+      {
+        "name": "ECO GENETICO",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO GENETICO GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO MADUREZ FETAL",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO MADUREZ FETAL GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO MORFOLOGICO",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO MORFOLOGICO GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO PERFIL BIOFISICO",
+        "priceUsd": 100
+      },
+      {
+        "name": "ECO PERFIL BIOFISICO GEMELAR",
+        "priceUsd": 110
+      },
+      {
+        "name": "ECO PULMONAR",
+        "priceUsd": 120
+      },
+      {
+        "name": "ECO STRESS CON DOBUTAMINA",
+        "priceUsd": 200
+      },
+      {
+        "name": "ECO TRANSFONTANELAR",
+        "priceUsd": 100
+      },
+      {
         "name": "ECOCARDIOGRAMA",
-        "priceUsd": 90
+        "priceUsd": 120
       },
       {
         "name": "ECOGRAFIA PÉLVICA CON MEDICÓN DE VOLUMEN VESICAL PRE Y POST -MICCIONAL",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "ECOGRAFIA PÉLVICA CON MEDICÓN DE VOLUMEN VESICAL PRE Y POST MICCIONAL + ECOGRAFIA PROSTATICA TRANSRECTAL",
-        "priceUsd": 60
+        "priceUsd": 140
       },
       {
         "name": "ECOGRAFIA PROSTATICA TRANSRECTAL",
-        "priceUsd": 80
+        "priceUsd": 100
       },
       {
         "name": "ECOGRAFIA RENAL",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "ECOGRAFIA UROLOGICA (RIÑONES, VEJIGA CON MEDICION PRE Y POST MICCIONAL Y PROSTATA)",
-        "priceUsd": 80
+        "priceUsd": 110
       },
       {
         "name": "ELECTROCARDIOGRAMA",
-        "priceUsd": 20
+        "priceUsd": 35
       },
       {
         "name": "ELECTROCOAGULACIÓN / RADIOELECTROCIRUGIA (SESION)",
@@ -704,7 +704,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ELECTROENCEFALOGRAMA",
-        "priceUsd": 70
+        "priceUsd": 220
       },
       {
         "name": "ELECTROFORESIS DE PROTEINAS",
@@ -712,7 +712,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ELECTRÓLISIS (SESION)",
-        "priceUsd": 150
+        "priceUsd": 160
       },
       {
         "name": "ELECTROLITOS EN ORINA",
@@ -720,11 +720,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ESCLEROSIS DE ULCERA SANGRANTE",
-        "priceUsd": 250
+        "priceUsd": 300
       },
       {
         "name": "ESCLEROSIS DE VARICES ESOFAGICAS",
-        "priceUsd": 800
+        "priceUsd": 850
       },
       {
         "name": "ESTRADIOL",
@@ -732,27 +732,27 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "EVALUACION CARDIOVASCULAR PRE-OPERATORIA",
-        "priceUsd": 45
+        "priceUsd": 70
       },
       {
         "name": "EXERESIS DE LIPOMA SUPERFICIAL",
-        "priceUsd": 400
+        "priceUsd": 100
       },
       {
         "name": "EXERESIS DE MUCOCELE SIMPLE",
-        "priceUsd": 350
+        "priceUsd": 100
       },
       {
         "name": "EXTIRPACIÓN DE QUISTE (UNIDAD)",
-        "priceUsd": 250
-      },
-      {
-        "name": "EXTRACCION DE CUERPO EXTRAÑO",
         "priceUsd": 220
       },
       {
+        "name": "EXTRACCION DE CUERPO EXTRAÑO",
+        "priceUsd": 260
+      },
+      {
         "name": "EXTRACCION DE CUERPOS EXTRAÑOS EN LA ESFERA DEL ORL",
-        "priceUsd": 85
+        "priceUsd": 120
       },
       {
         "name": "FACTOR REMATOIDEO (RA TEST)",
@@ -768,11 +768,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "FLUJOMETRIA URINARIA",
-        "priceUsd": 80
+        "priceUsd": 120
       },
       {
         "name": "FLUJOMETRIA URINARIA + ECOGRAFIA PELVICA CON MEDICIÓN DEL VOLUMEN VESICAL PRE Y POST MICCIONAL",
-        "priceUsd": 120
+        "priceUsd": 170
       },
       {
         "name": "FOSFATASA ACIDA",
@@ -808,7 +808,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "FUNCIONALISMO PULMONAR CON BRONCODILATACION (ESPIROMETRIA)",
-        "priceUsd": 80
+        "priceUsd": 110
       },
       {
         "name": "GAMA GLUTAMIL TRANSPEPIDASA (GGT)",
@@ -816,7 +816,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "GASTROSTOMIA ENDOSCOPICA PERCUTANEA",
-        "priceUsd": 1600
+        "priceUsd": 1300
       },
       {
         "name": "GLICEMIA EN AYUNAS",
@@ -868,27 +868,27 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "HISTEROSCOPIA DIAGNOSTICA",
-        "priceUsd": 380
+        "priceUsd": 270
       },
       {
         "name": "HISTEROSCOPIA OPERATORIA MAS BIOPSIA (INCLUYE ANATOMIA PATOLOGICA)",
-        "priceUsd": 380
+        "priceUsd": 370
       },
       {
         "name": "HISTEROSCOPIA: POLIPECTOMIA O MIOMECTOMIA MAYOR DE 2CM",
-        "priceUsd": 750
+        "priceUsd": 830
       },
       {
         "name": "HISTEROSCOPIA: POLIPECTOMIA O MIOMECTOMIA MENOR DE 2CM",
-        "priceUsd": 600
+        "priceUsd": 670
       },
       {
         "name": "HOLTER DE ARRITMIA",
-        "priceUsd": 100
+        "priceUsd": 120
       },
       {
         "name": "HOLTER DE PRESION (MAPA)",
-        "priceUsd": 100
+        "priceUsd": 120
       },
       {
         "name": "HORMONA FOLICULOESTIMULANTE ( FSH )",
@@ -912,23 +912,23 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "INFILTRACIÓN / ESCLEROSIS VÁRICES (Sesión)",
-        "priceUsd": 150
+        "priceUsd": 160
       },
       {
         "name": "INFILTRACION 1 ARTICULACION",
-        "priceUsd": 150
+        "priceUsd": 130
       },
       {
         "name": "INFILTRACION 2 o MAS ARTICULACIONES",
-        "priceUsd": 250
+        "priceUsd": 280
       },
       {
         "name": "INFILTRACION DE 1 ESPOLON",
-        "priceUsd": 150
+        "priceUsd": 100
       },
       {
         "name": "INMOVILIZACION Y RETIRO DE YESO (HONORARIOS)",
-        "priceUsd": 100
+        "priceUsd": 160
       },
       {
         "name": "INMUNOGLOBULINA A ( IGA )",
@@ -960,15 +960,15 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "LIBERACIÓN DE ADHERENCIAS BALANO PREPUCIALES",
-        "priceUsd": 200
+        "priceUsd": 100
       },
       {
         "name": "LIBERACIÓN DE SINEQUIA SIMPLE",
-        "priceUsd": 240
+        "priceUsd": 100
       },
       {
         "name": "LIGADURA DE VARICES ESOFAGICAS",
-        "priceUsd": 800
+        "priceUsd": 850
       },
       {
         "name": "LIPASA",
@@ -992,11 +992,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "MAMOGRAFIA BILATERAL",
-        "priceUsd": 50
+        "priceUsd": 60
       },
       {
         "name": "MAMOGRAFIA UNILATERAL",
-        "priceUsd": 38
+        "priceUsd": 40
       },
       {
         "name": "MICOPLASMA PNEUMONIAE ( IGA + IGG + IGM )",
@@ -1024,7 +1024,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "OCT SEGMENTO ANTERIOR Y POSTERIOR",
-        "priceUsd": 100
+        "priceUsd": 140
       },
       {
         "name": "ORINA",
@@ -1036,15 +1036,15 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "PAPILOGRAFIA",
-        "priceUsd": 65
+        "priceUsd": 100
       },
       {
         "name": "PAQUIMETRIA DE CORNEA",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "PARACENTESIS DIAGNOSTICA",
-        "priceUsd": 200
+        "priceUsd": 300
       },
       {
         "name": "PERFIL 1 PREVISORA ( HC + GL + UR + CR + COL + TRIG )",
@@ -1128,11 +1128,11 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "POLIPECTOMIA (1-3)",
-        "priceUsd": 150
+        "priceUsd": 230
       },
       {
         "name": "POLIPECTOMIA (MÁS DE 3)",
-        "priceUsd": 250
+        "priceUsd": 300
       },
       {
         "name": "POTASIO",
@@ -1164,47 +1164,47 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "PRUEBA DE ERECCIÓN INDUCIDA CON INYECCIÓN INTRACAVENOSA DE SUSTANCIAS VASO ACTIVAS",
-        "priceUsd": 90
+        "priceUsd": 100
       },
       {
         "name": "PRUEBA DE ESFUERZO",
-        "priceUsd": 100
+        "priceUsd": 130
       },
       {
         "name": "PTERIGION",
-        "priceUsd": 100
+        "priceUsd": 120
       },
       {
         "name": "PUNCIÓN CON AGUJA FINA",
-        "priceUsd": 200
-      },
-      {
-        "name": "PUNCIÓN LUMBAR",
-        "priceUsd": 255
-      },
-      {
-        "name": "RAFIA DE HERIDA SIMPLE",
-        "priceUsd": 350
-      },
-      {
-        "name": "REALIZACION DE BIOPSIA CON ANESTESIA LOCAL",
-        "priceUsd": 85
-      },
-      {
-        "name": "RECAMBIO DE SONDA FOLEY DE CISTOSTOMIA (INCLUYE MATERIAL)",
-        "priceUsd": 200
-      },
-      {
-        "name": "RECAMBIO DE SONDA FOLEY DE NEFROSTOMIA GUIA POR ECO (INCLUYE MATERIAL)",
         "priceUsd": 250
       },
       {
+        "name": "PUNCIÓN LUMBAR",
+        "priceUsd": 320
+      },
+      {
+        "name": "RAFIA DE HERIDA SIMPLE",
+        "priceUsd": 100
+      },
+      {
+        "name": "REALIZACION DE BIOPSIA CON ANESTESIA LOCAL",
+        "priceUsd": 100
+      },
+      {
+        "name": "RECAMBIO DE SONDA FOLEY DE CISTOSTOMIA (INCLUYE MATERIAL)",
+        "priceUsd": 220
+      },
+      {
+        "name": "RECAMBIO DE SONDA FOLEY DE NEFROSTOMIA GUIA POR ECO (INCLUYE MATERIAL)",
+        "priceUsd": 300
+      },
+      {
         "name": "REGISTRO BASICO DE RETINA (RBR)",
-        "priceUsd": 60
+        "priceUsd": 100
       },
       {
         "name": "REMOCIÓN CUERPO EXTRAÑO CORNEAL",
-        "priceUsd": 160
+        "priceUsd": 170
       },
       {
         "name": "RETICULOCITO",
@@ -1212,187 +1212,187 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "RETIRO DE CATETER DOBLE J (ANESTESIA LOCAL)",
-        "priceUsd": 250
+        "priceUsd": 350
       },
       {
         "name": "RMN ARTICULACION TEMPORO MANDIBULAR",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN CEREBRAL Y/O MULTIPLANAR",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN COXOFEMORAL CADERA DERECHA",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN COXOFEMORAL CADERA IZQUIERDA",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN DE ABDOMEN",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE ABDOMEN Y PELVIS",
-        "priceUsd": 600
+        "priceUsd": 650
       },
       {
         "name": "RMN DE ANTEBRAZO DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE ANTEBRAZO IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE AXILA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE BRAZO DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE BRAZO IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE CODO DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE CODO IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE COLUMNA CERVICAL",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE COLUMNA DORSAL",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN DE COLUMNA LUMBAR",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN DE CUELLO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE FEMUR DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE FEMUR IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE HOMBRO DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE HOMBRO IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE MANO DERECHA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE MANO IZQUIERDA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE MUÑECA DERECHA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE MUÑECA IZQUIERDA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE MUSLO DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE MUSLO IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE OIDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE ORBITA",
-        "priceUsd": 500
+        "priceUsd": 550
       },
       {
         "name": "RMN DE PANTORRILLA DERECHA",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN DE PANTORRILLA IZQUIERDA",
-        "priceUsd": 300
+        "priceUsd": 370
       },
       {
         "name": "RMN DE PELVIS",
-        "priceUsd": 600
+        "priceUsd": 650
       },
       {
         "name": "RMN DE PIE DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE PIE IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE PIERNA DERECHA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE PIERNA IZQUIERDA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE RODILLA DERECHA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE RODILLA IZQUIERDA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE SENOS PARANASALES",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE SILLA TURCA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE TOBILLO DERECHO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE TOBILLO IZQUIERDO",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN DE TORAX",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN SACRO COCCIGEA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "RMN SACROILIACA",
-        "priceUsd": 350
+        "priceUsd": 355
       },
       {
         "name": "ROTAVIRUS",
@@ -1404,231 +1404,231 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "RX CALCANEO O TALON DERECHO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX CALCANEO O TALON IZQUIERDO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX CAVUM, RINOFARINGE, WATERS HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX CISTOGRAFIA MICCIONAL (RX CON CONTRASTE)",
-        "priceUsd": 58
+        "priceUsd": 100
       },
       {
         "name": "RX CLAVICULA DERECHA HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX CLAVICULA IZQUIERDA HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX CODO DERECHO HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX CODO IZQUIERDO HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX COLUMNA CERVICAL HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX COLUMNA DORSAL HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX COLUMNA DORSO - LUMBAR HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX COLUMNA LUMBAR HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX COLUMNA LUMBOSACRA HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX COXIS HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX CRANEO HASTA (06) PROYECCIONES",
-        "priceUsd": 61
+        "priceUsd": 80
       },
       {
         "name": "RX CUELLO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX DE ABDOMEN 1 PROYECCION",
-        "priceUsd": 50
+        "priceUsd": 45
       },
       {
         "name": "RX DE ANTE BRAZO DERECHO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX DE ANTE BRAZO IZQUIERDO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX DE ARTICULACION COXOFEMORAL, CADERA DERECHA HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX DE ARTICULACION COXOFEMORAL, CADERA IZQUIERDA HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX DE ARTICULACION TEMPORO-MANDIBULAR HASTA (02) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 65
       },
       {
         "name": "RX ESCAPULA DERECHA HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX ESCAPULA IZQUIERDA HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX ESTERNON (01) PROYECCION",
-        "priceUsd": 55
+        "priceUsd": 45
       },
       {
         "name": "RX FEMUR DERECHO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX FEMUR IZQUIERDO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX HOMBRO DERECHO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX HOMBRO IZQUIERDO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX HUESOS PROPIOS DE LA NARIZ HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX HUMERO DERECHO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX HUMERO IZQUIERDO HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX MANO Y FALANGES DERECHA HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX MANO Y FALANGES IZQUIERDA HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX ORBITA HASTA (02) PROYECCIONES",
-        "priceUsd": 53
+        "priceUsd": 65
       },
       {
         "name": "RX PELVIS HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX PIE DERECHO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX PIE IZQUIERDO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX PIERNA DERECHO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
-      },
-      {
-        "name": "RX PIERNA IZQUIERDO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
-      },
-      {
-        "name": "RX RADIOCARPIANA Y MUÑECA DERECHA HASTA (06) PROYECCIONES",
-        "priceUsd": 61
-      },
-      {
-        "name": "RX RADIOCARPIANA Y MUÑECA IZQUIERDA HASTA (06) PROYECCIONES",
-        "priceUsd": 61
-      },
-      {
-        "name": "RX RODILLA DERECHA HASTA (06) PROYECCIONES",
-        "priceUsd": 61
-      },
-      {
-        "name": "RX RODILLA IZQUIERDA HASTA (06) PROYECCIONES",
-        "priceUsd": 61
-      },
-      {
-        "name": "RX ROTULA DERECHA HASTA (03) PROYECCIONES",
-        "priceUsd": 55
-      },
-      {
-        "name": "RX ROTULA IZQUIERDA HASTA (03) PROYECCIONES",
-        "priceUsd": 55
-      },
-      {
-        "name": "RX SACROXIS HASTA (03) PROYECCIONES",
-        "priceUsd": 55
-      },
-      {
-        "name": "RX SENOS PARANASALES HASTA (03) PROYECCIONES",
-        "priceUsd": 55
-      },
-      {
-        "name": "RX SERIE ESQUELOTICA HASTA (04) PROYECCIONES",
-        "priceUsd": 57
-      },
-      {
-        "name": "RX SILLA TURCA (01) PROYECCION",
         "priceUsd": 50
       },
       {
-        "name": "RX TOBILLO DERECHA HASTA (03) PROYECCIONES",
+        "name": "RX PIERNA IZQUIERDO HASTA (03) PROYECCIONES",
+        "priceUsd": 70
+      },
+      {
+        "name": "RX RADIOCARPIANA Y MUÑECA DERECHA HASTA (06) PROYECCIONES",
+        "priceUsd": 80
+      },
+      {
+        "name": "RX RADIOCARPIANA Y MUÑECA IZQUIERDA HASTA (06) PROYECCIONES",
+        "priceUsd": 80
+      },
+      {
+        "name": "RX RODILLA DERECHA HASTA (06) PROYECCIONES",
+        "priceUsd": 80
+      },
+      {
+        "name": "RX RODILLA IZQUIERDA HASTA (06) PROYECCIONES",
+        "priceUsd": 80
+      },
+      {
+        "name": "RX ROTULA DERECHA HASTA (03) PROYECCIONES",
+        "priceUsd": 70
+      },
+      {
+        "name": "RX ROTULA IZQUIERDA HASTA (03) PROYECCIONES",
+        "priceUsd": 70
+      },
+      {
+        "name": "RX SACROXIS HASTA (03) PROYECCIONES",
+        "priceUsd": 70
+      },
+      {
+        "name": "RX SENOS PARANASALES HASTA (03) PROYECCIONES",
+        "priceUsd": 70
+      },
+      {
+        "name": "RX SERIE ESQUELOTICA HASTA (04) PROYECCIONES",
         "priceUsd": 55
+      },
+      {
+        "name": "RX SILLA TURCA (01) PROYECCION",
+        "priceUsd": 40
+      },
+      {
+        "name": "RX TOBILLO DERECHA HASTA (03) PROYECCIONES",
+        "priceUsd": 70
       },
       {
         "name": "RX TOBILLO IZQUIERDO HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX TORAX HASTA (03) PROYECCIONES",
-        "priceUsd": 55
+        "priceUsd": 70
       },
       {
         "name": "RX TRANSITO GASTRO INTESTINAL (RX CON CONTRASTE)",
-        "priceUsd": 58
+        "priceUsd": 100
       },
       {
         "name": "RX URETROCISTOGRAFIA MICCIONAL (RX CON CONTRASTE)",
-        "priceUsd": 58
+        "priceUsd": 100
       },
       {
         "name": "RX URETROGRAFIA (RX CON CONTRASTE)",
-        "priceUsd": 58
+        "priceUsd": 100
       },
       {
         "name": "RX UROGRAFIA DE ELIMINACION (RX CON CONTRATE)",
-        "priceUsd": 58
+        "priceUsd": 100
       },
       {
         "name": "SANGRE OCULTA",
@@ -1688,175 +1688,175 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "TAPONAMIENTO ANTERIOR NASAL BILATERAL",
-        "priceUsd": 130
+        "priceUsd": 140
       },
       {
         "name": "TAPONAMIENTO ANTERIOR NASAL UNILATERAL",
-        "priceUsd": 85
+        "priceUsd": 100
       },
       {
         "name": "TC ARTICULACION SACROILIACA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC CEREBRAL",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE ABDOMEN",
-        "priceUsd": 250
+        "priceUsd": 270
       },
       {
         "name": "TC DE ABDOMEN Y PELVIS",
-        "priceUsd": 400
+        "priceUsd": 410
       },
       {
         "name": "TC DE ARTICULACION COXOFEMORAL Y CADERA DERECHA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE ARTICULACION COXOFEMORAL Y CADERA IZQUIERDA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE AXILA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE CODO DERECHO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE CODO IZQUIERDO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE COLUMNA CERVICAL",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE COLUMNA DORSAL",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE COLUMNA LUMBAR",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE COLUMNA LUMBOSACRA",
-        "priceUsd": 250
+        "priceUsd": 270
       },
       {
         "name": "TC DE COLUMNA SACRO COCCIGEA",
-        "priceUsd": 250
+        "priceUsd": 270
       },
       {
         "name": "TC DE CRANEO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE CUELLO",
-        "priceUsd": 250
+        "priceUsd": 270
       },
       {
         "name": "TC DE HOMBRO DERECHO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE HOMBRO IZQUIERDO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE MANO DERECHA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE MANO IZQUIERDA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE MUÑECA DERECHA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE MUÑECA IZQUIERDA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE MUSLO DERECHO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE MUSLO IZQUIERDO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE OIDO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE ORBITA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE PELVIS",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE PIE DERECHO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE PIE IZQUIERDO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE RODILLA DERECHA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE RODILLA IZQUIERDA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE SENOS PARANASALES",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE SILLA TURCA",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE TOBILLO DERECHO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE TOBILLO IZQUIERDO",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE TORAX",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC DE VIAS RESPIRATORIAS",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC MACIZO FACIAL Y/O ARTICULACION TEMPORO MANDIBULAR",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TC PROTOCOLO DE LITIASIS",
-        "priceUsd": 150
+        "priceUsd": 200
       },
       {
         "name": "TELELARINGOSCOPIA",
-        "priceUsd": 85
+        "priceUsd": 100
       },
       {
         "name": "TERAPIA CON ONDAS DE CHOQUE",
-        "priceUsd": 250
+        "priceUsd": 120
       },
       {
         "name": "TESTOSTERONA LIBRE",
@@ -1884,15 +1884,15 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "TOMA BIOPSIA DE NASAL",
-        "priceUsd": 170
+        "priceUsd": 180
       },
       {
         "name": "TOMA DE BIOPSIA (Unidad)",
-        "priceUsd": 80
+        "priceUsd": 110
       },
       {
         "name": "TOPOGRAFIA CORNEAL",
-        "priceUsd": 75
+        "priceUsd": 120
       },
       {
         "name": "TOXOPLASMOSIS ( IGG + IGM )",
@@ -1920,59 +1920,59 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ULTRASONIDO ABDOMINAL (HEPATICO, BILIAR, PANCREATICO, RENAL…)",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO CEREBRAL",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO DE CUELLO (TIROIDEO…)",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO DE PARTES BLANDAS",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO GINECOLOGICO",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO MAMARIO",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO OBSTETRICO",
-        "priceUsd": 60
-      },
-      {
-        "name": "ULTRASONIDO OBSTETRICO GEMELAR",
         "priceUsd": 80
       },
       {
+        "name": "ULTRASONIDO CEREBRAL",
+        "priceUsd": 80
+      },
+      {
+        "name": "ULTRASONIDO DE CUELLO (TIROIDEO…)",
+        "priceUsd": 80
+      },
+      {
+        "name": "ULTRASONIDO DE PARTES BLANDAS",
+        "priceUsd": 80
+      },
+      {
+        "name": "ULTRASONIDO GINECOLOGICO",
+        "priceUsd": 80
+      },
+      {
+        "name": "ULTRASONIDO MAMARIO",
+        "priceUsd": 80
+      },
+      {
+        "name": "ULTRASONIDO OBSTETRICO",
+        "priceUsd": 80
+      },
+      {
+        "name": "ULTRASONIDO OBSTETRICO GEMELAR",
+        "priceUsd": 160
+      },
+      {
         "name": "ULTRASONIDO OSTEO-MUSCULAR",
-        "priceUsd": 150
+        "priceUsd": 170
       },
       {
         "name": "ULTRASONIDO PELVICO",
-        "priceUsd": 60
+        "priceUsd": 80
       },
       {
         "name": "ULTRASONIDO PROSTATICO",
-        "priceUsd": 60
+        "priceUsd": 80
       },
       {
         "name": "ULTRASONIDO REFLUJO",
-        "priceUsd": 60
+        "priceUsd": 80
       },
       {
         "name": "ULTRASONIDO TESTICULAR",
-        "priceUsd": 60
+        "priceUsd": 80
       },
       {
         "name": "ULTRASONIDO TRANSVAGINAL",
-        "priceUsd": 60
+        "priceUsd": 80
       },
       {
         "name": "UREA EN ORINA DE 24H",
@@ -1984,7 +1984,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "URETROCISTOSCOPIA (ANESTESIA LOCAL)",
-        "priceUsd": 350
+        "priceUsd": 450
       },
       {
         "name": "UROCULTIVO Y ANTIBIOGRAMA",
@@ -1992,7 +1992,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "UROTAC",
-        "priceUsd": 400
+        "priceUsd": 370
       },
       {
         "name": "VDRL",
@@ -2004,19 +2004,19 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "VIDEO COLONOSCOPIA(CONSULTA + ESTUDIO)",
-        "priceUsd": 930
+        "priceUsd": 370
       },
       {
         "name": "VIDEO GASTROSCOPIA (CONSULTA + ESTUDIO)",
-        "priceUsd": 880
+        "priceUsd": 370
       },
       {
         "name": "VIDEOENDOSCOPIA NASAL, LARINGEA Y OTICA RIGIDA Y NASOFIBROLARINGOSCOPIA",
-        "priceUsd": 100
+        "priceUsd": 180
       },
       {
         "name": "VISCO SUPLEMENTACION UNILATERAL 1 SESION",
-        "priceUsd": 170
+        "priceUsd": 180
       },
       {
         "name": "VITAMINA B12 o CIANOCOBALAMINA",
@@ -2746,7 +2746,7 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
     ]
   },
   {
-    "name": "Estar Seguros S.A",
+    "name": "ESTAR SEGUROS S.A",
     "aliases": [
       "Estar Seguros"
     ],
@@ -6158,699 +6158,359 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
     "services": [
       {
         "name": "17 OH PROGESTERONA",
-        "priceUsd": 11.8
-      },
-      {
-        "name": "AC ANTI-BETA 2 GLICOPROTEINA IGG",
-        "priceUsd": 18.88
-      },
-      {
-        "name": "AC ANTI-BETA 2 GLICOPROTEINA IGM",
-        "priceUsd": 18.88
-      },
-      {
-        "name": "AC ANTI-PEPTIDO CITRULINADO CICLICO",
-        "priceUsd": 18.88
+        "priceUsd": 14.29
       },
       {
         "name": "AC ANTI-TIROGLOBULINA",
-        "priceUsd": 11.01
+        "priceUsd": 13.33
       },
       {
         "name": "AC ANTINUCLEARES (ANA)",
-        "priceUsd": 53.5
-      },
-      {
-        "name": "AC. ANTI-MUSCULO LISO (ANTI-ASMA)",
-        "priceUsd": 41.7
+        "priceUsd": 56.31
       },
       {
         "name": "ACIDO FOLICO (FOLATO)",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ACIDO LACTICO",
-        "priceUsd": 14.16
+        "priceUsd": 22
       },
       {
         "name": "ACIDO URICO",
-        "priceUsd": 3.15
+        "priceUsd": 3.81
       },
       {
         "name": "ACIDO URICO EN ORINA PARCIAL",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "ACIDO URICO ORINA 24 HORAS",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "ACIDO VALPROICO (VALPRON)",
-        "priceUsd": 29.9
-      },
-      {
-        "name": "ACS ANTI-MPO (PANCA)",
-        "priceUsd": 32.26
-      },
-      {
-        "name": "ACS ANTI-PR3 (C-ANCA)",
-        "priceUsd": 32.26
-      },
-      {
-        "name": "ACTH",
-        "priceUsd": 29.9
+        "priceUsd": 5.71
       },
       {
         "name": "ADENOVIRUS ROTAVIRUS EN HECES",
-        "priceUsd": 14.16
+        "priceUsd": 17.14
       },
       {
         "name": "ALBUMINA",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "ALFAFETOPROTEINA (AFP)",
-        "priceUsd": 18.1
+        "priceUsd": 19.05
       },
       {
         "name": "ALT",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "AMILASA",
-        "priceUsd": 7.87
+        "priceUsd": 8
       },
       {
         "name": "AMILASA EN ORINA",
-        "priceUsd": 7.87
+        "priceUsd": 8
       },
       {
         "name": "AMILASA EN ORINA 24H",
-        "priceUsd": 7.87
+        "priceUsd": 9.52
       },
       {
         "name": "AMILASA EN ORINA PARCIAL",
-        "priceUsd": 7.87
-      },
-      {
-        "name": "AMONIO",
-        "priceUsd": 19.67
-      },
-      {
-        "name": "ANCA C",
-        "priceUsd": 32.26
-      },
-      {
-        "name": "ANCA P",
-        "priceUsd": 32.26
-      },
-      {
-        "name": "ANDROSTENEDIONA",
-        "priceUsd": 12.59
-      },
-      {
-        "name": "ANOSCOPIA",
-        "priceUsd": 51.57
-      },
-      {
-        "name": "ANTI-FOSFOLIPIDOS IGG",
-        "priceUsd": 11.01
-      },
-      {
-        "name": "ANTI-FOSFOLIPIDOS IGM",
-        "priceUsd": 11.01
-      },
-      {
-        "name": "ANTIC ANTI SS-B (ANTI-LA)",
-        "priceUsd": 14.16
-      },
-      {
-        "name": "ANTIC. ANTI MITOCONDRIALES (AMA)",
-        "priceUsd": 28.32
-      },
-      {
-        "name": "ANTIC. ANTI RNP (ANTI-RNP)",
-        "priceUsd": 27.54
-      },
-      {
-        "name": "ANTIC. ANTI SMITH (ANTI-SM)",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "ANTIC. ANTI SS-A (ANTI-RO)",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "ANTIC. ANTI TRANSGLUTAMINASA IGA",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ANTIC. ANTI TRANSGLUTAMINASA IGG",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ANTIC. ANTI TREPONEMA PALLIDUM",
-        "priceUsd": 16.52
-      },
-      {
-        "name": "ANTIC. ANTI-RETICULINA (ARA)",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ANTIC. ANTI-SCL 70 (ANTI-SCL-70)",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "ANTICUERPOS ANTI TRANSGLUTAMINASA IGG/IGA",
-        "priceUsd": 40.91
-      },
-      {
-        "name": "ANTICUERPOS ANTI-DNA",
-        "priceUsd": 16.52
-      },
-      {
-        "name": "ANTICUERPOS ANTI-PEROXIDASA",
-        "priceUsd": 11.01
-      },
-      {
-        "name": "ANTICUERPOS ANTICARDIOLIPINAS IGA",
-        "priceUsd": 29.9
-      },
-      {
-        "name": "ANTICUERPOS ANTICARDIOLIPINAS IGG",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ANTICUERPOS ANTICARDIOLIPINAS IGM",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ANTICUERPOS ANTIGLIADINA (IGA)",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "ANTICUERPOS ANTIGLIADINA (IGG)",
-        "priceUsd": 21.24
+        "priceUsd": 9.52
       },
       {
         "name": "ANTIG. PROSTATICO LIBRE (PSA LIBRE)",
-        "priceUsd": 11.8
+        "priceUsd": 14.29
       },
       {
         "name": "ANTIG. PROSTATICO TOTAL (PSA TOTAL)",
-        "priceUsd": 11.8
-      },
-      {
-        "name": "ANTIGENO (COVID) HISOPADO",
-        "priceUsd": 11.8
+        "priceUsd": 14.29
       },
       {
         "name": "ANTIGENOS FEBRILES",
-        "priceUsd": 11.8
+        "priceUsd": 14.29
+      },
+      {
+        "name": "AST",
+        "priceUsd": 4.97
       },
       {
         "name": "ASTO ANTIESTREPTOLISINA O",
-        "priceUsd": 5.99
-      },
-      {
-        "name": "AUDIOMETRIA",
-        "priceUsd": 31.67
+        "priceUsd": 6.63
       },
       {
         "name": "AZUCARES REDUCTORES EN HECES",
-        "priceUsd": 3.14
-      },
-      {
-        "name": "BETA 2 GLICOPROTEINA (IGG)",
-        "priceUsd": 18.88
-      },
-      {
-        "name": "BETA 2 GLICOPROTEINA (IGM)",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "BETA 2 MICROGLOBULINA",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "BETA HCG (CUANTITATIVA)",
-        "priceUsd": 11.8
+        "priceUsd": 6
       },
       {
         "name": "BILIRRUBINA DIRECTA",
-        "priceUsd": 3.15
+        "priceUsd": 3.81
       },
       {
         "name": "BILIRRUBINA INDIRECTA",
-        "priceUsd": 3.15
+        "priceUsd": 3.81
       },
       {
         "name": "BILIRRUBINA TOTAL",
-        "priceUsd": 3.14
+        "priceUsd": 3.81
       },
       {
         "name": "BILIRRUBINA TOTAL Y FRACCIONADA",
-        "priceUsd": 6.3
+        "priceUsd": 7.62
       },
       {
         "name": "BIOMETRIA EN AMBOS OJOS",
-        "priceUsd": 36.19
-      },
-      {
-        "name": "BIOPSIA CUELLO UTERINO",
-        "priceUsd": 58.81
-      },
-      {
-        "name": "BIOPSIA DE ENDOMETRIO",
-        "priceUsd": 58.81
-      },
-      {
-        "name": "BIOPSIA DE PIEL EN SACOBOCADO",
-        "priceUsd": 144.76
-      },
-      {
-        "name": "BIOPSIA GASTRICA",
-        "priceUsd": 39.81
-      },
-      {
-        "name": "BIOPSIA PROSTATICA",
-        "priceUsd": 36.19
-      },
-      {
-        "name": "BNP PEPTIDO NATRIURETICO",
-        "priceUsd": 15.73
-      },
-      {
-        "name": "BORDETELLA PERTUSIS IGG",
-        "priceUsd": 29.9
-      },
-      {
-        "name": "BORDETELLA PERTUSIS IGM",
-        "priceUsd": 29.9
-      },
-      {
-        "name": "BUN (NITROGENO UREICO EN SANGRE)",
-        "priceUsd": 3.14
-      },
-      {
-        "name": "C1 INHIBIDOR",
-        "priceUsd": 27.54
+        "priceUsd": 38.1
       },
       {
         "name": "CA 125",
-        "priceUsd": 11.01
+        "priceUsd": 11.59
       },
       {
         "name": "CA 15-3",
-        "priceUsd": 11.01
+        "priceUsd": 11.59
       },
       {
         "name": "CA 19-9",
-        "priceUsd": 11.01
-      },
-      {
-        "name": "CA 72-4",
-        "priceUsd": 33.04
+        "priceUsd": 11.59
       },
       {
         "name": "CALCIO",
-        "priceUsd": 3.93
+        "priceUsd": 4.76
       },
       {
         "name": "CALCIO EN ORINA",
-        "priceUsd": 4.72
+        "priceUsd": 5
       },
       {
         "name": "CALCIO EN ORINA PARCIAL",
-        "priceUsd": 4.72
+        "priceUsd": 5
       },
       {
         "name": "CALCIO ORINA 24 HORAS",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "CALCITONINA",
-        "priceUsd": 44.06
-      },
-      {
-        "name": "CALPROTECTINA",
-        "priceUsd": 39.34
+        "priceUsd": 5.71
       },
       {
         "name": "CAMPIMETRIA",
-        "priceUsd": 27.14
-      },
-      {
-        "name": "CARBAMAZEPINA (TEGRETOL)",
-        "priceUsd": 32.26
+        "priceUsd": 30
       },
       {
         "name": "CARGA GLUCOSADA (GLICOLAC)",
-        "priceUsd": 5.51
-      },
-      {
-        "name": "CATECOLAMINAS EN ORINA 24 H",
-        "priceUsd": 28.32
-      },
-      {
-        "name": "CATECOLAMINAS EN SANGRE",
-        "priceUsd": 28.32
-      },
-      {
-        "name": "CAUTERIZACION DE LESIONES VPH",
-        "priceUsd": 84.14
+        "priceUsd": 10
       },
       {
         "name": "CEA ANTIGENO CARCINOEMBRIONARIO",
-        "priceUsd": 11.01
-      },
-      {
-        "name": "CELULAS LE",
-        "priceUsd": 15.73
-      },
-      {
-        "name": "CETONEMIA",
-        "priceUsd": 2.36
-      },
-      {
-        "name": "CETONURIA",
-        "priceUsd": 2.36
-      },
-      {
-        "name": "CH 50",
-        "priceUsd": 48.78
+        "priceUsd": 11.59
       },
       {
         "name": "CHAGAS - MACHADO GUERRERO",
-        "priceUsd": 18.1
+        "priceUsd": 20
       },
       {
         "name": "CHLAMYDIA PNEUMONIAE IGG.",
-        "priceUsd": 19.67
+        "priceUsd": 20.7
       },
       {
         "name": "CHLAMYDIA PNEUMONIE IGM.",
-        "priceUsd": 19.67
+        "priceUsd": 20.7
       },
       {
         "name": "CHLAMYDIA TRACOMATI IGG",
-        "priceUsd": 19.67
+        "priceUsd": 20.7
       },
       {
         "name": "CHLAMYDIA TRACOMATI IGM",
-        "priceUsd": 19.67
+        "priceUsd": 20.7
       },
       {
-        "name": "CISTOSCOPIA FLEXIBLE",
-        "priceUsd": 242.48
-      },
-      {
-        "name": "CISTOSCOPIA RIGIDA",
-        "priceUsd": 169.19
-      },
-      {
-        "name": "CITOGRAMA NASAL - EOSINOFILOS MOCO NASAL",
-        "priceUsd": 7.87
-      },
-      {
-        "name": "CITOLOGIA",
+        "name": "CITOLOGIA (INCLUYE TOMA DE MUESTRA Y HONORARIOS)",
         "priceUsd": 40
       },
       {
         "name": "CITOMEGALOVIRUS IG G",
-        "priceUsd": 14.16
+        "priceUsd": 15
       },
       {
         "name": "CITOMEGALOVIRUS IG M",
-        "priceUsd": 14.16
+        "priceUsd": 15
       },
       {
         "name": "CK CREATININA FOSFOQUINASA",
-        "priceUsd": 11.8
+        "priceUsd": 12.42
       },
       {
         "name": "CKMB CREATININA FOSFOQUINASA MB",
-        "priceUsd": 11.8
+        "priceUsd": 12.42
       },
       {
         "name": "CLORO",
-        "priceUsd": 13.37
+        "priceUsd": 14.08
       },
       {
         "name": "CLORO EN ORINA",
-        "priceUsd": 13.37
+        "priceUsd": 14.08
       },
       {
         "name": "CLORO EN ORINA 24H",
-        "priceUsd": 13.37
+        "priceUsd": 14.08
       },
       {
         "name": "CLORO EN ORINA PARCIAL",
-        "priceUsd": 13.37
+        "priceUsd": 14.08
       },
       {
         "name": "COCAINA",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "COLESTEROL HDL",
-        "priceUsd": 4.72
+        "priceUsd": 5
       },
       {
         "name": "COLESTEROL TOTAL",
-        "priceUsd": 4.72
+        "priceUsd": 5
       },
       {
         "name": "COLONOSCOPIA CON POLIPECTOMIA",
-        "priceUsd": 390
+        "priceUsd": 550
       },
       {
         "name": "COLONOSCOPIA SIN POLIPECTOMIA",
-        "priceUsd": 291.33
-      },
-      {
-        "name": "COLORACION BK / ZIEHL NEELSEN",
-        "priceUsd": 11.8
-      },
-      {
-        "name": "COLORACION BK / ZIEHL NEELSEN (CATIA)",
-        "priceUsd": 15.73
-      },
-      {
-        "name": "COLORACION DE GRAM",
-        "priceUsd": 7.87
-      },
-      {
-        "name": "COLORACION DE KINYOUN",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "COLORACION TINTA CHINA",
-        "priceUsd": 7.87
+        "priceUsd": 390
       },
       {
         "name": "COLPOSCOPIA",
-        "priceUsd": 96.81
-      },
-      {
-        "name": "COMPLEMENTO C3",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "COMPLEMENTO C4",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "COMPLEMENTO SERICO C3-C4-CH50",
-        "priceUsd": 91.26
+        "priceUsd": 101.9
       },
       {
         "name": "CONTAJE ENDOTELIAL EN AMBOS OJOS",
-        "priceUsd": 36.19
-      },
-      {
-        "name": "COOMBS DIRECTO",
-        "priceUsd": 9.44
+        "priceUsd": 40
       },
       {
         "name": "COPROCULTIVO",
-        "priceUsd": 31.47
+        "priceUsd": 38.1
       },
       {
         "name": "CORTISOL",
-        "priceUsd": 11.01
+        "priceUsd": 13.33
       },
       {
         "name": "CORTISOL EN ORINA",
-        "priceUsd": 11.01
+        "priceUsd": 13.33
       },
       {
         "name": "CORTISOL ORINA 24 HORAS",
-        "priceUsd": 11.01
+        "priceUsd": 13.33
       },
       {
         "name": "CORTISOL PM",
-        "priceUsd": 11.01
+        "priceUsd": 13.33
       },
       {
         "name": "CREATININA",
-        "priceUsd": 3.15
+        "priceUsd": 3.31
       },
       {
         "name": "CREATININA EN ORINA",
-        "priceUsd": 3.15
+        "priceUsd": 3.31
       },
       {
         "name": "CREATININA EN ORINA DE 24 HORAS",
-        "priceUsd": 3.15
+        "priceUsd": 3.31
       },
       {
         "name": "CREATININA EN ORINA PARCIAL",
-        "priceUsd": 3.15
-      },
-      {
-        "name": "CRIOAGLUTININAS",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "CRIOGLOBULINAS",
-        "priceUsd": 14.16
+        "priceUsd": 3.31
       },
       {
         "name": "CULTIVO DE BK + ZN",
-        "priceUsd": 54.29
+        "priceUsd": 60
       },
       {
         "name": "CULTIVO DE ESPUTO",
-        "priceUsd": 37.76
+        "priceUsd": 39.75
       },
       {
         "name": "CULTIVO DE EXUDADO VAGINAL",
-        "priceUsd": 25.96
-      },
-      {
-        "name": "CULTIVO DE HONGOS",
-        "priceUsd": 47.2
-      },
-      {
-        "name": "CULTIVO DE LIQUIDO",
-        "priceUsd": 24.39
+        "priceUsd": 31.43
       },
       {
         "name": "CULTIVO DE SECRECION",
-        "priceUsd": 25.96
+        "priceUsd": 31.43
       },
       {
         "name": "CULTIVO SECRECION URETRAL",
-        "priceUsd": 25.96
+        "priceUsd": 31.43
       },
       {
         "name": "CURVA DE TENSION",
-        "priceUsd": 27.14
+        "priceUsd": 33.61
       },
       {
         "name": "DENGUE ANTIGENO ANTICUERPO IGM/IGG/NS1",
-        "priceUsd": 15.73
-      },
-      {
-        "name": "DENSITOMETRIA OSEA",
-        "priceUsd": 36.19
+        "priceUsd": 16.56
       },
       {
         "name": "DEPURACION DE CREATININA 24H",
-        "priceUsd": 9.44
+        "priceUsd": 9.94
       },
       {
         "name": "DESHIDROGENASA LACTICA (LDH)",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "DESTILACION DE QUIMIOTERAPIA",
-        "priceUsd": 120.33
+        "priceUsd": 4.97
       },
       {
         "name": "DHEA",
-        "priceUsd": 18.1
+        "priceUsd": 19.05
       },
       {
         "name": "DHEA SULFATO (DHEA SO4)",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "DIGOXINA",
-        "priceUsd": 34.62
-      },
-      {
-        "name": "DILATACION RIGIDA URETRAL",
-        "priceUsd": 96.81
+        "priceUsd": 19.05
       },
       {
         "name": "DIMERO D",
-        "priceUsd": 14.16
+        "priceUsd": 17.14
       },
       {
         "name": "ECO ARTICULAR",
-        "priceUsd": 45.24
+        "priceUsd": 47.62
       },
       {
         "name": "ECO DE PULMON",
-        "priceUsd": 45.24
+        "priceUsd": 47.62
       },
       {
         "name": "ECO DOPPLER 2M ARTERIAL",
-        "priceUsd": 45.24
+        "priceUsd": 61.9
       },
       {
         "name": "ECO DOPPLER 2M VENOSO",
-        "priceUsd": 45.24
+        "priceUsd": 61.9
       },
       {
         "name": "ECO DOPPLER CAROTIDEO",
-        "priceUsd": 45.24
+        "priceUsd": 61.9
       },
       {
         "name": "ECO DOPPLER MIEMBROS SUPERIOR UNO ART",
-        "priceUsd": 45.24
+        "priceUsd": 61.9
       },
       {
         "name": "ECO DOPPLER MIEMBROS SUPERIOR UNO VEN",
-        "priceUsd": 45.24
+        "priceUsd": 61.9
       },
       {
         "name": "ECO PELVICO / TRANSVAGINAL",
-        "priceUsd": 47.95
-      },
-      {
-        "name": "ECO PROSTATICO",
-        "priceUsd": 47.95
-      },
-      {
-        "name": "ECO RENAL",
-        "priceUsd": 47.95
+        "priceUsd": 50.48
       },
       {
         "name": "ECOCARDIOGRAMA",
         "priceUsd": 90
       },
       {
-        "name": "ECOSONOGRAMA DOPPLER",
-        "priceUsd": 34
-      },
-      {
         "name": "ECOSONOGRAMA SIMPLE",
         "priceUsd": 30
       },
       {
-        "name": "EFECTO ANGIOGRAFICO DE MIEMBRO",
-        "priceUsd": 318.48
-      },
-      {
         "name": "ELECTROCARDIOGRAMA",
         "priceUsd": 20
-      },
-      {
-        "name": "ELECTROCOGULACIÓN",
-        "priceUsd": 146.57
       },
       {
         "name": "ELECTROENCEFALOGRAMA CONVENCIONAL",
@@ -6858,39 +6518,31 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ELECTROLITOS",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "ELECTROLITOS EN ORINA 24 HORAS",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "ELECTROLITOS EN ORINA PARCIAL",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "ENDOSCOPIA DIGESTIVA SUPERIOR E INFERIOR",
-        "priceUsd": 350
-      },
-      {
-        "name": "EOSINOFILOS EN SANGRE",
-        "priceUsd": 3.93
-      },
-      {
-        "name": "EPAMIN (FENITOINA)",
-        "priceUsd": 32.26
+        "priceUsd": 590
       },
       {
         "name": "EPSTEIN BARR VIRUS IGG",
-        "priceUsd": 14.16
+        "priceUsd": 20
       },
       {
         "name": "EPSTEIN BARR VIRUS IGM",
-        "priceUsd": 14.16
+        "priceUsd": 20
       },
       {
         "name": "ESPERMOCULTIVO",
-        "priceUsd": 28.32
+        "priceUsd": 34.29
       },
       {
         "name": "ESPIROMETRIA",
@@ -6898,27 +6550,15 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "ESTRADIOL",
-        "priceUsd": 11.8
+        "priceUsd": 12.42
       },
       {
         "name": "ESTUDIO DE ESTRABISMO",
-        "priceUsd": 27.14
-      },
-      {
-        "name": "ESTUDIO DE PISO PELVICO",
-        "priceUsd": 108.57
-      },
-      {
-        "name": "ESTUDIO URODINAMICO HOMBRE",
-        "priceUsd": 241.57
-      },
-      {
-        "name": "ESTUDIO URODINAMICO MUJER",
-        "priceUsd": 180.95
+        "priceUsd": 30
       },
       {
         "name": "EXAMEN DE HECES",
-        "priceUsd": 4.52
+        "priceUsd": 2.5
       },
       {
         "name": "EXAMEN DE ORINA",
@@ -6926,375 +6566,275 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "EXAMEN SERIADO DE HECES DIA 1",
-        "priceUsd": 3.15
+        "priceUsd": 2.5
       },
       {
         "name": "EXAMEN SERIADO DE HECES DIA 2",
-        "priceUsd": 3.15
+        "priceUsd": 4.5
       },
       {
         "name": "EXAMEN SERIADO DE HECES DIA 3",
-        "priceUsd": 3.15
-      },
-      {
-        "name": "EXCERESIS + ELECTROCOAGULACION",
-        "priceUsd": 194.52
-      },
-      {
-        "name": "EXCERESIS DE QUISTE",
-        "priceUsd": 212.62
-      },
-      {
-        "name": "EXCERESIS ELECTROCAUTERIO",
-        "priceUsd": 241.57
+        "priceUsd": 6
       },
       {
         "name": "EXTRACCION DE CUERPOS EXTRAÑOS",
-        "priceUsd": 58.81
+        "priceUsd": 70
       },
       {
         "name": "FACTOR REUMATOIDEO",
-        "priceUsd": 9.44
+        "priceUsd": 21
       },
       {
         "name": "FACTOR REUMATOIDEO CUANTITATIVO",
-        "priceUsd": 9.44
-      },
-      {
-        "name": "FENOBARBITAL",
-        "priceUsd": 25.18
+        "priceUsd": 21
       },
       {
         "name": "FERRITINA",
-        "priceUsd": 11.8
+        "priceUsd": 14
       },
       {
         "name": "FIBRINOGENO",
-        "priceUsd": 6.29
-      },
-      {
-        "name": "FIMOSECTOMIA (en consultorio o Unidad Especial)",
-        "priceUsd": 653.24
-      },
-      {
-        "name": "FOSFATASA ACIDA PROSTÁTICA",
-        "priceUsd": 25.18
-      },
-      {
-        "name": "FOSFATASA ACIDA TOTAL",
-        "priceUsd": 14.16
+        "priceUsd": 6.63
       },
       {
         "name": "FOSFATASA ALCALINA (ALP)",
-        "priceUsd": 5.51
+        "priceUsd": 5.8
       },
       {
         "name": "FOSFORO",
-        "priceUsd": 4.72
+        "priceUsd": 5.2
       },
       {
         "name": "FOSFORO EN ORINA 24 H",
-        "priceUsd": 4.72
+        "priceUsd": 5.2
       },
       {
         "name": "FOSFORO EN ORINA PARCIAL",
-        "priceUsd": 4.72
+        "priceUsd": 5.2
       },
       {
         "name": "FOSFORO ORINA",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "FROTIS DE SANGRE PERIFERICA",
-        "priceUsd": 7.87
+        "priceUsd": 5.2
       },
       {
         "name": "FSH",
-        "priceUsd": 7.87
-      },
-      {
-        "name": "FTA-ABS",
-        "priceUsd": 9.44
+        "priceUsd": 9.1
       },
       {
         "name": "GAMMA GLUTAMILTRANSFERASA (GGT)",
-        "priceUsd": 6.29
-      },
-      {
-        "name": "GASES ARTERIALES",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "GASES VENOSOS",
-        "priceUsd": 19.67
-      },
-      {
-        "name": "GASES VENOSOS (POST-PRANDIAL)",
-        "priceUsd": 19.67
+        "priceUsd": 6.63
       },
       {
         "name": "GASTROSCOPIA",
-        "priceUsd": 268.71
+        "priceUsd": 350
       },
       {
         "name": "GLICEMIA",
-        "priceUsd": 3.15
+        "priceUsd": 3.31
       },
       {
         "name": "GLICEMIA 120'",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "GLICEMIA 150'",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "GLICEMIA 180'",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "GLICEMIA 30'",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "GLICEMIA 60'",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "GLICEMIA 75 GR",
-        "priceUsd": 4.72
+        "priceUsd": 10
       },
       {
         "name": "GLICEMIA 90'",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "GLICEMIA E INSULINA BASAL Y POST-PRANDRIAL 120 MIN",
-        "priceUsd": 23.6
+        "priceUsd": 5.71
       },
       {
         "name": "GLICEMIA POST CARGA 50 GR",
-        "priceUsd": 4.72
+        "priceUsd": 12
       },
       {
         "name": "GLICEMIA POST PRANDIAL",
-        "priceUsd": 4.72
+        "priceUsd": 12
       },
       {
         "name": "GOTA GRUESA",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "GRUPO SANGUINEO - FACTOR RH",
-        "priceUsd": 5.51
+        "priceUsd": 5.8
       },
       {
         "name": "HELICOBACTER PILORY EN HECES",
-        "priceUsd": 7.08
+        "priceUsd": 8
       },
       {
         "name": "HELICOBACTER PYLORI IGG",
-        "priceUsd": 11.8
+        "priceUsd": 12.42
       },
       {
         "name": "HELICOBACTER PYLORI IGM",
-        "priceUsd": 11.8
+        "priceUsd": 12.42
       },
       {
         "name": "HEMATOCRITO",
-        "priceUsd": 4.72
+        "priceUsd": 4.97
       },
       {
         "name": "HEMATOLOGIA COMPLETA",
-        "priceUsd": 12.8
+        "priceUsd": 6.5
       },
       {
         "name": "HEMOCULTIVO",
-        "priceUsd": 9.44
+        "priceUsd": 34.29
       },
       {
         "name": "HEMOGLOBINA GLICOSILADA A1C",
-        "priceUsd": 4.72
+        "priceUsd": 16.5
       },
       {
         "name": "HEMOGLOBINA HEMATOCRITO",
-        "priceUsd": 11.8
+        "priceUsd": 5
       },
       {
         "name": "HEPATITIS A IGM/ IGG",
-        "priceUsd": 7.87
+        "priceUsd": 12.42
       },
       {
         "name": "HEPATITIS B AG SUPERFICIE",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "HEPATITIS B CORE TOTAL",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "HEPATITIS C",
-        "priceUsd": 15.73
+        "priceUsd": 8.28
       },
       {
         "name": "HERPES SIMPLEX I",
-        "priceUsd": 31.47
+        "priceUsd": 33.13
       },
       {
         "name": "HERPES SIMPLEX I IGG",
-        "priceUsd": 15.73
+        "priceUsd": 16.56
       },
       {
         "name": "HERPES SIMPLEX I IGM",
-        "priceUsd": 31.47
+        "priceUsd": 16.56
       },
       {
         "name": "HERPES SIMPLEX II",
-        "priceUsd": 15.73
+        "priceUsd": 33.13
       },
       {
         "name": "HERPES SIMPLEX II IGG",
-        "priceUsd": 15.73
+        "priceUsd": 16.56
       },
       {
         "name": "HERPES SIMPLEX II IGM",
-        "priceUsd": 6.29
+        "priceUsd": 16.56
       },
       {
         "name": "HIERRO",
-        "priceUsd": 9.44
-      },
-      {
-        "name": "HIERRO CAPACIDAD DE FIJACIÓN",
-        "priceUsd": 6.29
-      },
-      {
-        "name": "HISTEROSCOPIA DIAGNOSTICA",
-        "priceUsd": 241.57
-      },
-      {
-        "name": "HISTEROSCOPIA TERAPEUTICA QX",
-        "priceUsd": 604.38
+        "priceUsd": 7.1
       },
       {
         "name": "HIV CUALITATIVO",
-        "priceUsd": 77.1
+        "priceUsd": 6.63
       },
       {
         "name": "HOLTER",
         "priceUsd": 90
       },
       {
-        "name": "HOMOCISTEINA",
-        "priceUsd": 29.9
-      },
-      {
         "name": "HORMONA PARATIROIDEA (PTH)",
-        "priceUsd": 15.73
-      },
-      {
-        "name": "INFLUENZA A+B PRUEBA RAPIDA",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "INMUNOGLOBULINA A (IGA)",
-        "priceUsd": 21.24
-      },
-      {
-        "name": "INMUNOGLOBULINA A SALIVA",
-        "priceUsd": 11.8
+        "priceUsd": 31.47
       },
       {
         "name": "INMUNOGLOBULINA E (IGE TOTAL)",
-        "priceUsd": 14.16
+        "priceUsd": 14
       },
       {
         "name": "INMUNOGLOBULINA IGG",
-        "priceUsd": 14.16
+        "priceUsd": 16
       },
       {
         "name": "INMUNOGLOBULINA IGM",
-        "priceUsd": 7.87
+        "priceUsd": 16
       },
       {
         "name": "INSULINA",
-        "priceUsd": 9.44
+        "priceUsd": 9
       },
       {
         "name": "INSULINA 120 MIN POST CARGA 50GR",
-        "priceUsd": 9.44
+        "priceUsd": 10.5
       },
       {
         "name": "INSULINA 120 MIN POST CARGA 75 GR",
-        "priceUsd": 9.44
+        "priceUsd": 10.5
       },
       {
         "name": "INSULINA 30",
-        "priceUsd": 9.44
+        "priceUsd": 10.5
       },
       {
         "name": "INSULINA 60'",
-        "priceUsd": 9.44
+        "priceUsd": 10.5
       },
       {
         "name": "INSULINA 90'",
-        "priceUsd": 9.44
+        "priceUsd": 10.5
       },
       {
         "name": "INSULINA POST PRANDIAL",
-        "priceUsd": 2.36
-      },
-      {
-        "name": "LEUCOGRAMA FECAL",
-        "priceUsd": 6.29
+        "priceUsd": 10.5
       },
       {
         "name": "LH",
-        "priceUsd": 6.29
+        "priceUsd": 7.62
       },
       {
         "name": "LIPASA",
-        "priceUsd": 6.29
+        "priceUsd": 19
       },
       {
         "name": "LIPASA EN ORINA",
-        "priceUsd": 6.29
+        "priceUsd": 19
       },
       {
         "name": "LIPASA EN ORINA 24 HORAS",
-        "priceUsd": 6.29
+        "priceUsd": 19
       },
       {
         "name": "LIPASA EN ORINA PARCIAL",
-        "priceUsd": 6.3
-      },
-      {
-        "name": "LIQUIDO CEFALORRAQUIDEO CITOQUIMIC",
-        "priceUsd": 29.9
+        "priceUsd": 19
       },
       {
         "name": "MAGNESIO",
-        "priceUsd": 3.93
+        "priceUsd": 4.14
       },
       {
         "name": "MAGNESIO EN ORINA",
-        "priceUsd": 3.93
+        "priceUsd": 4.14
       },
       {
         "name": "MAGNESIO EN ORINA 24 H",
-        "priceUsd": 3.93
-      },
-      {
-        "name": "MAMOGRAFIA BILATERAL",
-        "priceUsd": 52.25
-      },
-      {
-        "name": "MAMOGRAFIA BILATERAL PROTESIS",
-        "priceUsd": 57
-      },
-      {
-        "name": "MAMOGRAFIA UNILATERAL HASTA TALLA 36",
-        "priceUsd": 47.2
+        "priceUsd": 4.14
       },
       {
         "name": "MAPA",
@@ -7302,295 +6842,175 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "MICROALBUMINURIA 24H",
-        "priceUsd": 15.73
+        "priceUsd": 18.4
       },
       {
         "name": "MICROALBUMINURIA PARCIAL",
-        "priceUsd": 11.8
-      },
-      {
-        "name": "MONOTEST",
-        "priceUsd": 6.29
-      },
-      {
-        "name": "MORFOLOGIA PLAQUETARIA",
-        "priceUsd": 2.36
+        "priceUsd": 14.29
       },
       {
         "name": "MYCOPLASMA IGA",
-        "priceUsd": 18.88
+        "priceUsd": 19.88
       },
       {
         "name": "MYCOPLASMA PNEUMONIAE IGG",
-        "priceUsd": 18.88
+        "priceUsd": 19.88
       },
       {
         "name": "MYCOPLASMA PNEUMONIAE IGM",
-        "priceUsd": 18.88
+        "priceUsd": 19.88
       },
       {
         "name": "OCT DE NERVIO OPTICO Y DE MACULA",
-        "priceUsd": 36.19
-      },
-      {
-        "name": "OXALATO EN ORINA 24 H",
-        "priceUsd": 29.9
-      },
-      {
-        "name": "OXALATOS ORINA",
-        "priceUsd": 29.9
-      },
-      {
-        "name": "PANEL ALIMENTOS",
-        "priceUsd": 59.01
-      },
-      {
-        "name": "PANEL INHALANTES",
-        "priceUsd": 59.01
-      },
-      {
-        "name": "PAQUIMETRIA",
-        "priceUsd": 27.14
-      },
-      {
-        "name": "PCR CLOSTRIDIUM DIFFICILE",
-        "priceUsd": 220.29
-      },
-      {
-        "name": "PEPTIDO C",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "PERFIL ANEMICO.",
-        "priceUsd": 63.73
-      },
-      {
-        "name": "PERFIL BARIATRICO (G)",
-        "priceUsd": 125.88
-      },
-      {
-        "name": "PERFIL CARDIACO (INCLUYE Hematología Completa / Orina / Glicemia / Creatinina / Ácido Úrico / Colesterol (HDL- LDL- VLDL) / Triglicéridos)",
         "priceUsd": 40
       },
       {
-        "name": "PERFIL HEPATICO",
-        "priceUsd": 15.73
+        "name": "PERFIL CARDIACO (INCLUYE HEMATOLOGÍA COMPLETA / ORINA / GLICEMIA / CREATININA / ÁCIDO ÚRICO / COLESTEROL (HDL- LDL- VLDL) / TRIGLICÉRIDOS)",
+        "priceUsd": 40
       },
       {
-        "name": "PERFIL HEPATICO II",
-        "priceUsd": 18.88
-      },
-      {
-        "name": "PERFIL HORMONAL FEMENINO.",
-        "priceUsd": 47.2
-      },
-      {
-        "name": "PERFIL LIPIDICO (INCLUYE: Colesterol (HDL- LDL- VLDL) / Triglicéridos / Lípidos Totales)",
+        "name": "PERFIL LIPIDICO (INCLUYE: COLESTEROL (HDL- LDL- VLDL) / TRIGLICÉRIDOS / LÍPIDOS TOTALES)",
         "priceUsd": 12
       },
       {
-        "name": "PERFIL PEDIATRICO",
-        "priceUsd": 14.16
-      },
-      {
-        "name": "PERFIL PRE NATAL",
-        "priceUsd": 22.03
+        "name": "PERFIL PEDIATRICO (HEMATOLOGIA,GLICEMIA,ORINA,HECES, VSG,PCR Y CREATININA)",
+        "priceUsd": 16
       },
       {
         "name": "PERFIL PRE-EMPLEO",
-        "priceUsd": 21.24
+        "priceUsd": 25
       },
       {
         "name": "PERFIL PRE-OPERATORIO",
-        "priceUsd": 18.88
+        "priceUsd": 22.86
       },
       {
         "name": "PERFIL PREVACACIONAL (RRHH)",
-        "priceUsd": 9.44
+        "priceUsd": 11.43
       },
       {
-        "name": "PERFIL REUMATOIDE I",
-        "priceUsd": 17
+        "name": "PERFIL REUMATOIDE I (INCLUYE : HEMATOLOGIA COMPLETA / VSG / ACIDO URICO / FACTOR REUMATOIDEO (RA TEST) / PROTEINA C REACTIVA)",
+        "priceUsd": 16.19
       },
       {
-        "name": "PERFIL REUMATOIDE II",
-        "priceUsd": 15.73
-      },
-      {
-        "name": "PERFIL SARS/INFLU/RSV",
-        "priceUsd": 19.67
-      },
-      {
-        "name": "PERFIL SARS/INFLU/RSV/ADENOVIRUS",
+        "name": "PERFIL TIROIDEO I LIBRE (INCLUYE: T3 TOTAL / T3 LIBRE / T4 TOTAL / T4 LIBRE / TSH)",
         "priceUsd": 23.6
-      },
-      {
-        "name": "PERFIL TIROIDEO I LIBRE",
-        "priceUsd": 22.42
-      },
-      {
-        "name": "PERFIL TIROIDEO II",
-        "priceUsd": 33.04
-      },
-      {
-        "name": "PERFIL TORCH",
-        "priceUsd": 31.47
       },
       {
         "name": "PLAQUETAS",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "POLIPECTOMIA GASTROSCOPIA SIMPLE",
-        "priceUsd": 142.05
+        "priceUsd": 3.6
       },
       {
         "name": "POTASIO",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "POTASIO EN ORINA",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "POTASIO EN ORINA 24 H",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "POTASIO EN ORINA PARCIAL",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "POTASIO EN SANGRE TOTAL",
-        "priceUsd": 14.16
+        "priceUsd": 14
       },
       {
         "name": "PRESION OCULAR",
-        "priceUsd": 27.14
+        "priceUsd": 33.61
       },
       {
         "name": "PROCALCITONINA",
-        "priceUsd": 18.1
-      },
-      {
-        "name": "PROCEDIMIENTO ESPECIAL ENDOSCOPICOS QX (APLICA PARA CASOS SEGÚN CONDICIÓN MEDICA DEL ASEGURADO)",
-        "priceUsd": 459.62
+        "priceUsd": 19.05
       },
       {
         "name": "PROGESTERONA",
-        "priceUsd": 9.44
+        "priceUsd": 10
       },
       {
         "name": "PROLACTINA",
-        "priceUsd": 9.44
+        "priceUsd": 1.5
       },
       {
         "name": "PROTEINA C REACTIVA",
-        "priceUsd": 4.72
+        "priceUsd": 5.5
       },
       {
         "name": "PROTEINA DE BENCE JONES",
-        "priceUsd": 3.93
+        "priceUsd": 4.14
       },
       {
         "name": "PROTEINAS EN ORINA PARCIAL",
-        "priceUsd": 7.87
+        "priceUsd": 9
       },
       {
         "name": "PROTEINAS TOTALES",
-        "priceUsd": 4.72
+        "priceUsd": 5.5
       },
       {
         "name": "PROTEINAS TOTALES Y FRACCIONADAS",
-        "priceUsd": 11.01
+        "priceUsd": 11.59
       },
       {
         "name": "PROTEINURIA",
-        "priceUsd": 3.93
+        "priceUsd": 4.76
       },
       {
         "name": "PROTEINURIA EN 24 HORAS",
-        "priceUsd": 7.87
+        "priceUsd": 9.52
       },
       {
         "name": "PRUEBA DE EMBARAZO-HCG CUALITATIVA",
-        "priceUsd": 3.93
-      },
-      {
-        "name": "PRUEBA DE ESFUERZO",
-        "priceUsd": 49.76
+        "priceUsd": 4.76
       },
       {
         "name": "PSA TOTAL Y LIBRE",
-        "priceUsd": 23.6
-      },
-      {
-        "name": "PUNCION GUIADA POR ECO",
-        "priceUsd": 125.88
-      },
-      {
-        "name": "PUNCION GUIADA POR ECO TAC",
-        "priceUsd": 157.35
+        "priceUsd": 28.57
       },
       {
         "name": "RELAC CALCIO CREATININA ORINA PARCIAL",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "RELACION AC. URICO CREATININA O/P",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "RELACION AC. URICO/CREAT ORINA 24H",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "RELACION CALCIO/CREATININA O/24H",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "RELACION PROTEINA/CREATININA",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "RELACION UREA/CREATININA O/24H",
-        "priceUsd": 7.87
+        "priceUsd": 8.28
       },
       {
         "name": "RELACION UREA/CREATININA OR PARCIAL",
-        "priceUsd": 7.87
-      },
-      {
-        "name": "RESONANCIA MAGNETICA NUCLEAR CON CONTRASTE (RNM)",
-        "priceUsd": 144.76
-      },
-      {
-        "name": "RESONANCIA MAGNETICA NUCLEAR SIN CONTRASTE (RNM)",
-        "priceUsd": 108.57
-      },
-      {
-        "name": "RETICULOCITOS",
-        "priceUsd": 4.72
-      },
-      {
-        "name": "RETIRO DE CATETER DOBLE J",
-        "priceUsd": 266.9
-      },
-      {
-        "name": "ROTAVIRUS",
-        "priceUsd": 7.08
+        "priceUsd": 8.28
       },
       {
         "name": "RUBEOLA IG G",
-        "priceUsd": 14.16
+        "priceUsd": 16
       },
       {
         "name": "RUBEOLA IG M",
-        "priceUsd": 14.16
+        "priceUsd": 16
       },
       {
         "name": "RX. CON CONTRASTE",
-        "priceUsd": 165.22
+        "priceUsd": 173.91
       },
       {
         "name": "RX. CUALQUIER PARTE DEL CUERPO (1 PROYECCION)",
@@ -7618,159 +7038,59 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "RX.CADWELL",
-        "priceUsd": 23.6
-      },
-      {
-        "name": "RX.CISTOGRAFIA MICCIONAL",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.CISTOURETROGRAFIA",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.COLANGIOGRAFIA TRANS-KERT",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.COLECISTOGRAFIA COLANGIO E.V.",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.COLECISTOGRAFIA ORAL",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.COLON POR ENEMA",
-        "priceUsd": 165.22
+        "priceUsd": 25
       },
       {
         "name": "RX.COLUMNA BENDING",
-        "priceUsd": 35.4
+        "priceUsd": 40
       },
       {
         "name": "RX.COLUMNA CERVICAL DINAMICA",
-        "priceUsd": 70.81
+        "priceUsd": 75
       },
       {
         "name": "RX.COLUMNA CERVICAL FUNCIONAL",
-        "priceUsd": 70.81
+        "priceUsd": 75
       },
       {
         "name": "RX.COLUMNA DORSO LUMBAR BENDING",
-        "priceUsd": 23.6
+        "priceUsd": 40
       },
       {
         "name": "RX.CRANEO CADWELL",
-        "priceUsd": 23.6
+        "priceUsd": 40
       },
       {
         "name": "RX.CRANEO TOWNE",
-        "priceUsd": 23.6
+        "priceUsd": 40
       },
       {
         "name": "RX.CRANEO WATTERS",
-        "priceUsd": 23.6
-      },
-      {
-        "name": "RX.ESOFAG, ESTOM, DUODEN CON CONT",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.ESOFAGO, ESTOMAGO Y DUODENO S/C",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.ESOFAGOGRAMA",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.FISTULOGRAFIA PERIANAL",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.FISTULOGRAFIA PIE",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.HISTEROSALPINGOGRAFIA",
-        "priceUsd": 165.22
+        "priceUsd": 40
       },
       {
         "name": "RX.MEDICION DE MIEMBROS",
-        "priceUsd": 47.2
-      },
-      {
-        "name": "RX.ORBITA AP WATTERS TOWN",
-        "priceUsd": 43.27
-      },
-      {
-        "name": "RX.PELVIMETRIA",
-        "priceUsd": 70.81
-      },
-      {
-        "name": "RX.PIELOGRAFIA",
-        "priceUsd": 165.22
+        "priceUsd": 60
       },
       {
         "name": "RX.RINOFARINGE ADENOIDES BA BC",
-        "priceUsd": 35.4
+        "priceUsd": 40
       },
       {
         "name": "RX.RINOFARINGE BA Y BC",
-        "priceUsd": 35.4
-      },
-      {
-        "name": "RX.SIALOGRAFIA DOS LADOS",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.SIALOGRAFIA UN LADO",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.SURVEY OSEO",
-        "priceUsd": 236.02
+        "priceUsd": 40
       },
       {
         "name": "RX.TEMPOMAXILAR",
-        "priceUsd": 35.4
-      },
-      {
-        "name": "RX.TRANSITO INTESTINAL",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.URETROCISTOGRAFIA",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "RX.UROGRAFIA DE ELIMINACION / INFUSION",
-        "priceUsd": 165.22
+        "priceUsd": 40
       },
       {
         "name": "SANGRE OCULTA EN HECES",
-        "priceUsd": 14.16
-      },
-      {
-        "name": "SARAMPION IGG",
-        "priceUsd": 14.16
-      },
-      {
-        "name": "SARAMPION IGM",
-        "priceUsd": 14.16
-      },
-      {
-        "name": "SEDACIÓN",
-        "priceUsd": 59.71
+        "priceUsd": 4.97
       },
       {
         "name": "SEDACION POR ANESTESIOLOGO",
-        "priceUsd": 113.05
-      },
-      {
-        "name": "SEROLOGIA SARS-COV-2",
-        "priceUsd": 15.73
+        "priceUsd": 120
       },
       {
         "name": "SESION DE REHABILITACION (POR SESION INDEPENDIENTEMENTE LA(S) PATOLOGIA(S)",
@@ -7778,99 +7098,83 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "SODIO",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "SODIO EN ORINA 24H",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "SODIO EN ORINA PARCIAL",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "SODIO EN SANGRE TOTAL",
-        "priceUsd": 14.16
-      },
-      {
-        "name": "SOMATOMEDINA C (IGF-1)",
-        "priceUsd": 37.76
+        "priceUsd": 14.91
       },
       {
         "name": "T3 LIBRE",
-        "priceUsd": 7.08
+        "priceUsd": 7.45
       },
       {
         "name": "T3 TOTAL",
-        "priceUsd": 7.08
+        "priceUsd": 7.45
       },
       {
         "name": "T4 LIBRE",
-        "priceUsd": 7.08
+        "priceUsd": 7.45
       },
       {
         "name": "T4 TOTAL",
-        "priceUsd": 6.29
+        "priceUsd": 7.45
       },
       {
         "name": "TAC ANGIO-TOMOGRAFIA CUELLO",
-        "priceUsd": 424.84
+        "priceUsd": 450
       },
       {
         "name": "TAC ANGIOTAC AORTICA ABDOMINAL",
-        "priceUsd": 424.84
+        "priceUsd": 460
       },
       {
         "name": "TAC ANGIOTAC AORTICA TORAXICA",
-        "priceUsd": 424.84
+        "priceUsd": 460
       },
       {
         "name": "TAC ANGIOTAC CRANEO CON CONTRASTE",
-        "priceUsd": 472.05
+        "priceUsd": 500
       },
       {
         "name": "TAC ANGIOTAC MIEMBROS INFERIORES",
-        "priceUsd": 456.31
-      },
-      {
-        "name": "TAC POLIGONO DE WILLIS",
-        "priceUsd": 236.02
-      },
-      {
-        "name": "TAC RECONSTRUCCION VOLUMETRICA",
-        "priceUsd": 31.47
+        "priceUsd": 480
       },
       {
         "name": "TAC UROTAC CON CONTRASTE",
-        "priceUsd": 244.29
+        "priceUsd": 282.86
       },
       {
         "name": "TAC UROTAC SIN CONTRASTE",
-        "priceUsd": 165.22
-      },
-      {
-        "name": "TEST DE TELLER",
-        "priceUsd": 27.14
+        "priceUsd": 195
       },
       {
         "name": "TESTOSTERONA LIBRE*",
-        "priceUsd": 11.8
+        "priceUsd": 14.29
       },
       {
         "name": "TESTOSTERONA TOTAL*",
-        "priceUsd": 11.8
+        "priceUsd": 12.9
       },
       {
         "name": "TIEMPO DE PROTROMBINA (PT)",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "TIEMPO PARCIAL TROMBOPLASTINA (PTT)",
-        "priceUsd": 4.72
+        "priceUsd": 5.71
       },
       {
         "name": "TIROGLOBULINA",
-        "priceUsd": 21.24
+        "priceUsd": 22.36
       },
       {
         "name": "TODAS LAS CONSULTAS (INDEPENDIENTEMENTE DE LA ESPECIALIDAD)",
@@ -7878,111 +7182,83 @@ export const BAREMO_INSURANCES: BaremoInsuranceSeed[] = [
       },
       {
         "name": "TOMOGRAFIA AXIAL COMPUTARIZADA CON CONTRASTE (TAC)",
-        "priceUsd": 199.05
+        "priceUsd": 238.1
       },
       {
         "name": "TOMOGRAFIA AXIAL COMPUTARIZADA SIN CONTRASTE (TAC)",
-        "priceUsd": 108.57
-      },
-      {
-        "name": "TOMOSINTESIS (TOMOMAMOGRAFIA)",
-        "priceUsd": 78.67
+        "priceUsd": 160
       },
       {
         "name": "TOPOGRAFIA CORNEAL",
-        "priceUsd": 36.19
+        "priceUsd": 40
       },
       {
         "name": "TOXOPLASMA IG G",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "TOXOPLASMA IG M",
-        "priceUsd": 14.16
+        "priceUsd": 14.91
       },
       {
         "name": "TRANSAMINASAS",
-        "priceUsd": 6.29
+        "priceUsd": 6.63
       },
       {
         "name": "TRANSFERRINA",
-        "priceUsd": 18.1
+        "priceUsd": 19.05
       },
       {
         "name": "TRATAMIENTO ORTOPTICO",
-        "priceUsd": 27.14
+        "priceUsd": 30
       },
       {
         "name": "TRIGLICERIDOS",
-        "priceUsd": 4.72
+        "priceUsd": 4.97
       },
       {
         "name": "TROPONINA I",
-        "priceUsd": 10.23
+        "priceUsd": 20
       },
       {
         "name": "TSH",
-        "priceUsd": 7.08
-      },
-      {
-        "name": "TUNEL INTERCONTINEO/RODILLA TU",
-        "priceUsd": 35.4
-      },
-      {
-        "name": "ULTRASONIDOS DE VIAS URINARIAS",
-        "priceUsd": 36.19
+        "priceUsd": 7.45
       },
       {
         "name": "UREA",
-        "priceUsd": 4.72
+        "priceUsd": 4.97
       },
       {
         "name": "UREA EN ORINA",
-        "priceUsd": 3.15
+        "priceUsd": 3.31
       },
       {
         "name": "UREA EN ORINA 24H",
-        "priceUsd": 3.15
+        "priceUsd": 3.31
       },
       {
         "name": "UROCULTIVO",
-        "priceUsd": 24.39
-      },
-      {
-        "name": "UROFLUJOMETRIA",
-        "priceUsd": 72.38
-      },
-      {
-        "name": "VARICELA ZOSTER IGG",
-        "priceUsd": 19.67
-      },
-      {
-        "name": "VARICELA ZOSTER IGM",
-        "priceUsd": 19.67
-      },
-      {
-        "name": "VASECTOMIA (en consultorio o Unidad Especial)",
-        "priceUsd": 484.05
+        "priceUsd": 29.52
       },
       {
         "name": "VDRL",
-        "priceUsd": 5.51
+        "priceUsd": 5.8
       },
       {
         "name": "VELOCIDAD DE SEDIMENTACION GLOBULAR",
-        "priceUsd": 3.93
+        "priceUsd": 4.14
       },
       {
         "name": "VIDEOGASTROSCOPIA + BIOPSIA + SEDACION",
-        "priceUsd": 439.85
+        "priceUsd": 520
       },
       {
         "name": "VITAMINA B12",
-        "priceUsd": 18.88
+        "priceUsd": 22.86
       },
       {
         "name": "VITAMINA D TOTAL",
-        "priceUsd": 18.88
+        "priceUsd": 19.88
       }
     ]
   },
