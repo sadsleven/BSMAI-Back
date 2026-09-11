@@ -476,9 +476,9 @@ async function parseLabPdf(file, splitX = 486) {
 const CIMA_COLUMNS = {
   name: [64, 434],
   cash: [434, 470], // lo que CIMA le cobra a AFMI por un paciente de contado
-  cima: [470, 512], // lo que le queda a CIMA en un caso de seguro
+  cima: [470, 512], // lo que le queda a CIMA descontada la comisión de AFMI
   afmi: [512, 548], // comisión de AFMI (13% del total facturado al seguro)
-  seguro: [548, 592], // total facturado al seguro = cima + afmi
+  seguro: [548, 592], // VALOR DEL SERVICIO = cima + afmi
 };
 
 /**
@@ -487,8 +487,10 @@ const CIMA_COLUMNS = {
  * parten en dos filas: la primera trae sólo el Nº y el inicio del nombre, y la
  * segunda el resto del nombre junto a los montos; se unen antes de leer.
  *
- * `priceUsd` = columna CIMA (lo que se le paga al centro) y
- * `particularPriceUsd` = columna SEGURO (lo que cobra AFMI).
+ * El valor del servicio es la columna **SEGURO** (el total, antes de separar el
+ * 13% de AFMI que muestra la columna CIMA): de ahí salen tanto `priceUsd` (lo
+ * que se registra para el centro) como `particularPriceUsd` (lo que cobra AFMI,
+ * que PISA el particular del catálogo).
  */
 async function parseCimaPdf() {
   const services = [];
@@ -513,7 +515,7 @@ async function parseCimaPdf() {
       if (!name) continue;
       services.push({
         name,
-        priceUsd: round2(cima),
+        priceUsd: round2(seguro),
         particularPriceUsd: round2(seguro),
       });
     }

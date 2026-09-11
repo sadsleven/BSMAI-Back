@@ -809,307 +809,307 @@ export const BAREMO_CARE_CENTERS: BaremoCareCenterSeed[] = [
     "services": [
       {
         "name": "TAC DE CRÁNEO SIN CONTRATE",
-        "priceUsd": 73.95,
+        "priceUsd": 85,
         "particularPriceUsd": 85
       },
       {
         "name": "TAC DE CRÁNEO CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE CRÁNEO CON RECOSNTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE CUELLO SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE CUELLO CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE CUELLO CON RECOSNTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE TÓRAX SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE TÓRAX CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE SENOS PARANASALES SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE SENOS PARANASALES CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE SENOS PARANASALES CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE ÓRBITAS SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE ÓRBITAS CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE ÓIDO/MASTOIDE SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE ÓIDO/MASTOIDE CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE MACÍZO FACIAL SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE MACISO FACIAL CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE ABDOMEN Y PÉLVIS SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE ABDOMEN Y PÉLVIS CON CONTRASTE ORAL",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE ABDOMEN Y PÉLVIS CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE ABDOMEN Y PÉLVIS CON DOBLE CONTRASTE",
-        "priceUsd": 234.9,
+        "priceUsd": 270,
         "particularPriceUsd": 270
       },
       {
         "name": "TAC DE CADERA SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE CADERA CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE CADERA CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE MIEMBROS SUPERIORES SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE MIEMBROS SUPERIORES CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE MIEMBROS SUPERIORES CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE MIEMBROS INFERIORES SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE MIEMBROS INFERIORES CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE MIEMBROS INFERIORES CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE COLUMNA CERVICAL SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE COLUMNA CERVICAL CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE COLUMNA CERVICAL CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE COLUMNA DORSAL SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE COLUMNA DORSAL CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE COLUMNA DORSAL CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "TAC DE COLUMNA LUMBAR SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "TAC DE COLUMNA LUMBAR CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "TAC DE COLUMNA LUMBAR CON CONTRASTE EV.",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "UROTAC SIN CONTRASTE",
-        "priceUsd": 95.7,
+        "priceUsd": 110,
         "particularPriceUsd": 110
       },
       {
         "name": "UROTAC CON CONTRASTE EV.",
-        "priceUsd": 182.7,
+        "priceUsd": 210,
         "particularPriceUsd": 210
       },
       {
         "name": "UROTAC CON RECONSTRUCCIÓN 3D",
-        "priceUsd": 200.1,
+        "priceUsd": 230,
         "particularPriceUsd": 230
       },
       {
         "name": "ANGIOTAC ABDOMINAL CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC ABDOMINAL CON CONTRASTE EV Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC DE TÓRAX CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC DE TÓRAX CON CONTRASTE EV Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC RENAL CON CONTRASTE EV",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC RENAL CON CONTRASTE EV Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC DE AORTA TORACICA CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC DE AORTA TORACICA CON CONTRASTE EV. Y RECNSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC DE AORTA ABDOMINAL CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC DE AORTA ABDOMINAL CON CONTRASTE EV. Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC DE MIEMBROS SUPERIORES CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC DE MIEMBROS SUPERIORES CON CONTRASTE EV. Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC DE MIEMBROS INFERIORES CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC DE MIEMBROS INFERIORES CON CONTRASTE EV. Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC DE VASOS SUPRAORTICO, CARÓTIDA O CUELLO CON CONTRASTE EV.",
-        "priceUsd": 243.6,
+        "priceUsd": 280,
         "particularPriceUsd": 280
       },
       {
         "name": "ANGIOTAC DE VASOS SUPRAORTICO, CARÓTIDA O CUELLO CON CONTRASTE EV. Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC TORACICA/ABDOMINAL CON CONTRASTE EV",
-        "priceUsd": 255.65,
+        "priceUsd": 295,
         "particularPriceUsd": 295
       },
       {
         "name": "ANGIOTAC TORACICA CON CONTRASTE EV. Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       },
       {
         "name": "ANGIOTAC ABDOMINAL CON CONTRASTE EV. Y RECONSTRUCCIÓN 3D",
-        "priceUsd": 269.7,
+        "priceUsd": 310,
         "particularPriceUsd": 310
       }
     ]
