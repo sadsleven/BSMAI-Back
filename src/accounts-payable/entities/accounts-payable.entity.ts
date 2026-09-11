@@ -68,6 +68,13 @@ export class AccountsPayable {
   @JoinColumn({ name: 'taxUnitId' })
   taxUnit?: TaxUnit | null;
 
+  /**
+   * ¿El lote descuenta la retención de ISLR (SENIAT)? `false` ⇒ neto = bruto y
+   * al quedar pagado NO nace la obligación en `taxes_payable`. Default `true`.
+   */
+  @Column({ type: 'boolean', default: true })
+  applyRetention: boolean;
+
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
   status: AccountsPayableStatus;
 

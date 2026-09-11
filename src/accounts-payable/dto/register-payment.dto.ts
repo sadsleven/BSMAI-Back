@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsIn,
   IsISO8601,
   IsNumber,
@@ -78,8 +79,13 @@ export class CreateAccountsPayableBatchDto {
   @IsUUID()
   taxUnitId?: string;
 
+  /** ¿Descontar la retención de ISLR? Sin enviar = `true`. */
+  @IsOptional()
+  @IsBoolean()
+  applyRetention?: boolean;
+
   @IsArray()
-  @ArrayMinSize(1, { message: 'Agregá al menos una orden interna' })
+  @ArrayMinSize(1, { message: 'Agrega al menos una orden interna' })
   @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
@@ -90,6 +96,12 @@ export class CreateAccountsPayableBatchDto {
 export class SetPayableTaxUnitDto {
   @IsUUID()
   taxUnitId: string;
+}
+
+/** Activar/desactivar la retención de ISLR de un lote existente. */
+export class SetPayableRetentionDto {
+  @IsBoolean()
+  applyRetention: boolean;
 }
 
 /** Agregar/quitar órdenes internas de un lote existente (mismo proveedor). */

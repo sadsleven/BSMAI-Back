@@ -180,6 +180,7 @@ export class ReportsService {
         payableId: string | null;
         payableNumber: string | null;
         payableStatus: string | null;
+        payableApplyRetention: boolean | null;
       }>
     >(
       `SELECT iio.id AS "internalOrderId", iio."orderId", o."orderNumber",
@@ -201,7 +202,8 @@ export class ReportsService {
                  WHERE ost."internalOrderId" = iio.id)::text AS "facturacionUsd",
               iio."providerAmountUsd"::text AS "grossUsd",
               fx."amountBs"::text AS "billingRateBs",
-              ap.id AS "payableId", ap."payableNumber", ap.status AS "payableStatus"
+              ap.id AS "payableId", ap."payableNumber", ap.status AS "payableStatus",
+              ap."applyRetention" AS "payableApplyRetention"
        FROM "order_internal_orders" iio
        JOIN "orders" o ON o.id = iio."orderId"
        LEFT JOIN "branches" b ON b.id = o."branchId"
@@ -241,6 +243,8 @@ export class ReportsService {
     const loteGrossBs = new Map<string, number>();
     const loteGrossUsd = new Map<string, number>();
     const lotePersonType = new Map<string, SeniatPersonType>();
+    // Lotes que NO descuentan retención (`accounts_payable.applyRetention=false`).
+    const loteNoRetention = new Set<string>();
     for (const r of obligations) {
       if (!r.payableId) continue;
       const rateBs = r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
@@ -248,16 +252,20 @@ export class ReportsService {
       loteGrossBs.set(r.payableId, (loteGrossBs.get(r.payableId) ?? 0) + grossBs);
       loteGrossUsd.set(r.payableId, (loteGrossUsd.get(r.payableId) ?? 0) + num(r.grossUsd));
       lotePersonType.set(r.payableId, this.personTypeFor(r.providerType, r.doctorIsLegal));
+      if (r.payableApplyRetention === false) loteNoRetention.add(r.payableId);
     }
     // Neto Bs por lote = bruto − retención REAL (calculada sobre el bruto agregado).
+    // Lote sin retención ⇒ neto = bruto.
     const loteNetBs = new Map<string, number>();
     for (const [pid, grossBs] of loteGrossBs) {
-      const retention = calcRetention({
-        grossBs: round2(grossBs),
-        personType: lotePersonType.get(pid) ?? 'natural',
-        taxUnitBs,
-      });
-      loteNetBs.set(pid, round2(round2(grossBs) - retention.taxAmountBs));
+      const retentionBs = loteNoRetention.has(pid)
+        ? 0
+        : calcRetention({
+            grossBs: round2(grossBs),
+            personType: lotePersonType.get(pid) ?? 'natural',
+            taxUnitBs,
+          }).taxAmountBs;
+      loteNetBs.set(pid, round2(round2(grossBs) - retentionBs));
     }
 
     // ---- Filas por obligación (estimado de retención por fila) ----
@@ -265,10 +273,12 @@ export class ReportsService {
       const rateBs = r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
       const grossBs = round2(num(r.grossUsd) * rateBs);
       const personType = this.personTypeFor(r.providerType, r.doctorIsLegal);
-      // Estimado: retención sobre el bruto de esta sola obligación.
-      const retentionBs = round2(
-        calcRetention({ grossBs, personType, taxUnitBs }).taxAmountBs,
-      );
+      // Estimado: retención sobre el bruto de esta sola obligación. En un lote
+      // sin retención es 0 (sin lote se estima con retención: es el default).
+      const retentionBs =
+        r.payableApplyRetention === false
+          ? 0
+          : round2(calcRetention({ grossBs, personType, taxUnitBs }).taxAmountBs);
       const netBs = round2(grossBs - retentionBs);
       const state: string = r.payableId ? (r.payableStatus ?? 'unpaid') : 'sin_lote';
       const meta = r.payableId ? paymentMetaByPayable.get(r.payableId) : undefined;

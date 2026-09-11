@@ -314,6 +314,11 @@ export class AccountsPayableService {
     return batch.doctor?.isLegalEntity ? 'legal_entity' : 'natural';
   }
 
+  /** ¿El lote descuenta retención? Lotes previos a la columna (undefined) ⇒ sí. */
+  private appliesRetention(batch: AccountsPayable): boolean {
+    return batch.applyRetention !== false;
+  }
+
   /** Calcula y adjunta los campos transient (gross/retención/neto/pagado/pendiente). */
   private computeFigures(batch: AccountsPayable, fallbackTaxUnitBs: number): void {
     let grossUsd = 0;
@@ -331,11 +336,14 @@ export class AccountsPayableService {
     const taxUnitBs = batch.taxUnit
       ? Number(batch.taxUnit.amountBs)
       : fallbackTaxUnitBs;
-    const retention = calcRetention({
-      grossBs,
-      personType: this.personTypeOf(batch),
-      taxUnitBs,
-    });
+    // Retención opcional por lote: desactivada ⇒ 0 y neto = bruto.
+    const retention = this.appliesRetention(batch)
+      ? calcRetention({
+          grossBs,
+          personType: this.personTypeOf(batch),
+          taxUnitBs,
+        })
+      : { taxAmountBs: 0 };
     const netBs = round2(grossBs - retention.taxAmountBs);
     const paidBs = round2(
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
@@ -375,7 +383,10 @@ export class AccountsPayableService {
     const personType = this.personTypeOf(batch);
     const taxUnit = batch.taxUnit ?? (await this.taxUnits.getCurrentOrThrow());
     const taxUnitAmountBs = Number(taxUnit.amountBs);
-    const retention = calcRetention({ grossBs, personType, taxUnitBs: taxUnitAmountBs });
+    // Retención opcional por lote: desactivada ⇒ tasa/sustraendo/retención en 0.
+    const retention = this.appliesRetention(batch)
+      ? calcRetention({ grossBs, personType, taxUnitBs: taxUnitAmountBs })
+      : { taxRate: 0, subtrahendBs: 0, taxAmountBs: 0 };
     return {
       grossUsd,
       grossBs,
@@ -421,14 +432,15 @@ export class AccountsPayableService {
       );
       const payableNumber = String(seq[0].nextval);
       const inserted = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "status")
-         VALUES ($1, $2, $3, $4, $5, 'unpaid') RETURNING id`,
+        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "status")
+         VALUES ($1, $2, $3, $4, $5, $6, 'unpaid') RETURNING id`,
         [
           payableNumber,
           dto.recipientType,
           dto.recipientType === 'doctor' ? providerId : null,
           dto.recipientType === 'care_center' ? providerId : null,
           taxUnit.id,
+          dto.applyRetention ?? true,
         ],
       );
       const batchId = inserted[0].id;
@@ -531,6 +543,32 @@ export class AccountsPayableService {
     const taxUnit = await this.resolveTaxUnit(taxUnitId);
     await this.dataSource.transaction(async (mgr) => {
       await mgr.update(AccountsPayable, id, { taxUnitId: taxUnit.id });
+      await this.recomputeBatchStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  /**
+   * Activa/desactiva la retención de ISLR del lote y recalcula neto/estado.
+   * Bloqueado si ya está pagado (el neto define el cuadre de los pagos y la
+   * obligación SENIAT ya nació): edita o quita un pago primero.
+   */
+  async setRetention(
+    id: string,
+    applyRetention: boolean,
+    user: AuthenticatedUser,
+  ): Promise<AccountsPayable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'El lote ya está pagado. Para cambiar la retención, edita o elimina un pago primero.',
+      );
+    }
+    if (this.appliesRetention(batch) === applyRetention) return this.findOneBatch(id, user);
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(AccountsPayable, id, { applyRetention });
       await this.recomputeBatchStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -752,7 +790,8 @@ export class AccountsPayableService {
       paidAt: status === 'paid' ? batch.paidAt ?? new Date() : null,
     });
 
-    if (status === 'paid') {
+    // La obligación SENIAT nace sólo si el lote quedó pagado Y descuenta retención.
+    if (status === 'paid' && this.appliesRetention(batch)) {
       await this.upsertRetention(mgr, batch, net);
     } else {
       await this.removeRetentionIfReversible(mgr, id);

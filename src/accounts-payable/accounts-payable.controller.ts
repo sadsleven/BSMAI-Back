@@ -18,6 +18,7 @@ import {
   QueryAccountsPayableDto,
   QueryPendingPayableDto,
   RegisterPaymentDto,
+  SetPayableRetentionDto,
   SetPayableTaxUnitDto,
 } from './dto/register-payment.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -93,6 +94,16 @@ export class AccountsPayableController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.setTaxUnit(id, dto.taxUnitId, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
+  @Patch(':id/retention')
+  setRetention(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetPayableRetentionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setRetention(id, dto.applyRetention, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
