@@ -20,7 +20,9 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(40, { message: 'El grado académico no puede superar 40 caracteres' })
+  @MaxLength(40, {
+    message: 'El grado académico no puede superar 40 caracteres',
+  })
   academicDegree?: string;
 
   @IsOptional()

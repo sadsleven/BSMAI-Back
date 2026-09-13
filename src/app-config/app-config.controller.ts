@@ -1,8 +1,5 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
-import {
-  AppConfigService,
-  CasheaCommissionConfig,
-} from './app-config.service';
+import { AppConfigService, CasheaCommissionConfig } from './app-config.service';
 import { UpdateCasheaCommissionDto } from './dto/update-cashea-commission.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { PERMISSIONS } from '../permissions/permissions.catalog';

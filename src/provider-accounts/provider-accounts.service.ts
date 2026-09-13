@@ -74,7 +74,12 @@ export class ProviderAccountsService {
       });
       if (!user) {
         // Vínculo colgante (el usuario fue borrado por fuera): recrear.
-        return this.createAccount({ email, firstName, lastName, password: opts.password });
+        return this.createAccount({
+          email,
+          firstName,
+          lastName,
+          password: opts.password,
+        });
       }
       if (user.deletedAt) {
         await this.usersRepo.restore(user.id);
@@ -99,7 +104,12 @@ export class ProviderAccountsService {
         'Definí una contraseña para habilitar el acceso del proveedor',
       );
     }
-    return this.createAccount({ email, firstName, lastName, password: opts.password });
+    return this.createAccount({
+      email,
+      firstName,
+      lastName,
+      password: opts.password,
+    });
   }
 
   private async createAccount(opts: {

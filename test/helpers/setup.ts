@@ -30,7 +30,9 @@ export async function bootstrapApp(): Promise<INestApplication> {
   return app;
 }
 
-export async function closeApp(app: INestApplication | undefined): Promise<void> {
+export async function closeApp(
+  app: INestApplication | undefined,
+): Promise<void> {
   if (!app) return;
   await app.close();
 }

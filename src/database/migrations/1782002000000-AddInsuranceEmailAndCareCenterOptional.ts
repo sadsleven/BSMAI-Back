@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - CareCenter: `email` y `rif` pasan a opcionales (drop NOT NULL + drop unique
  *   constraint → índice unique parcial `WHERE col IS NOT NULL`).
  */
-export class AddInsuranceEmailAndCareCenterOptional1782002000000
-  implements MigrationInterface
-{
+export class AddInsuranceEmailAndCareCenterOptional1782002000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // insurances.email
     await queryRunner.query(
@@ -18,7 +16,9 @@ export class AddInsuranceEmailAndCareCenterOptional1782002000000
     );
 
     // care_centers.email
-    await queryRunner.query(`ALTER TABLE "care_centers" ALTER COLUMN "email" DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "care_centers" ALTER COLUMN "email" DROP NOT NULL`,
+    );
     await queryRunner.query(`
       DO $$
       DECLARE c text;
@@ -38,7 +38,9 @@ export class AddInsuranceEmailAndCareCenterOptional1782002000000
     );
 
     // care_centers.rif
-    await queryRunner.query(`ALTER TABLE "care_centers" ALTER COLUMN "rif" DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "care_centers" ALTER COLUMN "rif" DROP NOT NULL`,
+    );
     await queryRunner.query(`
       DO $$
       DECLARE c text;
@@ -59,19 +61,31 @@ export class AddInsuranceEmailAndCareCenterOptional1782002000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_care_centers_rif_partial"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "UQ_care_centers_rif_partial"`,
+    );
     await queryRunner.query(
       `ALTER TABLE "care_centers" ADD CONSTRAINT "UQ_care_centers_rif" UNIQUE ("rif")`,
     );
-    await queryRunner.query(`ALTER TABLE "care_centers" ALTER COLUMN "rif" SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "care_centers" ALTER COLUMN "rif" SET NOT NULL`,
+    );
 
-    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_care_centers_email_partial"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "UQ_care_centers_email_partial"`,
+    );
     await queryRunner.query(
       `ALTER TABLE "care_centers" ADD CONSTRAINT "UQ_care_centers_email" UNIQUE ("email")`,
     );
-    await queryRunner.query(`ALTER TABLE "care_centers" ALTER COLUMN "email" SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "care_centers" ALTER COLUMN "email" SET NOT NULL`,
+    );
 
-    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_insurances_email_partial"`);
-    await queryRunner.query(`ALTER TABLE "insurances" DROP COLUMN IF EXISTS "email"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "UQ_insurances_email_partial"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "insurances" DROP COLUMN IF EXISTS "email"`,
+    );
   }
 }

@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Branch } from './entities/branch.entity';
@@ -26,7 +30,9 @@ export class BranchesService {
       isActive,
     } = query;
 
-    const qb = this.repo.createQueryBuilder('branch').orderBy(`branch.${sortBy}`, sortDir);
+    const qb = this.repo
+      .createQueryBuilder('branch')
+      .orderBy(`branch.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('branch.deletedAt IS NOT NULL');
@@ -64,8 +70,12 @@ export class BranchesService {
 
   async create(dto: CreateBranchDto): Promise<Branch> {
     const name = dto.name.trim();
-    const exists = await this.repo.findOne({ where: { name }, withDeleted: true });
-    if (exists) throw new ConflictException('Ya existe una sucursal con ese nombre');
+    const exists = await this.repo.findOne({
+      where: { name },
+      withDeleted: true,
+    });
+    if (exists)
+      throw new ConflictException('Ya existe una sucursal con ese nombre');
     const branch = this.repo.create({
       name,
       description: dto.description?.trim() ?? null,
@@ -79,8 +89,12 @@ export class BranchesService {
     if (dto.name) {
       const name = dto.name.trim();
       if (name !== branch.name) {
-        const dupe = await this.repo.findOne({ where: { name }, withDeleted: true });
-        if (dupe) throw new ConflictException('Ya existe una sucursal con ese nombre');
+        const dupe = await this.repo.findOne({
+          where: { name },
+          withDeleted: true,
+        });
+        if (dupe)
+          throw new ConflictException('Ya existe una sucursal con ese nombre');
         branch.name = name;
       }
     }
@@ -108,7 +122,10 @@ export class BranchesService {
   }
 
   async restore(id: string): Promise<Branch> {
-    const branch = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const branch = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!branch) throw new NotFoundException('Sucursal no encontrada');
     if (!branch.deletedAt) return branch;
     await this.repo.restore(id);

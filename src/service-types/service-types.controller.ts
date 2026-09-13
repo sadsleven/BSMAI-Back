@@ -48,7 +48,10 @@ export class ServiceTypesController {
 
   @RequirePermissions(PERMISSIONS.SERVICE_TYPES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateServiceTypeDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateServiceTypeDto,
+  ) {
     return this.service.update(id, dto);
   }
 

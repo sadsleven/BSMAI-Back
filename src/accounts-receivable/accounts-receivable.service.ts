@@ -103,7 +103,8 @@ export class AccountsReceivableService {
     @InjectRepository(Order) private readonly ordersRepo: Repository<Order>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
-    @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
+    @InjectRepository(ExchangeRate)
+    private readonly ratesRepo: Repository<ExchangeRate>,
     private readonly dataSource: DataSource,
     private readonly paymentAccounts: PaymentAccountsService,
   ) {
@@ -111,7 +112,9 @@ export class AccountsReceivableService {
     void this.banksRepo;
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },
@@ -138,8 +141,15 @@ export class AccountsReceivableService {
     query: QueryPendingReceivableDto,
     user: AuthenticatedUser,
   ): Promise<PaginatedResponse<PendingReceivable>> {
-    const { page = 1, limit = 10, search, debtorType, insuranceId, holderId, branchId } =
-      query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      debtorType,
+      insuranceId,
+      holderId,
+      branchId,
+    } = query;
     const params: unknown[] = [];
     const where: string[] = [
       `o.status = 'finalized'`,
@@ -253,7 +263,8 @@ export class AccountsReceivableService {
         casheaCommissionRate: r.casheaCommissionRate,
         casheaFinancingRate: r.casheaFinancingRate,
         useFixedRate: r.useFixedRate,
-        fixedExchangeRate: r.fixedRateBs != null ? { amountBs: r.fixedRateBs } : null,
+        fixedExchangeRate:
+          r.fixedRateBs != null ? { amountBs: r.fixedRateBs } : null,
       } as unknown as Order;
       const debtorType: 'insurance' | 'holder' | 'cashea' =
         r.orderType === 'insurance'
@@ -264,8 +275,9 @@ export class AccountsReceivableService {
       // Cashea: el deudor es la fintech, pero mostramos el titular como referencia.
       const debtorName =
         debtorType === 'insurance'
-          ? r.insuranceName ?? '—'
-          : r.businessName ?? (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
+          ? (r.insuranceName ?? '—')
+          : (r.businessName ??
+            (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—'));
       // Targets por porción: 'full' = orden completa; 'fixed' = resto no
       // indexado en Bs a la tasa de la orden; 'indexed' = STs indexados en USD.
       const price = Number(r.priceAmount) || 0;
@@ -305,7 +317,11 @@ export class AccountsReceivableService {
 
     return {
       data,
-      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+      metadata: {
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
@@ -352,7 +368,8 @@ export class AccountsReceivableService {
         );
     }
     if (status) qb.andWhere('ar.status = :status', { status });
-    if (insuranceId) qb.andWhere('ar.insuranceId = :insuranceId', { insuranceId });
+    if (insuranceId)
+      qb.andWhere('ar.insuranceId = :insuranceId', { insuranceId });
     if (holderId) qb.andWhere('ar.holderId = :holderId', { holderId });
     if (debtorType === 'insurance') qb.andWhere('ar.insuranceId IS NOT NULL');
     if (debtorType === 'holder') qb.andWhere('ar.holderId IS NOT NULL');
@@ -387,19 +404,30 @@ export class AccountsReceivableService {
     for (const b of data) this.computeFigures(b);
     return {
       data,
-      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+      metadata: {
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
-  async findOneBatch(id: string, user: AuthenticatedUser): Promise<AccountsReceivable> {
+  async findOneBatch(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<AccountsReceivable> {
     const batch = await this.loadBatch(this.dataSource.manager, id);
-    if (!batch) throw new NotFoundException('Lote de cuentas por cobrar no encontrado');
+    if (!batch)
+      throw new NotFoundException('Lote de cuentas por cobrar no encontrado');
     await this.assertVisibility(batch, user);
     this.computeFigures(batch);
     return batch;
   }
 
-  private loadBatch(mgr: EntityManager, id: string): Promise<AccountsReceivable | null> {
+  private loadBatch(
+    mgr: EntityManager,
+    id: string,
+  ): Promise<AccountsReceivable | null> {
     return mgr.findOne(AccountsReceivable, {
       where: { id },
       relations: {
@@ -410,7 +438,12 @@ export class AccountsReceivableService {
         // holder/patient/fixedExchangeRate de cada orden: los usa el estado de
         // cuenta Excel del lote de seguro en el FE.
         orders: {
-          order: { branch: true, holder: true, patient: true, fixedExchangeRate: true },
+          order: {
+            branch: true,
+            holder: true,
+            patient: true,
+            fixedExchangeRate: true,
+          },
         },
         payments: { exchangeRate: true },
       },
@@ -433,26 +466,38 @@ export class AccountsReceivableService {
 
   private computeFigures(batch: AccountsReceivable): void {
     const pivots = batch.orders ?? [];
-    const mode: 'usd' | 'fixed' = pivots.some((o) => o.useFixedRate) ? 'fixed' : 'usd';
+    const mode: 'usd' | 'fixed' = pivots.some((o) => o.useFixedRate)
+      ? 'fixed'
+      : 'usd';
     batch.mode = mode;
     // Ajuste firmado en la moneda del lote (negativo resta, positivo suma).
     // El target efectivo nunca baja de 0.
     const adjustment = round2(Number(batch.adjustmentAmount ?? 0) || 0);
     if (mode === 'fixed') {
-      const baseBs = round2(pivots.reduce((s, o) => s + Number(o.targetBs || 0), 0));
+      const baseBs = round2(
+        pivots.reduce((s, o) => s + Number(o.targetBs || 0), 0),
+      );
       const targetBs = Math.max(0, round2(baseBs + adjustment));
       const collectedBs = round2(
-        (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
+        (batch.payments ?? []).reduce(
+          (s, p) => s + Number(p.amountInBs || 0),
+          0,
+        ),
       );
       batch.targetBaseBs = baseBs;
       batch.targetBs = targetBs;
       batch.collectedBs = collectedBs;
       batch.pendingBs = Math.max(0, round2(targetBs - collectedBs));
     } else {
-      const baseUsd = round2(pivots.reduce((s, o) => s + Number(o.targetUsd || 0), 0));
+      const baseUsd = round2(
+        pivots.reduce((s, o) => s + Number(o.targetUsd || 0), 0),
+      );
       const targetUsd = Math.max(0, round2(baseUsd + adjustment));
       const collectedUsd = round2(
-        (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInUsd || 0), 0),
+        (batch.payments ?? []).reduce(
+          (s, p) => s + Number(p.amountInUsd || 0),
+          0,
+        ),
       );
       batch.targetBaseUsd = baseUsd;
       batch.targetUsd = targetUsd;
@@ -493,7 +538,9 @@ export class AccountsReceivableService {
     // El ajuste no puede dejar el total a cobrar en negativo.
     this.computeFigures(batch);
     const base =
-      batch.mode === 'fixed' ? (batch.targetBaseBs ?? 0) : (batch.targetBaseUsd ?? 0);
+      batch.mode === 'fixed'
+        ? (batch.targetBaseBs ?? 0)
+        : (batch.targetBaseUsd ?? 0);
     if (!clear && round2(base + value) < 0) {
       throw new BadRequestException(
         'El ajuste no puede dejar el total a cobrar en negativo',
@@ -591,10 +638,17 @@ export class AccountsReceivableService {
       insuranceId: batch.insuranceId ?? undefined,
       holderId: batch.holderId ?? undefined,
     } as CreateAccountsReceivableBatchDto;
-    const existingMode: 'usd' | 'fixed' = (batch.orders ?? []).some((o) => o.useFixedRate)
+    const existingMode: 'usd' | 'fixed' = (batch.orders ?? []).some(
+      (o) => o.useFixedRate,
+    )
       ? 'fixed'
       : 'usd';
-    const rows = await this.validatePendingOrders(orderIds, dtoLike, user, existingMode);
+    const rows = await this.validatePendingOrders(
+      orderIds,
+      dtoLike,
+      user,
+      existingMode,
+    );
     await this.dataSource.transaction(async (mgr) => {
       for (const r of rows) {
         await mgr.query(
@@ -624,9 +678,13 @@ export class AccountsReceivableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    const remaining = (batch.orders ?? []).filter((o) => !orderIds.includes(o.orderId));
+    const remaining = (batch.orders ?? []).filter(
+      (o) => !orderIds.includes(o.orderId),
+    );
     if (remaining.length === 0) {
-      throw new BadRequestException('El lote quedaría vacío. Elimina el lote en su lugar.');
+      throw new BadRequestException(
+        'El lote quedaría vacío. Elimina el lote en su lugar.',
+      );
     }
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(
@@ -682,7 +740,8 @@ export class AccountsReceivableService {
       portionsInBatch.set(r.orderId, set);
     }
     let allowed: Set<string> | null = null;
-    if (!user.isSuperAdmin) allowed = new Set(await this.resolveUserBranchIds(user));
+    if (!user.isSuperAdmin)
+      allowed = new Set(await this.resolveUserBranchIds(user));
 
     // Porción natural de cada orden ('full' si no hay mezcla; null = mixta,
     // depende del modo del lote).
@@ -716,7 +775,8 @@ export class AccountsReceivableService {
       );
     }
 
-    const debtorId = dto.debtorType === 'insurance' ? dto.insuranceId : dto.holderId;
+    const debtorId =
+      dto.debtorType === 'insurance' ? dto.insuranceId : dto.holderId;
     const out: Array<{
       orderId: string;
       portion: AroPortion;
@@ -726,7 +786,9 @@ export class AccountsReceivableService {
     }> = [];
     for (const o of orders) {
       if (o.status !== 'finalized') {
-        throw new BadRequestException('Sólo se pueden cobrar órdenes finalizadas');
+        throw new BadRequestException(
+          'Sólo se pueden cobrar órdenes finalizadas',
+        );
       }
       if (allowed && !allowed.has(o.branchId)) {
         throw new ForbiddenException('No tienes acceso a una de las órdenes');
@@ -734,7 +796,11 @@ export class AccountsReceivableService {
       // Deudor uniforme. Cashea: basta que la orden sea cashea (el deudor es la
       // fintech; puede mezclar titulares distintos).
       const oDebtorType: 'insurance' | 'holder' | 'cashea' =
-        o.type === 'insurance' ? 'insurance' : o.type === 'cashea' ? 'cashea' : 'holder';
+        o.type === 'insurance'
+          ? 'insurance'
+          : o.type === 'cashea'
+            ? 'cashea'
+            : 'holder';
       if (oDebtorType !== dto.debtorType) {
         throw new BadRequestException(
           'Todas las órdenes del lote deben ser del mismo tipo de deudor',
@@ -752,8 +818,10 @@ export class AccountsReceivableService {
 
       // Porción que entra al lote + fila snapshot.
       const natural = naturalPortion(o);
-      const portion: AroPortion = natural ?? (mode === 'fixed' ? 'fixed' : 'indexed');
-      const rowFixed = portion === 'full' ? o.useFixedRate : portion === 'fixed';
+      const portion: AroPortion =
+        natural ?? (mode === 'fixed' ? 'fixed' : 'indexed');
+      const rowFixed =
+        portion === 'full' ? o.useFixedRate : portion === 'fixed';
       // Modo uniforme (la porción debe calzar con el modo del lote).
       if ((mode === 'fixed') !== rowFixed) {
         throw new BadRequestException(
@@ -762,7 +830,10 @@ export class AccountsReceivableService {
       }
       // Exclusividad por porción ('full' choca con todo).
       const taken = portionsInBatch.get(o.id);
-      if (taken && (taken.has('full') || taken.has(portion) || portion === 'full')) {
+      if (
+        taken &&
+        (taken.has('full') || taken.has(portion) || portion === 'full')
+      ) {
         throw new BadRequestException(
           'Una orden (o su porción) ya está en otro lote. Quítala de ese lote primero.',
         );
@@ -799,7 +870,9 @@ export class AccountsReceivableService {
       }
     }
     if (out.some((r) => r.useFixedRate && r.targetBs == null)) {
-      throw new BadRequestException('Una orden con tasa fija no tiene tasa snapshot');
+      throw new BadRequestException(
+        'Una orden con tasa fija no tiene tasa snapshot',
+      );
     }
     return out;
   }
@@ -823,13 +896,17 @@ export class AccountsReceivableService {
         ? await this.computePaymentsTotalBs(payments, usdRateId)
         : await this.computePaymentsTotalUsd(payments, usdRateId);
     if (newTotal <= 0) {
-      throw new BadRequestException('El monto de los cobros debe ser mayor a 0');
+      throw new BadRequestException(
+        'El monto de los cobros debe ser mayor a 0',
+      );
     }
 
     await this.dataSource.transaction(async (mgr) => {
       for (const p of payments) {
         const payload = await this.resolvePaymentForSave(p, usdRateId);
-        const saved = await mgr.save(mgr.create(AccountsReceivablePayment, payload));
+        const saved = await mgr.save(
+          mgr.create(AccountsReceivablePayment, payload),
+        );
         await mgr.query(
           `INSERT INTO "accounts_receivable_payment_links" ("receivableId", "paymentId")
            VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -879,7 +956,10 @@ export class AccountsReceivableService {
         `DELETE FROM "accounts_receivable_payment_links" WHERE "receivableId" = $1 AND "paymentId" = $2`,
         [id, paymentId],
       );
-      await mgr.query(`DELETE FROM "accounts_receivable_payments" WHERE id = $1`, [paymentId]);
+      await mgr.query(
+        `DELETE FROM "accounts_receivable_payments" WHERE id = $1`,
+        [paymentId],
+      );
       await this.recomputeStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -892,9 +972,10 @@ export class AccountsReceivableService {
     await this.dataSource.transaction(async (mgr) => {
       const payIds = (batch.payments ?? []).map((p) => p.id);
       if (payIds.length) {
-        await mgr.query(`DELETE FROM "accounts_receivable_payments" WHERE id = ANY($1)`, [
-          payIds,
-        ]);
+        await mgr.query(
+          `DELETE FROM "accounts_receivable_payments" WHERE id = ANY($1)`,
+          [payIds],
+        );
       }
       await mgr.query(`DELETE FROM "accounts_receivable" WHERE id = $1`, [id]);
     });
@@ -907,7 +988,11 @@ export class AccountsReceivableService {
     const batch = await this.loadBatch(mgr, id);
     if (!batch) return;
     this.computeFigures(batch);
-    let status: 'uncollected' | 'partially_collected' | 'collected' | 'overcollected';
+    let status:
+      | 'uncollected'
+      | 'partially_collected'
+      | 'collected'
+      | 'overcollected';
     if (batch.mode === 'fixed') {
       const target = batch.targetBs ?? 0;
       const collected = batch.collectedBs ?? 0;
@@ -927,7 +1012,7 @@ export class AccountsReceivableService {
     }
     const collectedAt =
       status === 'collected' || status === 'overcollected'
-        ? batch.collectedAt ?? new Date()
+        ? (batch.collectedAt ?? new Date())
         : null;
     await mgr.update(AccountsReceivable, id, { status, collectedAt });
   }
@@ -991,7 +1076,12 @@ export class AccountsReceivableService {
         );
       const account = await this.paymentAccounts.assertUsableForPaymentType(
         p.paymentAccountId,
-        p.type as 'mobile_payment' | 'bank_transfer' | 'bank_transfer_usd' | 'card' | 'other',
+        p.type as
+          | 'mobile_payment'
+          | 'bank_transfer'
+          | 'bank_transfer_usd'
+          | 'card'
+          | 'other',
       );
       out.paymentAccountId = account.id;
       out.bankCode = account.bankCode ?? null;
@@ -1002,28 +1092,45 @@ export class AccountsReceivableService {
       );
     }
 
-    if (p.type === 'mobile_payment' || p.type === 'bank_transfer' || p.type === 'card') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
+    if (
+      p.type === 'mobile_payment' ||
+      p.type === 'bank_transfer' ||
+      p.type === 'card'
+    ) {
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
-        throw new BadRequestException('Pago móvil/transferencia/punto debe ser en BS');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        throw new BadRequestException(
+          'Pago móvil/transferencia/punto debe ser en BS',
+        );
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('Cobro en BS requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
       usdCtxId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
-      if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido');
+      if (p.amountCurrency !== 'BS')
+        throw new BadRequestException('cash_bs debe ser en BS');
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
       usdCtxId = p.exchangeRateId;
     } else if (p.type === 'bank_transfer_usd') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency !== 'USD')
-        throw new BadRequestException('Transferencia en dólares debe ser en USD');
+        throw new BadRequestException(
+          'Transferencia en dólares debe ser en USD',
+        );
       out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_usd') {
       if (p.amountCurrency !== 'USD')
@@ -1032,20 +1139,29 @@ export class AccountsReceivableService {
     } else if (p.type === 'cash_eur') {
       if (p.amountCurrency !== 'EUR')
         throw new BadRequestException('cash_eur debe ser en EUR');
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido (EUR)');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido (EUR)');
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'EUR')
-        throw new BadRequestException('cash_eur requiere una tasa de cambio en EUR');
+        throw new BadRequestException(
+          'cash_eur requiere una tasa de cambio en EUR',
+        );
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency === 'BS' || p.amountCurrency === 'EUR') {
         if (!p.exchangeRateId)
           throw new BadRequestException(
             `exchangeRateId requerido para cobro other en ${p.amountCurrency}`,
           );
-        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
-        if (!rate) throw new BadRequestException('Tasa de cambio no encontrada');
+        const rate = await this.ratesRepo.findOne({
+          where: { id: p.exchangeRateId },
+        });
+        if (!rate)
+          throw new BadRequestException('Tasa de cambio no encontrada');
         if (p.amountCurrency === 'BS' && rate.currency !== 'USD')
           throw new BadRequestException('other en BS requiere tasa USD/Bs');
         if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
@@ -1060,9 +1176,13 @@ export class AccountsReceivableService {
       amountCurrency: p.amountCurrency,
       exchangeRateId: p.exchangeRateId ?? null,
     };
-    const usdAmount = await computeAmountInUsd(conversionInput, this.ratesRepo, {
-      usdExchangeRateId: usdCtxId,
-    });
+    const usdAmount = await computeAmountInUsd(
+      conversionInput,
+      this.ratesRepo,
+      {
+        usdExchangeRateId: usdCtxId,
+      },
+    );
     out.amountInUsd = usdAmount.toFixed(2);
     const bsAmount = await computeAmountInBs(conversionInput, this.ratesRepo, {
       usdExchangeRateId: usdCtxId,
@@ -1080,7 +1200,7 @@ export class AccountsReceivableService {
     usdExchangeRateId: string | null,
   ): string | null {
     return p.amountCurrency === 'BS'
-      ? p.exchangeRateId ?? usdExchangeRateId
+      ? (p.exchangeRateId ?? usdExchangeRateId)
       : usdExchangeRateId;
   }
 

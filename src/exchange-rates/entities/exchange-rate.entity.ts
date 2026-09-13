@@ -12,7 +12,10 @@ export type Currency = 'USD' | 'EUR';
 export const CURRENCIES: Currency[] = ['USD', 'EUR'];
 
 @Entity({ name: 'exchange_rates' })
-@Index('idx_exchange_rates_currency_effective_date', ['currency', 'effectiveDate'])
+@Index('idx_exchange_rates_currency_effective_date', [
+  'currency',
+  'effectiveDate',
+])
 export class ExchangeRate {
   @PrimaryGeneratedColumn('uuid')
   id: string;

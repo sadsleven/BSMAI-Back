@@ -11,7 +11,9 @@ export class AddRoleIsSystem1777300000000 implements MigrationInterface {
         default: false,
       }),
     );
-    await queryRunner.query(`UPDATE "roles" SET "isSystem" = true WHERE "name" = 'Super Admin'`);
+    await queryRunner.query(
+      `UPDATE "roles" SET "isSystem" = true WHERE "name" = 'Super Admin'`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

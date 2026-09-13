@@ -37,7 +37,9 @@ export class Role {
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;
 
-  @ManyToMany(() => Permission, (permission) => permission.roles, { eager: false })
+  @ManyToMany(() => Permission, (permission) => permission.roles, {
+    eager: false,
+  })
   @JoinTable({
     name: 'roles_permissions',
     joinColumn: { name: 'roleId', referencedColumnName: 'id' },

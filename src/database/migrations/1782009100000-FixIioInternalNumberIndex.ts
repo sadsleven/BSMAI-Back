@@ -12,11 +12,11 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * usan las consultas de numeración (`MAX(...)`, huecos libres) y tolera valores
  * temporales fuera del patrón.
  */
-export class FixIioInternalNumberIndex1782009100000
-  implements MigrationInterface
-{
+export class FixIioInternalNumberIndex1782009100000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_iio_internal_number_int"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_iio_internal_number_int"`,
+    );
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "idx_iio_internal_number_num"
          ON "order_internal_orders" ((("internalNumber")::bigint))
@@ -25,7 +25,9 @@ export class FixIioInternalNumberIndex1782009100000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_iio_internal_number_num"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_iio_internal_number_num"`,
+    );
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "idx_iio_internal_number_int"
          ON "order_internal_orders" ((("internalNumber")::integer))`,

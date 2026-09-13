@@ -41,11 +41,17 @@ export class CreateUserBranches1782001600000 implements MigrationInterface {
 
     await queryRunner.createIndex(
       'user_branches',
-      new TableIndex({ name: 'IDX_user_branches_userId', columnNames: ['userId'] }),
+      new TableIndex({
+        name: 'IDX_user_branches_userId',
+        columnNames: ['userId'],
+      }),
     );
     await queryRunner.createIndex(
       'user_branches',
-      new TableIndex({ name: 'IDX_user_branches_branchId', columnNames: ['branchId'] }),
+      new TableIndex({
+        name: 'IDX_user_branches_branchId',
+        columnNames: ['branchId'],
+      }),
     );
   }
 

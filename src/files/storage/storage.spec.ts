@@ -25,10 +25,14 @@ describe('resolveStorageDriver', () => {
 
   it('respeta STORAGE_DRIVER explícito por encima del entorno', () => {
     process.env.VERCEL = '1';
-    expect(resolveStorageDriver(configOf({ STORAGE_DRIVER: 'minio' }))).toBe('minio');
+    expect(resolveStorageDriver(configOf({ STORAGE_DRIVER: 'minio' }))).toBe(
+      'minio',
+    );
     delete process.env.VERCEL;
     expect(
-      resolveStorageDriver(configOf({ ...MINIO_ENV, STORAGE_DRIVER: 'vercel_blob' })),
+      resolveStorageDriver(
+        configOf({ ...MINIO_ENV, STORAGE_DRIVER: 'vercel_blob' }),
+      ),
     ).toBe('vercel_blob');
   });
 
@@ -48,16 +52,19 @@ describe('resolveStorageDriver', () => {
     // Endpoint y bucket sin credenciales no alcanza.
     expect(
       resolveStorageDriver(
-        configOf({ MINIO_ENDPOINT: 'http://minio:9000', MINIO_BUCKET: 'afmi-files' }),
+        configOf({
+          MINIO_ENDPOINT: 'http://minio:9000',
+          MINIO_BUCKET: 'afmi-files',
+        }),
       ),
     ).toBe('vercel_blob');
   });
 
   it('driver desconocido cae a autodetección', () => {
     delete process.env.VERCEL;
-    expect(resolveStorageDriver(configOf({ ...MINIO_ENV, STORAGE_DRIVER: 'ftp' }))).toBe(
-      'minio',
-    );
+    expect(
+      resolveStorageDriver(configOf({ ...MINIO_ENV, STORAGE_DRIVER: 'ftp' })),
+    ).toBe('minio');
   });
 });
 
@@ -76,7 +83,11 @@ describe('MinioStorageProvider', () => {
   });
 
   it('prefiere el service account sobre las root creds', () => {
-    const cfg = provider({ ...MINIO_ENV, MINIO_ACCESS_KEY: 'svc', MINIO_SECRET_KEY: 'k' }).cfg();
+    const cfg = provider({
+      ...MINIO_ENV,
+      MINIO_ACCESS_KEY: 'svc',
+      MINIO_SECRET_KEY: 'k',
+    }).cfg();
     expect(cfg.accessKeyId).toBe('svc');
     expect(provider().cfg().accessKeyId).toBe('afmi-admin');
   });
@@ -86,9 +97,10 @@ describe('MinioStorageProvider', () => {
       'http://minio:9000/afmi-files/orders/abc/report/x.pdf',
     );
     expect(
-      provider({ ...MINIO_ENV, MINIO_PUBLIC_ENDPOINT: 'https://archivos.afmi.com.ve/' }).publicUrl(
-        'orders/abc/report/x.pdf',
-      ),
+      provider({
+        ...MINIO_ENV,
+        MINIO_PUBLIC_ENDPOINT: 'https://archivos.afmi.com.ve/',
+      }).publicUrl('orders/abc/report/x.pdf'),
     ).toBe('https://archivos.afmi.com.ve/afmi-files/orders/abc/report/x.pdf');
   });
 
@@ -96,7 +108,9 @@ describe('MinioStorageProvider', () => {
     const p = provider();
     const key = 'orders/abc/order_report_attachment/informe-1a2b3c.pdf';
     expect(p.objectKey(`http://minio:9000/afmi-files/${key}`)).toBe(key);
-    expect(p.objectKey(`https://archivos.afmi.com.ve/afmi-files/${key}`)).toBe(key);
+    expect(p.objectKey(`https://archivos.afmi.com.ve/afmi-files/${key}`)).toBe(
+      key,
+    );
     // Key cruda y URL sin el bucket en el path (virtual-host style).
     expect(p.objectKey(key)).toBe(key);
     expect(p.objectKey(`https://afmi-files.s3.example.com/${key}`)).toBe(key);
@@ -104,7 +118,9 @@ describe('MinioStorageProvider', () => {
 
   it('objectKey decodifica nombres con espacios y acentos', () => {
     expect(
-      provider().objectKey('http://minio:9000/afmi-files/orders/1/k/informe%20m%C3%A9dico.pdf'),
+      provider().objectKey(
+        'http://minio:9000/afmi-files/orders/1/k/informe%20m%C3%A9dico.pdf',
+      ),
     ).toBe('orders/1/k/informe médico.pdf');
   });
 

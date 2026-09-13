@@ -55,7 +55,10 @@ describe('OrdersController (e2e)', () => {
         phones: [],
       });
     if (![200, 201].includes(patientRes.status)) {
-      console.warn('Skipping orders create — patient setup failed', patientRes.body);
+      console.warn(
+        'Skipping orders create — patient setup failed',
+        patientRes.body,
+      );
       return;
     }
     const holderId = patientRes.body.id;

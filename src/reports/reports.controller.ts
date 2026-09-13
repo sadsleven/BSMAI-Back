@@ -57,7 +57,10 @@ export class ReportsController {
    */
   @RequirePermissions(PERMISSIONS.REPORTS.ARC_LIST)
   @Get('arc')
-  arc(@Query() query: QueryArcReportDto, @CurrentUser() user: AuthenticatedUser) {
+  arc(
+    @Query() query: QueryArcReportDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.arc(query, user);
   }
 
@@ -84,7 +87,10 @@ export class ReportsController {
   /** Antigüedad de saldos pendientes (buckets por días de orderDate). */
   @RequirePermissions(PERMISSIONS.REPORTS.AGING_LIST)
   @Get('aging')
-  aging(@Query() query: QueryReportsDto, @CurrentUser() user: AuthenticatedUser) {
+  aging(
+    @Query() query: QueryReportsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.aging(query, user);
   }
 }

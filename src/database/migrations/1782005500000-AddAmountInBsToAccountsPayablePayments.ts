@@ -8,9 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Históricos quedan en 0: las cuentas ya pagadas no se reprocesan, así que el
  * valor sólo importa para pagos nuevos (incluidos los parciales).
  */
-export class AddAmountInBsToAccountsPayablePayments1782005500000
-  implements MigrationInterface
-{
+export class AddAmountInBsToAccountsPayablePayments1782005500000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "accounts_payable_payments"

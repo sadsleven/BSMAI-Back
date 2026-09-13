@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Idempotente: si no hay filas con `cash_foreign`, no hace nada.
  */
-export class SplitCashForeignPaymentType1782003900000
-  implements MigrationInterface
-{
+export class SplitCashForeignPaymentType1782003900000 implements MigrationInterface {
   private readonly tables = [
     'order_payments',
     'accounts_payable_payments',

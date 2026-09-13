@@ -49,9 +49,7 @@ const BACKUP_TABLES = [
   'order_service_pricing',
 ];
 
-export class StandardizeServiceTypeNames1782007200000
-  implements MigrationInterface
-{
+export class StandardizeServiceTypeNames1782007200000 implements MigrationInterface {
   private loadData(): Data {
     const raw = readFileSync(
       join(__dirname, '1782007200000-StandardizeServiceTypeNames.data.json'),
@@ -175,9 +173,10 @@ export class StandardizeServiceTypeNames1782007200000
       [id],
     );
     for (const o of orders) await this.purgeOrder(qr, o.orderId);
-    await qr.query(`DELETE FROM order_service_pricing WHERE "serviceTypeId" = $1`, [
-      id,
-    ]);
+    await qr.query(
+      `DELETE FROM order_service_pricing WHERE "serviceTypeId" = $1`,
+      [id],
+    );
     await qr.query(`DELETE FROM service_types WHERE id = $1`, [id]);
   }
 
@@ -303,10 +302,9 @@ export class StandardizeServiceTypeNames1782007200000
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Restaura desde los backups creados en up() (revierte fusiones, renombres y borrados).
     for (const t of BACKUP_TABLES) {
-      const exists = await queryRunner.query(
-        `SELECT to_regclass($1) AS t`,
-        [`public._bkp_std_${t}`],
-      );
+      const exists = await queryRunner.query(`SELECT to_regclass($1) AS t`, [
+        `public._bkp_std_${t}`,
+      ]);
       if (!exists[0].t) {
         throw new Error(
           `No existe el backup "_bkp_std_${t}"; no se puede revertir automáticamente.`,

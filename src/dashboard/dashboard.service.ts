@@ -17,9 +17,11 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 export class DashboardService {
   constructor(
     @InjectRepository(Order) private readonly ordersRepo: Repository<Order>,
-    @InjectRepository(Patient) private readonly patientsRepo: Repository<Patient>,
+    @InjectRepository(Patient)
+    private readonly patientsRepo: Repository<Patient>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
-    @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
+    @InjectRepository(ExchangeRate)
+    private readonly ratesRepo: Repository<ExchangeRate>,
     @InjectRepository(AccountsPayable)
     private readonly apRepo: Repository<AccountsPayable>,
     @InjectRepository(AccountsReceivable)
@@ -57,10 +59,14 @@ export class DashboardService {
     return { count };
   }
 
-  async ordersPendingCount(user: AuthenticatedUser): Promise<{ count: number }> {
+  async ordersPendingCount(
+    user: AuthenticatedUser,
+  ): Promise<{ count: number }> {
     const qb = this.ordersRepo
       .createQueryBuilder('o')
-      .where('o.status NOT IN (:...excluded)', { excluded: ['finalized', 'cancelled'] })
+      .where('o.status NOT IN (:...excluded)', {
+        excluded: ['finalized', 'cancelled'],
+      })
       .andWhere('o.deletedAt IS NULL');
     await this.applyBranchScope(qb, user);
     const count = await qb.getCount();
@@ -97,7 +103,11 @@ export class DashboardService {
     const { from, to } = monthRangeIso();
     const qb = this.arPaymentsRepo
       .createQueryBuilder('p')
-      .innerJoin('accounts_receivable_payment_links', 'lnk', 'lnk."paymentId" = p.id')
+      .innerJoin(
+        'accounts_receivable_payment_links',
+        'lnk',
+        'lnk."paymentId" = p.id',
+      )
       .innerJoin(
         'accounts_receivable',
         'ar',
@@ -141,7 +151,9 @@ export class DashboardService {
                      JOIN "orders" o2 ON o2.id = aro2."orderId" AND o2."deletedAt" IS NULL
                      WHERE aro2."receivableId" = ar.id AND o2."branchId" = ANY($1))`;
     }
-    const rows = await this.dataSource.query<{ target: string; paid: string }[]>(
+    const rows = await this.dataSource.query<
+      { target: string; paid: string }[]
+    >(
       `SELECT
          (SELECT COALESCE(SUM(COALESCE(aro."targetUsd", o."priceAmount")), 0)
             FROM "accounts_receivable_orders" aro
@@ -245,7 +257,9 @@ export class DashboardService {
     qb.andWhere('o.branchId IN (:...allowed)', { allowed });
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },
@@ -282,4 +296,3 @@ function monthRangeIso(): { from: string; to: string } {
     to: isoDate(new Date(y, m + 1, 0)),
   };
 }
-

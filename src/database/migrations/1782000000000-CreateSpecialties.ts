@@ -15,7 +15,12 @@ export class CreateSpecialties1782000000000 implements MigrationInterface {
             generationStrategy: 'uuid',
           },
           { name: 'name', type: 'varchar', length: '120', isUnique: true },
-          { name: 'description', type: 'varchar', length: '500', isNullable: true },
+          {
+            name: 'description',
+            type: 'varchar',
+            length: '500',
+            isNullable: true,
+          },
           { name: 'isActive', type: 'boolean', default: true },
           { name: 'createdAt', type: 'timestamptz', default: 'now()' },
           { name: 'updatedAt', type: 'timestamptz', default: 'now()' },

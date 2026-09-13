@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * de pagos viejos. En pagos nuevos, BE snapshotea esos campos desde la
  * `PaymentAccount` al guardar (sólo aplica a mobile_payment y bank_transfer).
  */
-export class AddPaymentAccountIdToPayments1782004900000
-  implements MigrationInterface
-{
+export class AddPaymentAccountIdToPayments1782004900000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // order_payments
     await queryRunner.query(

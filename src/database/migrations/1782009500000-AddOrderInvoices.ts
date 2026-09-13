@@ -115,9 +115,7 @@ export class AddOrderInvoices1782009500000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "idx_order_invoices_order"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "idx_order_invoices_order"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "uq_order_invoices_active"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "uq_order_invoices_number"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "order_invoices"`);

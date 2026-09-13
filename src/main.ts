@@ -14,7 +14,10 @@ import { isServerlessRuntime } from './shared/utils/runtime.util';
 let cachedApp: INestApplication | null = null;
 let cachedServer: Express | null = null;
 
-async function bootstrap(): Promise<{ app: INestApplication; server: Express }> {
+async function bootstrap(): Promise<{
+  app: INestApplication;
+  server: Express;
+}> {
   if (cachedApp && cachedServer) {
     return { app: cachedApp, server: cachedServer };
   }
@@ -25,10 +28,14 @@ async function bootstrap(): Promise<{ app: INestApplication; server: Express }> 
     : ['log', 'debug', 'error', 'warn', 'verbose'];
 
   const expressApp = express();
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp), {
-    bufferLogs: true,
-    logger: logLevels,
-  });
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressApp),
+    {
+      bufferLogs: true,
+      logger: logLevels,
+    },
+  );
 
   app.enableShutdownHooks();
 

@@ -63,7 +63,9 @@ export class CareCenter {
    * Precios que se pagan al centro por Tipo de Servicio. Sólo los STs que el
    * centro efectivamente realiza. Replace-all en update.
    */
-  @OneToMany(() => CareCenterServicePrice, (sp) => sp.careCenter, { eager: true })
+  @OneToMany(() => CareCenterServicePrice, (sp) => sp.careCenter, {
+    eager: true,
+  })
   servicePrices: CareCenterServicePrice[];
 
   /**

@@ -75,7 +75,10 @@ export class FilesController {
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
-    const { stream, file, contentLength } = await this.service.download(id, user);
+    const { stream, file, contentLength } = await this.service.download(
+      id,
+      user,
+    );
     res.setHeader('Content-Type', file.mimeType);
     if (contentLength !== null) {
       res.setHeader('Content-Length', String(contentLength));

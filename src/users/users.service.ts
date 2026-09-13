@@ -32,7 +32,9 @@ export class UsersService {
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
   ) {}
 
-  async findAll(query: QueryUsersDto): Promise<PaginatedResponse<PublicUserView>> {
+  async findAll(
+    query: QueryUsersDto,
+  ): Promise<PaginatedResponse<PublicUserView>> {
     const {
       page = 1,
       limit = 10,
@@ -112,12 +114,18 @@ export class UsersService {
 
   async create(dto: CreateUserDto): Promise<PublicUserView> {
     const email = dto.email.toLowerCase();
-    const exists = await this.usersRepo.findOne({ where: { email }, withDeleted: true });
-    if (exists) throw new ConflictException('Ya existe un usuario con ese email');
+    const exists = await this.usersRepo.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (exists)
+      throw new ConflictException('Ya existe un usuario con ese email');
     const roles = await this.resolveRoles(dto.roleIds);
     const isSuperAdmin = dto.isSuperAdmin ?? false;
     // Super Admins ignoran branchIds — acceso implícito a todas.
-    const branches = isSuperAdmin ? [] : await this.resolveBranches(dto.branchIds ?? []);
+    const branches = isSuperAdmin
+      ? []
+      : await this.resolveBranches(dto.branchIds ?? []);
     const hash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const user = this.usersRepo.create({
       firstName: dto.firstName,
@@ -136,7 +144,11 @@ export class UsersService {
     return this.findOne(saved.id);
   }
 
-  async update(id: string, dto: UpdateUserDto, actor: AuthenticatedUser): Promise<PublicUserView> {
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    actor: AuthenticatedUser,
+  ): Promise<PublicUserView> {
     const user = await this.usersRepo.findOne({
       where: { id },
       relations: { roles: true, branches: true },
@@ -148,10 +160,12 @@ export class UsersService {
     // El email es inmutable; no se modifica desde la edición de usuario.
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
-    if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber ?? null;
+    if (dto.phoneNumber !== undefined)
+      user.phoneNumber = dto.phoneNumber ?? null;
     if (dto.academicDegree !== undefined)
       user.academicDegree = dto.academicDegree?.trim() || null;
-    if (dto.jobTitle !== undefined) user.jobTitle = dto.jobTitle?.trim() || null;
+    if (dto.jobTitle !== undefined)
+      user.jobTitle = dto.jobTitle?.trim() || null;
     const isSelf = actor.id === id;
     if (dto.isActive !== undefined) {
       if (isSelf && dto.isActive !== user.isActive) {
@@ -161,10 +175,14 @@ export class UsersService {
     }
     if (dto.isSuperAdmin !== undefined) {
       if (!actor.isSuperAdmin) {
-        throw new ForbiddenException('Sólo un Super Admin puede asignar Super Admin');
+        throw new ForbiddenException(
+          'Sólo un Super Admin puede asignar Super Admin',
+        );
       }
       if (isSelf && dto.isSuperAdmin !== user.isSuperAdmin) {
-        throw new ForbiddenException('No podés cambiar tu propio rol de Super Admin');
+        throw new ForbiddenException(
+          'No podés cambiar tu propio rol de Super Admin',
+        );
       }
       user.isSuperAdmin = dto.isSuperAdmin;
     }
@@ -174,7 +192,10 @@ export class UsersService {
     if (user.isSuperAdmin) {
       user.branches = [];
     } else if (dto.branchIds !== undefined) {
-      user.branches = await this.resolveBranches(dto.branchIds, user.branches ?? []);
+      user.branches = await this.resolveBranches(
+        dto.branchIds,
+        user.branches ?? [],
+      );
     }
 
     await this.usersRepo.save(user);
@@ -198,22 +219,31 @@ export class UsersService {
         throw new BadRequestException('La contraseña actual es requerida');
       }
       const ok = await bcrypt.compare(dto.currentPassword, user.password);
-      if (!ok) throw new UnauthorizedException('La contraseña actual es incorrecta');
-    } else if (!actor.isSuperAdmin && !actor.permissions.includes('users.change-password')) {
+      if (!ok)
+        throw new UnauthorizedException('La contraseña actual es incorrecta');
+    } else if (
+      !actor.isSuperAdmin &&
+      !actor.permissions.includes('users.change-password')
+    ) {
       throw new ForbiddenException('Permisos insuficientes');
     }
     user.password = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.usersRepo.save(user);
   }
 
-  async toggleActive(id: string, actor: AuthenticatedUser): Promise<PublicUserView> {
+  async toggleActive(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<PublicUserView> {
     const user = await this.usersRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (actor.id === id) {
       throw new ForbiddenException('No podés cambiar tu propio estado');
     }
     if (user.isSuperAdmin && !actor.isSuperAdmin) {
-      throw new ForbiddenException('No puedes cambiar el estado de un Super Admin');
+      throw new ForbiddenException(
+        'No puedes cambiar el estado de un Super Admin',
+      );
     }
     user.isActive = !user.isActive;
     await this.usersRepo.save(user);
@@ -233,7 +263,10 @@ export class UsersService {
   }
 
   async hardDelete(id: string, actor: AuthenticatedUser): Promise<void> {
-    const user = await this.usersRepo.findOne({ where: { id }, withDeleted: true });
+    const user = await this.usersRepo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (user.isSuperAdmin) {
       throw new BadRequestException('No se puede eliminar un Super Admin');
@@ -245,7 +278,10 @@ export class UsersService {
   }
 
   async restore(id: string): Promise<PublicUserView> {
-    const user = await this.usersRepo.findOne({ where: { id }, withDeleted: true });
+    const user = await this.usersRepo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!user) throw new NotFoundException('Usuario no encontrado');
     if (!user.deletedAt) return this.findOne(id);
     await this.usersRepo.restore(id);

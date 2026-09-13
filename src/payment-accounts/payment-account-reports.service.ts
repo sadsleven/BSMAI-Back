@@ -85,7 +85,9 @@ export class PaymentAccountReportsService {
     user: AuthenticatedUser,
   ): Promise<InflowsReport> {
     const source = query.source ?? 'all';
-    const allowed = user.isSuperAdmin ? null : await this.resolveUserBranchIds(user);
+    const allowed = user.isSuperAdmin
+      ? null
+      : await this.resolveUserBranchIds(user);
 
     const rows: InflowRow[] = [];
 
@@ -162,12 +164,18 @@ export class PaymentAccountReportsService {
         .addSelect('pa."deletedAt"', 'deletedAt')
         .from('payment_accounts', 'pa')
         .where('pa.id IN (:...ids)', { ids: accountIds })
-        .getRawMany<{ id: string; isActive: boolean; deletedAt: Date | null }>();
+        .getRawMany<{
+          id: string;
+          isActive: boolean;
+          deletedAt: Date | null;
+        }>();
       for (const m of meta) {
         const agg = byAccountMap.get(m.id);
         if (agg) {
           agg.isActive = m.isActive;
-          agg.deletedAt = m.deletedAt ? new Date(m.deletedAt).toISOString() : null;
+          agg.deletedAt = m.deletedAt
+            ? new Date(m.deletedAt).toISOString()
+            : null;
         }
       }
     }
@@ -336,7 +344,9 @@ export class PaymentAccountReportsService {
     };
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },

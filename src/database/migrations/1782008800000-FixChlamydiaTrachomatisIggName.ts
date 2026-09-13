@@ -32,9 +32,7 @@ async function rename(
   );
 }
 
-export class FixChlamydiaTrachomatisIggName1782008800000
-  implements MigrationInterface
-{
+export class FixChlamydiaTrachomatisIggName1782008800000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await rename(queryRunner, WRONG, RIGHT);
   }

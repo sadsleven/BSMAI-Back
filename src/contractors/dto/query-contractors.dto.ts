@@ -1,5 +1,13 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBooleanString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class QueryContractorsDto {
   @IsOptional()
@@ -25,7 +33,9 @@ export class QueryContractorsDto {
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
   sortDir?: 'ASC' | 'DESC' = 'DESC';
 
   @IsOptional()

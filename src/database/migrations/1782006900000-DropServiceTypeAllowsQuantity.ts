@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `service_types.allowsQuantity` (ya no condiciona nada). La columna
  * `order_service_types.quantity` (≥1, default 1) se conserva.
  */
-export class DropServiceTypeAllowsQuantity1782006900000
-  implements MigrationInterface
-{
+export class DropServiceTypeAllowsQuantity1782006900000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "service_types" DROP COLUMN IF EXISTS "allowsQuantity"`,

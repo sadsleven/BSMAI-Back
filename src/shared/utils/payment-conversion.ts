@@ -62,7 +62,9 @@ export async function computeAmountInUsd(
   });
   if (!eurRate) throw new BadRequestException('Tasa EUR no encontrada');
   if (eurRate.currency !== 'EUR') {
-    throw new BadRequestException('exchangeRateId del pago EUR debe ser de tipo EUR');
+    throw new BadRequestException(
+      'exchangeRateId del pago EUR debe ser de tipo EUR',
+    );
   }
   const eurRateBs = Number(eurRate.amountBs);
   if (!Number.isFinite(eurRateBs) || eurRateBs <= 0) {
@@ -84,7 +86,9 @@ export async function resolveUsdRate(
     const rate = await ratesRepo.findOne({ where: { id: usdExchangeRateId } });
     if (!rate) throw new BadRequestException('Tasa USD no encontrada');
     if (rate.currency !== 'USD') {
-      throw new BadRequestException('billingExchangeRateId debe ser de tipo USD');
+      throw new BadRequestException(
+        'billingExchangeRateId debe ser de tipo USD',
+      );
     }
     return rate;
   }
@@ -134,12 +138,18 @@ export async function computeAmountInBs(
 
   // EUR
   if (!payment.exchangeRateId) {
-    throw new BadRequestException('Pago en EUR requiere exchangeRateId con tasa EUR/Bs');
+    throw new BadRequestException(
+      'Pago en EUR requiere exchangeRateId con tasa EUR/Bs',
+    );
   }
-  const eurRate = await ratesRepo.findOne({ where: { id: payment.exchangeRateId } });
+  const eurRate = await ratesRepo.findOne({
+    where: { id: payment.exchangeRateId },
+  });
   if (!eurRate) throw new BadRequestException('Tasa EUR no encontrada');
   if (eurRate.currency !== 'EUR') {
-    throw new BadRequestException('exchangeRateId del pago EUR debe ser de tipo EUR');
+    throw new BadRequestException(
+      'exchangeRateId del pago EUR debe ser de tipo EUR',
+    );
   }
   const eurRateBs = Number(eurRate.amountBs);
   if (!Number.isFinite(eurRateBs) || eurRateBs <= 0) {

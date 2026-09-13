@@ -34,7 +34,8 @@ export class AppConfigService {
     const row = await this.repo.findOne({ where: { key } });
     if (row) return row.value;
     const def = DEFAULTS[key];
-    if (def === undefined) throw new NotFoundException(`Config ${key} no definida`);
+    if (def === undefined)
+      throw new NotFoundException(`Config ${key} no definida`);
     return def;
   }
 

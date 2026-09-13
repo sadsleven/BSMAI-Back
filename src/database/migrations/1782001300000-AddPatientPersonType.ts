@@ -37,9 +37,15 @@ export class AddPatientPersonType1782001300000 implements MigrationInterface {
     }
 
     // Make natural-only fields nullable.
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "cedula" DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "firstName" DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "lastName" DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "cedula" DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "firstName" DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "lastName" DROP NOT NULL`,
+    );
 
     // Partial unique indexes — only enforce when column is not null.
     await queryRunner.query(
@@ -55,15 +61,23 @@ export class AddPatientPersonType1782001300000 implements MigrationInterface {
     await queryRunner.query(`DROP INDEX IF EXISTS "ux_patients_cedula"`);
 
     // Restore strict NOT NULL + UNIQUE on cedula. Down assumes no legal_entity rows exist.
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "cedula" SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "firstName" SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "lastName" SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "cedula" SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "firstName" SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "lastName" SET NOT NULL`,
+    );
     await queryRunner.query(
       `ALTER TABLE "patients" ADD CONSTRAINT "UQ_patients_cedula" UNIQUE ("cedula")`,
     );
 
     await queryRunner.query(`ALTER TABLE "patients" DROP COLUMN "rif"`);
-    await queryRunner.query(`ALTER TABLE "patients" DROP COLUMN "businessName"`);
+    await queryRunner.query(
+      `ALTER TABLE "patients" DROP COLUMN "businessName"`,
+    );
     await queryRunner.query(`ALTER TABLE "patients" DROP COLUMN "personType"`);
   }
 }

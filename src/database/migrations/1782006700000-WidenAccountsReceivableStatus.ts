@@ -9,9 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `*Number`). El CHECK `ck_ar_status` y el índice `idx_ar_status` sobreviven al
  * cambio de tipo.
  */
-export class WidenAccountsReceivableStatus1782006700000
-  implements MigrationInterface
-{
+export class WidenAccountsReceivableStatus1782006700000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     await q.query(
       `ALTER TABLE "accounts_receivable" ALTER COLUMN "status" TYPE varchar(32)`,

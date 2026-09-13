@@ -19,9 +19,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  si la orden es de seguro no indexado, en `fixedExchangeRateId` (target Bs de
  *  la cuenta por cobrar) — el campo de tasa que antes vivía en el Paso 1.
  */
-export class AddOrderInvoiceExchangeRate1782009400000
-  implements MigrationInterface
-{
+export class AddOrderInvoiceExchangeRate1782009400000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceExchangeRateId" uuid NULL`,

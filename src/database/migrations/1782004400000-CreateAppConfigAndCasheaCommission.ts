@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Idempotente vía IF EXISTS / IF NOT EXISTS.
  */
-export class CreateAppConfigAndCasheaCommission1782004400000
-  implements MigrationInterface
-{
+export class CreateAppConfigAndCasheaCommission1782004400000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "app_config" (

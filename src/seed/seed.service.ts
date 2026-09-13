@@ -8,7 +8,10 @@ import { Role } from '../roles/entities/role.entity';
 import { User } from '../users/entities/user.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { BANKS_SEED } from '../banks/banks.data';
-import { PERMISSION_CATALOG, PERMISSIONS } from '../permissions/permissions.catalog';
+import {
+  PERMISSION_CATALOG,
+  PERMISSIONS,
+} from '../permissions/permissions.catalog';
 import { PROVIDER_ROLE_NAME } from '../provider-accounts/provider-accounts.service';
 
 const SUPER_ADMIN_ROLE = 'Super Admin';
@@ -29,7 +32,8 @@ export class SeedService {
 
   constructor(
     private readonly config: ConfigService,
-    @InjectRepository(Permission) private readonly permsRepo: Repository<Permission>,
+    @InjectRepository(Permission)
+    private readonly permsRepo: Repository<Permission>,
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
@@ -94,12 +98,16 @@ export class SeedService {
   private async seedBanks(): Promise<void> {
     const existing = await this.banksRepo.find();
     const existingCodes = new Set(existing.map((b) => b.code));
-    const toInsert = BANKS_SEED.filter((def) => !existingCodes.has(def.codigo)).map((def) =>
+    const toInsert = BANKS_SEED.filter(
+      (def) => !existingCodes.has(def.codigo),
+    ).map((def) =>
       this.banksRepo.create({ code: def.codigo, name: def.nombre }),
     );
 
     if (toInsert.length) await this.banksRepo.save(toInsert);
-    this.logger.log(`Bancos: insertados=${toInsert.length} catálogo seed=${BANKS_SEED.length}`);
+    this.logger.log(
+      `Bancos: insertados=${toInsert.length} catálogo seed=${BANKS_SEED.length}`,
+    );
   }
 
   private async seedPermissions(): Promise<Permission[]> {
@@ -155,7 +163,8 @@ export class SeedService {
         await this.rolesRepo.restore(role.id);
         role.deletedAt = null;
       }
-      role.description = role.description ?? 'Rol con todos los permisos del sistema';
+      role.description =
+        role.description ?? 'Rol con todos los permisos del sistema';
       role.isSystem = true;
       role.isActive = true;
       role.permissions = all;
@@ -164,10 +173,14 @@ export class SeedService {
   }
 
   private async seedSuperAdminUser(role: Role): Promise<void> {
-    const email = (this.config.get<string>('SUPER_ADMIN_EMAIL') ?? '').toLowerCase().trim();
+    const email = (this.config.get<string>('SUPER_ADMIN_EMAIL') ?? '')
+      .toLowerCase()
+      .trim();
     const password = this.config.get<string>('SUPER_ADMIN_PASSWORD') ?? '';
-    const firstName = this.config.get<string>('SUPER_ADMIN_FIRST_NAME') ?? 'Super';
-    const lastName = this.config.get<string>('SUPER_ADMIN_LAST_NAME') ?? 'Admin';
+    const firstName =
+      this.config.get<string>('SUPER_ADMIN_FIRST_NAME') ?? 'Super';
+    const lastName =
+      this.config.get<string>('SUPER_ADMIN_LAST_NAME') ?? 'Admin';
     const phoneNumber = this.config.get<string>('SUPER_ADMIN_PHONE') ?? null;
 
     if (!email || !password) {

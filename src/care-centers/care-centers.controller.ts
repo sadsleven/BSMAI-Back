@@ -49,7 +49,10 @@ export class CareCentersController {
 
   @RequirePermissions(PERMISSIONS.CARE_CENTERS.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateCareCenterDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateCareCenterDto,
+  ) {
     return this.service.update(id, dto);
   }
 

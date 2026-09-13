@@ -9,9 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Idempotente vía IF NOT EXISTS / IF EXISTS.
  */
-export class AddOrderIsReimbursement1782007700000
-  implements MigrationInterface
-{
+export class AddOrderIsReimbursement1782007700000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "orders"

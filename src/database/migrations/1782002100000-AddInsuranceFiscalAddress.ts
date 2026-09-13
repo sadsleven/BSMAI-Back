@@ -8,6 +8,8 @@ export class AddInsuranceFiscalAddress1782002100000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "insurances" DROP COLUMN IF EXISTS "fiscalAddress"`);
+    await queryRunner.query(
+      `ALTER TABLE "insurances" DROP COLUMN IF EXISTS "fiscalAddress"`,
+    );
   }
 }

@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Bank } from './entities/bank.entity';
@@ -29,7 +33,9 @@ export class BanksService {
   async create(dto: CreateBankDto): Promise<Bank> {
     const dupe = await this.repo.findOne({ where: { code: dto.code } });
     if (dupe) {
-      throw new ConflictException(`Ya existe un banco con el código ${dto.code}`);
+      throw new ConflictException(
+        `Ya existe un banco con el código ${dto.code}`,
+      );
     }
     const bank = this.repo.create({
       code: dto.code,
@@ -52,7 +58,9 @@ export class BanksService {
     if (dto.code !== undefined && dto.code !== oldCode) {
       const dupe = await this.repo.findOne({ where: { code: dto.code } });
       if (dupe) {
-        throw new ConflictException(`Ya existe un banco con el código ${dto.code}`);
+        throw new ConflictException(
+          `Ya existe un banco con el código ${dto.code}`,
+        );
       }
       bank.code = dto.code;
     }

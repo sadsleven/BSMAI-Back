@@ -18,10 +18,13 @@ import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 export class ContractorsService {
   constructor(
     @InjectRepository(Contractor) private readonly repo: Repository<Contractor>,
-    @InjectRepository(Insurance) private readonly insurancesRepo: Repository<Insurance>,
+    @InjectRepository(Insurance)
+    private readonly insurancesRepo: Repository<Insurance>,
   ) {}
 
-  async findAll(query: QueryContractorsDto): Promise<PaginatedResponse<Contractor>> {
+  async findAll(
+    query: QueryContractorsDto,
+  ): Promise<PaginatedResponse<Contractor>> {
     const {
       page = 1,
       limit = 10,
@@ -82,8 +85,12 @@ export class ContractorsService {
 
   async create(dto: CreateContractorDto): Promise<Contractor> {
     const name = dto.name.trim();
-    const exists = await this.repo.findOne({ where: { name }, withDeleted: true });
-    if (exists) throw new ConflictException('Ya existe un contratista con ese nombre');
+    const exists = await this.repo.findOne({
+      where: { name },
+      withDeleted: true,
+    });
+    if (exists)
+      throw new ConflictException('Ya existe un contratista con ese nombre');
     const insurances = await this.resolveInsurances(dto.insuranceIds ?? []);
     const contractor = this.repo.create({
       name,
@@ -99,8 +106,14 @@ export class ContractorsService {
     if (dto.name) {
       const name = dto.name.trim();
       if (name !== contractor.name) {
-        const dupe = await this.repo.findOne({ where: { name }, withDeleted: true });
-        if (dupe) throw new ConflictException('Ya existe un contratista con ese nombre');
+        const dupe = await this.repo.findOne({
+          where: { name },
+          withDeleted: true,
+        });
+        if (dupe)
+          throw new ConflictException(
+            'Ya existe un contratista con ese nombre',
+          );
         contractor.name = name;
       }
     }
@@ -135,7 +148,10 @@ export class ContractorsService {
   }
 
   async restore(id: string): Promise<Contractor> {
-    const contractor = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const contractor = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!contractor) throw new NotFoundException('Contratista no encontrado');
     if (!contractor.deletedAt) return contractor;
     await this.repo.restore(id);

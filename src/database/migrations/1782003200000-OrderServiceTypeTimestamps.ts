@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Originalmente la tabla era un JoinTable simple sin timestamps; al promoverla
  * a entity propia las columnas faltaban.
  */
-export class OrderServiceTypeTimestamps1782003200000
-  implements MigrationInterface
-{
+export class OrderServiceTypeTimestamps1782003200000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "order_service_types" ADD COLUMN IF NOT EXISTS "createdAt" timestamptz NOT NULL DEFAULT now()`,

@@ -25,7 +25,8 @@ import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.m
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET') ?? 'change-me',
         signOptions: {
-          expiresIn: (config.get<string>('JWT_EXPIRATION') ?? '7d') as unknown as number,
+          expiresIn: (config.get<string>('JWT_EXPIRATION') ??
+            '7d') as unknown as number,
         },
       }),
     }),

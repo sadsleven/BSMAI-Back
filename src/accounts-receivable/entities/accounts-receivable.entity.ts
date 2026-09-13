@@ -94,10 +94,14 @@ export class AccountsReceivable {
   adjustedAt?: Date | null;
 
   /** Órdenes incluidas en el lote (pivot con snapshot de modo y target). */
-  @OneToMany(() => AccountsReceivableOrder, (o) => o.receivable, { cascade: false })
+  @OneToMany(() => AccountsReceivableOrder, (o) => o.receivable, {
+    cascade: false,
+  })
   orders: AccountsReceivableOrder[];
 
-  @ManyToMany(() => AccountsReceivablePayment, (p) => p.accounts, { cascade: false })
+  @ManyToMany(() => AccountsReceivablePayment, (p) => p.accounts, {
+    cascade: false,
+  })
   @JoinTable({
     name: 'accounts_receivable_payment_links',
     joinColumn: { name: 'receivableId', referencedColumnName: 'id' },

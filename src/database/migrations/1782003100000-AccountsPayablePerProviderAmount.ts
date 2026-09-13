@@ -12,9 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * proveedor). Tras la migración, `billing()` actualiza cada cuenta con su
  * monto correspondiente.
  */
-export class AccountsPayablePerProviderAmount1782003100000
-  implements MigrationInterface
-{
+export class AccountsPayablePerProviderAmount1782003100000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "accounts_payable" ADD COLUMN IF NOT EXISTS "providerAmount" numeric(14,2) NULL`,

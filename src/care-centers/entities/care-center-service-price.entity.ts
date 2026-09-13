@@ -16,7 +16,9 @@ import { ServiceType } from '../../service-types/entities/service-type.entity';
  * Un Centro carga sólo los STs que efectivamente realiza.
  */
 @Entity({ name: 'care_center_service_prices' })
-@Index('UQ_ccsp_carecenter_st', ['careCenterId', 'serviceTypeId'], { unique: true })
+@Index('UQ_ccsp_carecenter_st', ['careCenterId', 'serviceTypeId'], {
+  unique: true,
+})
 export class CareCenterServicePrice {
   @PrimaryGeneratedColumn('uuid')
   id: string;

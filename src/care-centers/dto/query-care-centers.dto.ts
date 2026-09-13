@@ -30,11 +30,14 @@ export class QueryCareCentersDto {
 
   @IsOptional()
   @IsIn(['businessName', 'email', 'rif', 'createdAt', 'updatedAt'])
-  sortBy?: 'businessName' | 'email' | 'rif' | 'createdAt' | 'updatedAt' = 'createdAt';
+  sortBy?: 'businessName' | 'email' | 'rif' | 'createdAt' | 'updatedAt' =
+    'createdAt';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
   sortDir?: 'ASC' | 'DESC' = 'DESC';
 
   @IsOptional()

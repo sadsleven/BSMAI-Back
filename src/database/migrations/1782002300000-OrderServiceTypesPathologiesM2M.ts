@@ -65,14 +65,22 @@ export class OrderServiceTypesPathologiesM2M1782002300000 implements MigrationIn
         END LOOP;
       END $$;
     `);
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "serviceTypeId"`);
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "pathologyId"`);
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "serviceTypeId"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "pathologyId"`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Restablece columnas escalares (nullable) y vuelca cualquier item del pivote.
-    await queryRunner.query(`ALTER TABLE "orders" ADD COLUMN "serviceTypeId" uuid NULL`);
-    await queryRunner.query(`ALTER TABLE "orders" ADD COLUMN "pathologyId" uuid NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "orders" ADD COLUMN "serviceTypeId" uuid NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "orders" ADD COLUMN "pathologyId" uuid NULL`,
+    );
     await queryRunner.query(`
       UPDATE "orders" o SET "serviceTypeId" = (
         SELECT "serviceTypeId" FROM "order_service_types" ost WHERE ost."orderId" = o.id LIMIT 1

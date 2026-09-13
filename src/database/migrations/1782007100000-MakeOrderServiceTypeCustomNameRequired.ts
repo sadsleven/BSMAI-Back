@@ -8,9 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * genérico, de modo que `SET NOT NULL` nunca falle. A partir de aquí toda fila
  * lleva su propio nombre para la orden (Paso 2: órdenes internas; Paso 4: factura).
  */
-export class MakeOrderServiceTypeCustomNameRequired1782007100000
-  implements MigrationInterface
-{
+export class MakeOrderServiceTypeCustomNameRequired1782007100000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 1) Rellena con el nombre del baremo las filas sin customName.
     await queryRunner.query(`

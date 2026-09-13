@@ -10,9 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `bank_transfer_usd`. Las columnas `type` de `order_payments` /
  * `accounts_receivable_payments` son varchar sin CHECK → no requieren cambios.
  */
-export class AddBankTransferUsdPaymentAccountType1782006000000
-  implements MigrationInterface
-{
+export class AddBankTransferUsdPaymentAccountType1782006000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "payment_accounts" DROP CONSTRAINT IF EXISTS "CHK_pa_type_xor"`,

@@ -9,7 +9,9 @@ import { Order } from '../orders/entities/order.entity';
 import { Branch } from '../branches/entities/branch.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Patient, Doctor, CareCenter, Order, Branch])],
+  imports: [
+    TypeOrmModule.forFeature([Patient, Doctor, CareCenter, Order, Branch]),
+  ],
   controllers: [SearchController],
   providers: [SearchService],
 })

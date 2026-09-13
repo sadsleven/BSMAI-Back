@@ -35,7 +35,10 @@ export class AuthService {
     private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
-  async login(email: string, password: string): Promise<{ accessToken: string; user: PublicUser }> {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ accessToken: string; user: PublicUser }> {
     const user = await this.usersRepo
       .createQueryBuilder('u')
       .leftJoinAndSelect('u.roles', 'r')
@@ -57,12 +60,15 @@ export class AuthService {
       {
         jwtid: jti,
         secret: this.config.get<string>('JWT_SECRET'),
-        expiresIn: (this.config.get<string>('JWT_EXPIRATION') ?? '7d') as unknown as number,
+        expiresIn: (this.config.get<string>('JWT_EXPIRATION') ??
+          '7d') as unknown as number,
       },
     );
 
     const branches = await this.resolveVisibleBranches(user);
-    const providerLink = await this.providerAccounts.findProviderByUserId(user.id);
+    const providerLink = await this.providerAccounts.findProviderByUserId(
+      user.id,
+    );
     return { accessToken, user: toPublicUser(user, branches, providerLink) };
   }
 
@@ -88,7 +94,8 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales del validador inválidas');
     }
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) throw new UnauthorizedException('Credenciales del validador inválidas');
+    if (!ok)
+      throw new UnauthorizedException('Credenciales del validador inválidas');
 
     const permissions = new Set<string>();
     for (const role of user.roles ?? []) {
@@ -115,11 +122,16 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException();
     const branches = await this.resolveVisibleBranches(user);
-    const providerLink = await this.providerAccounts.findProviderByUserId(user.id);
+    const providerLink = await this.providerAccounts.findProviderByUserId(
+      user.id,
+    );
     return toPublicUser(user, branches, providerLink);
   }
 
-  async updateOwnProfile(userId: string, dto: UpdateProfileDto): Promise<PublicUser> {
+  async updateOwnProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<PublicUser> {
     const user = await this.usersRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
@@ -130,7 +142,8 @@ export class AuthService {
       dto.academicDegree !== undefined ||
       dto.jobTitle !== undefined
     ) {
-      const providerLink = await this.providerAccounts.findProviderByUserId(userId);
+      const providerLink =
+        await this.providerAccounts.findProviderByUserId(userId);
       if (providerLink) {
         throw new ForbiddenException(
           'Teléfono, grado académico y cargo están reservados para usuarios AFMI',
@@ -141,16 +154,21 @@ export class AuthService {
     // El email es inmutable; no se modifica desde el perfil.
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
     if (dto.lastName !== undefined) user.lastName = dto.lastName;
-    if (dto.phoneNumber !== undefined) user.phoneNumber = dto.phoneNumber ?? null;
+    if (dto.phoneNumber !== undefined)
+      user.phoneNumber = dto.phoneNumber ?? null;
     if (dto.academicDegree !== undefined)
       user.academicDegree = dto.academicDegree?.trim() || null;
-    if (dto.jobTitle !== undefined) user.jobTitle = dto.jobTitle?.trim() || null;
+    if (dto.jobTitle !== undefined)
+      user.jobTitle = dto.jobTitle?.trim() || null;
 
     await this.usersRepo.save(user);
     return this.me(userId);
   }
 
-  async changeOwnPassword(userId: string, dto: ChangeOwnPasswordDto): Promise<void> {
+  async changeOwnPassword(
+    userId: string,
+    dto: ChangeOwnPasswordDto,
+  ): Promise<void> {
     const user = await this.usersRepo
       .createQueryBuilder('u')
       .addSelect('u.password')
@@ -159,7 +177,8 @@ export class AuthService {
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
     const ok = await bcrypt.compare(dto.currentPassword, user.password);
-    if (!ok) throw new UnauthorizedException('La contraseña actual es incorrecta');
+    if (!ok)
+      throw new UnauthorizedException('La contraseña actual es incorrecta');
 
     if (dto.newPassword === dto.currentPassword) {
       throw new BadRequestException(
@@ -236,7 +255,9 @@ export function toPublicUser(
   branches: PublicBranch[],
   providerLink: ProviderLink | null = null,
 ): PublicUser {
-  const activeRoles = (user.roles ?? []).filter((r) => r.isActive && !r.deletedAt);
+  const activeRoles = (user.roles ?? []).filter(
+    (r) => r.isActive && !r.deletedAt,
+  );
   const permissions = new Set<string>();
   for (const role of activeRoles) {
     for (const perm of role.permissions ?? []) permissions.add(perm.name);

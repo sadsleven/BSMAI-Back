@@ -13,9 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *     · type='insurance' + contractorId NULL     → 'direct'
  *     · resto → NULL
  */
-export class RestorePatientInsurancesAndOrderInsuranceSource1782002800000
-  implements MigrationInterface
-{
+export class RestorePatientInsurancesAndOrderInsuranceSource1782002800000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- patient_insurances ---
     await queryRunner.query(`

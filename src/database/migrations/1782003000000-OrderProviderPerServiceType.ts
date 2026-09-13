@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Idempotente con IF EXISTS / IF NOT EXISTS.
  */
-export class OrderProviderPerServiceType1782003000000
-  implements MigrationInterface
-{
+export class OrderProviderPerServiceType1782003000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 1) Columns
     await queryRunner.query(
@@ -121,12 +119,8 @@ export class OrderProviderPerServiceType1782003000000
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Reversa best-effort. Nota: la reversión no preserva órdenes con múltiples proveedores
     // ya que `orders` no puede albergar más de uno; se toma el primero por order.
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "UQ_ap_order_doctor"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "UQ_ap_order_careCenter"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_ap_order_doctor"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_ap_order_careCenter"`);
     await queryRunner.query(
       `ALTER TABLE "accounts_payable" ADD CONSTRAINT "accounts_payable_orderId_key" UNIQUE ("orderId")`,
     );
@@ -165,12 +159,8 @@ export class OrderProviderPerServiceType1782003000000
     await queryRunner.query(
       `ALTER TABLE "order_service_types" DROP CONSTRAINT IF EXISTS "FK_ost_careCenter"`,
     );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_ost_doctor"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_ost_careCenter"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_ost_doctor"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_ost_careCenter"`);
     await queryRunner.query(
       `ALTER TABLE "order_service_types" DROP COLUMN IF EXISTS "careCenterId"`,
     );

@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
-import { TaxPayable, TaxPayableInvoiceRow } from './entities/tax-payable.entity';
+import {
+  TaxPayable,
+  TaxPayableInvoiceRow,
+} from './entities/tax-payable.entity';
 import { TaxPayablePayment } from './entities/tax-payable-payment.entity';
 import { TaxPaymentBatch } from './entities/tax-payment-batch.entity';
 import { Branch } from '../branches/entities/branch.entity';
@@ -38,14 +41,17 @@ export class TaxesPayableService {
     private readonly batchRepo: Repository<TaxPaymentBatch>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
-    @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
+    @InjectRepository(ExchangeRate)
+    private readonly ratesRepo: Repository<ExchangeRate>,
     private readonly dataSource: DataSource,
     private readonly taxUnits: TaxUnitsService,
   ) {
     void this.paymentsRepo;
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },
@@ -80,7 +86,14 @@ export class TaxesPayableService {
     query: QueryPendingTaxDto,
     user: AuthenticatedUser,
   ): Promise<PaginatedResponse<TaxPayable>> {
-    const { page = 1, limit = 10, search, doctorId, careCenterId, branchId } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      doctorId,
+      careCenterId,
+      branchId,
+    } = query;
     const qb = this.repo
       .createQueryBuilder('tp')
       .leftJoinAndSelect('tp.doctor', 'doctor')
@@ -89,11 +102,13 @@ export class TaxesPayableService {
 
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
-      if (allowed.length === 0) return { data: [], metadata: { total: 0, page, lastPage: 1 } };
+      if (allowed.length === 0)
+        return { data: [], metadata: { total: 0, page, lastPage: 1 } };
       qb.andWhere(this.branchScopeExists('tp'), { allowed });
     }
     if (doctorId) qb.andWhere('tp."doctorId" = :doctorId', { doctorId });
-    if (careCenterId) qb.andWhere('tp."careCenterId" = :careCenterId', { careCenterId });
+    if (careCenterId)
+      qb.andWhere('tp."careCenterId" = :careCenterId', { careCenterId });
     if (branchId) qb.andWhere(this.branchScopeExistsSingle('tp'), { branchId });
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
@@ -112,7 +127,11 @@ export class TaxesPayableService {
     await this.attachInternalNumbers(data);
     return {
       data,
-      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+      metadata: {
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
@@ -150,7 +169,7 @@ export class TaxesPayableService {
     }
     for (const t of taxes) {
       t.internalNumbers = t.sourcePayableId
-        ? byPayable.get(t.sourcePayableId) ?? []
+        ? (byPayable.get(t.sourcePayableId) ?? [])
         : [];
     }
   }
@@ -209,7 +228,9 @@ export class TaxesPayableService {
       byPayable.set(r.payableId, arr);
     }
     for (const t of taxes) {
-      t.invoices = t.sourcePayableId ? byPayable.get(t.sourcePayableId) ?? [] : [];
+      t.invoices = t.sourcePayableId
+        ? (byPayable.get(t.sourcePayableId) ?? [])
+        : [];
     }
   }
 
@@ -296,11 +317,18 @@ export class TaxesPayableService {
     }
     return {
       data,
-      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+      metadata: {
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
-  async findOneBatch(id: string, user: AuthenticatedUser): Promise<TaxPaymentBatch> {
+  async findOneBatch(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<TaxPaymentBatch> {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote SENIAT no encontrado');
     await this.assertBatchVisibility(batch, user);
@@ -310,7 +338,10 @@ export class TaxesPayableService {
     return batch;
   }
 
-  private loadBatch(mgr: EntityManager, id: string): Promise<TaxPaymentBatch | null> {
+  private loadBatch(
+    mgr: EntityManager,
+    id: string,
+  ): Promise<TaxPaymentBatch | null> {
     return mgr.findOne(TaxPaymentBatch, {
       where: { id },
       relations: {
@@ -323,7 +354,10 @@ export class TaxesPayableService {
 
   private computeFigures(batch: TaxPaymentBatch): void {
     const originalTargetBs = round2(
-      (batch.obligations ?? []).reduce((s, o) => s + Number(o.taxAmountBs || 0), 0),
+      (batch.obligations ?? []).reduce(
+        (s, o) => s + Number(o.taxAmountBs || 0),
+        0,
+      ),
     );
     // Ajuste de UT: el monto a enterar al SENIAT se recalcula por obligación
     // con la UT del ajuste; el snapshot (lo retenido al proveedor) no cambia.
@@ -449,7 +483,9 @@ export class TaxesPayableService {
       (o) => !taxPayableIds.includes(o.id),
     );
     if (remaining.length === 0) {
-      throw new BadRequestException('El lote quedaría vacío. Elimina el lote en su lugar.');
+      throw new BadRequestException(
+        'El lote quedaría vacío. Elimina el lote en su lugar.',
+      );
     }
     await this.dataSource.transaction(async (mgr) => {
       await mgr.query(
@@ -491,7 +527,9 @@ export class TaxesPayableService {
       resolvedId = ut.id;
     }
     await this.dataSource.transaction(async (mgr) => {
-      await mgr.update(TaxPaymentBatch, id, { adjustmentTaxUnitId: resolvedId });
+      await mgr.update(TaxPaymentBatch, id, {
+        adjustmentTaxUnitId: resolvedId,
+      });
       await this.recomputeStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -539,7 +577,9 @@ export class TaxesPayableService {
     }
     if (!user.isSuperAdmin) {
       const allowed = new Set(await this.resolveUserBranchIds(user));
-      const sourceIds = taxes.map((t) => t.sourcePayableId).filter(Boolean) as string[];
+      const sourceIds = taxes
+        .map((t) => t.sourcePayableId)
+        .filter(Boolean) as string[];
       if (sourceIds.length) {
         const rows = await this.dataSource.query<{ branchId: string }[]>(
           `SELECT DISTINCT o."branchId"
@@ -550,7 +590,9 @@ export class TaxesPayableService {
           [sourceIds],
         );
         if (rows.some((r) => !allowed.has(r.branchId))) {
-          throw new ForbiddenException('No tenés acceso a una de las retenciones');
+          throw new ForbiddenException(
+            'No tenés acceso a una de las retenciones',
+          );
         }
       }
     }
@@ -575,7 +617,10 @@ export class TaxesPayableService {
     this.computeFigures(batch);
     const usdRateId = await this.usdRateForBatch(batch);
     const priorPaidBs = batch.paidBs ?? 0;
-    const newPaymentsBs = await this.computePaymentsTotalBs(payments, usdRateId);
+    const newPaymentsBs = await this.computePaymentsTotalBs(
+      payments,
+      usdRateId,
+    );
     if (newPaymentsBs <= 0) {
       throw new BadRequestException('El monto de los pagos debe ser mayor a 0');
     }
@@ -640,7 +685,9 @@ export class TaxesPayableService {
         `DELETE FROM "tax_payment_batch_payment_links" WHERE "batchId" = $1 AND "paymentId" = $2`,
         [id, paymentId],
       );
-      await mgr.query(`DELETE FROM "taxes_payable_payments" WHERE id = $1`, [paymentId]);
+      await mgr.query(`DELETE FROM "taxes_payable_payments" WHERE id = $1`, [
+        paymentId,
+      ]);
       await this.recomputeStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -659,7 +706,10 @@ export class TaxesPayableService {
       );
       const payIds = (batch.payments ?? []).map((p) => p.id);
       if (payIds.length) {
-        await mgr.query(`DELETE FROM "taxes_payable_payments" WHERE id = ANY($1)`, [payIds]);
+        await mgr.query(
+          `DELETE FROM "taxes_payable_payments" WHERE id = ANY($1)`,
+          [payIds],
+        );
       }
       await mgr.query(`DELETE FROM "tax_payment_batches" WHERE id = $1`, [id]);
     });
@@ -679,7 +729,7 @@ export class TaxesPayableService {
     else if (paid > 0) status = 'partially_paid';
     else status = 'unpaid';
 
-    const paidAt = status === 'paid' ? batch.paidAt ?? new Date() : null;
+    const paidAt = status === 'paid' ? (batch.paidAt ?? new Date()) : null;
     await mgr.update(TaxPaymentBatch, id, { status, paidAt });
     // Las obligaciones espejan el estado del lote.
     await mgr.query(
@@ -688,12 +738,16 @@ export class TaxesPayableService {
     );
   }
 
-  private async usdRateForBatch(batch: TaxPaymentBatch): Promise<string | null> {
+  private async usdRateForBatch(
+    batch: TaxPaymentBatch,
+  ): Promise<string | null> {
     const sourceIds = (batch.obligations ?? [])
       .map((o) => o.sourcePayableId)
       .filter(Boolean) as string[];
     if (!sourceIds.length) return null;
-    const rows = await this.dataSource.query<{ billingExchangeRateId: string | null }[]>(
+    const rows = await this.dataSource.query<
+      { billingExchangeRateId: string | null }[]
+    >(
       `SELECT o."billingExchangeRateId"
        FROM "accounts_payable_orders" apo
        JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
@@ -726,36 +780,56 @@ export class TaxesPayableService {
 
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
       if (!p.bankCode) throw new BadRequestException('bankCode requerido');
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency !== 'BS')
-        throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
-      const bank = await this.banksRepo.findOne({ where: { code: p.bankCode } });
+        throw new BadRequestException(
+          'Pago móvil/transferencia debe ser en BS',
+        );
+      const bank = await this.banksRepo.findOne({
+        where: { code: p.bankCode },
+      });
       if (!bank) throw new BadRequestException('Banco no encontrado');
       out.bankCode = p.bankCode;
       out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_bs') {
-      if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
+      if (p.amountCurrency !== 'BS')
+        throw new BadRequestException('cash_bs debe ser en BS');
       out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_usd') {
-      if (p.amountCurrency !== 'USD') throw new BadRequestException('cash_usd debe ser en USD');
+      if (p.amountCurrency !== 'USD')
+        throw new BadRequestException('cash_usd debe ser en USD');
       if (!p.exchangeRateId)
-        throw new BadRequestException('cash_usd requiere tasa USD/Bs (para convertir a Bs)');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        throw new BadRequestException(
+          'cash_usd requiere tasa USD/Bs (para convertir a Bs)',
+        );
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('cash_usd requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'cash_eur') {
-      if (p.amountCurrency !== 'EUR') throw new BadRequestException('cash_eur debe ser en EUR');
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido (EUR)');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (p.amountCurrency !== 'EUR')
+        throw new BadRequestException('cash_eur debe ser en EUR');
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido (EUR)');
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'EUR')
-        throw new BadRequestException('cash_eur requiere una tasa de cambio en EUR');
+        throw new BadRequestException(
+          'cash_eur requiere una tasa de cambio en EUR',
+        );
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       out.accountNumber = p.accountNumber ?? null;
       if (p.amountCurrency !== 'BS' && !p.exchangeRateId) {
-        throw new BadRequestException('Pago "other" en USD/EUR requiere exchangeRateId');
+        throw new BadRequestException(
+          'Pago "other" en USD/EUR requiere exchangeRateId',
+        );
       }
       out.exchangeRateId = p.exchangeRateId ?? null;
     }

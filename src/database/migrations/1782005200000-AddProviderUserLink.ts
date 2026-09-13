@@ -18,7 +18,9 @@ export class AddProviderUserLink1782005200000 implements MigrationInterface {
       ON "doctors" ("userId") WHERE "userId" IS NOT NULL
     `);
 
-    await queryRunner.query(`ALTER TABLE "care_centers" ADD COLUMN "userId" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "care_centers" ADD COLUMN "userId" uuid`,
+    );
     await queryRunner.query(`
       ALTER TABLE "care_centers"
       ADD CONSTRAINT "fk_care_centers_user"
@@ -43,6 +45,8 @@ export class AddProviderUserLink1782005200000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "doctors" DROP CONSTRAINT IF EXISTS "fk_doctors_user"`,
     );
-    await queryRunner.query(`ALTER TABLE "doctors" DROP COLUMN IF EXISTS "userId"`);
+    await queryRunner.query(
+      `ALTER TABLE "doctors" DROP COLUMN IF EXISTS "userId"`,
+    );
   }
 }

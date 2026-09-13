@@ -36,10 +36,18 @@ export class TaxesPayable1782003400000 implements MigrationInterface {
         "deletedAt" timestamptz NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_tp_status" ON "taxes_payable"("status")`);
-    await queryRunner.query(`CREATE INDEX "idx_tp_doctor" ON "taxes_payable"("doctorId")`);
-    await queryRunner.query(`CREATE INDEX "idx_tp_careCenter" ON "taxes_payable"("careCenterId")`);
-    await queryRunner.query(`CREATE INDEX "idx_tp_order" ON "taxes_payable"("orderId")`);
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_status" ON "taxes_payable"("status")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_doctor" ON "taxes_payable"("doctorId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_careCenter" ON "taxes_payable"("careCenterId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_order" ON "taxes_payable"("orderId")`,
+    );
 
     await queryRunner.query(`
       CREATE TABLE "taxes_payable_payments" (
@@ -125,7 +133,9 @@ export class TaxesPayable1782003400000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payment_links"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "taxes_payable_payment_links"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payments"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable"`);
     await queryRunner.query(`DROP SEQUENCE IF EXISTS taxes_payable_seq`);

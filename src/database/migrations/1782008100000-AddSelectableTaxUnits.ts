@@ -37,9 +37,7 @@ export class AddSelectableTaxUnits1782008100000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "idx_tpb_adjustmentTaxUnit"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "idx_tpb_adjustmentTaxUnit"`);
     await queryRunner.query(
       `ALTER TABLE "tax_payment_batches" DROP CONSTRAINT IF EXISTS "fk_tpb_adjustment_tax_unit"`,
     );

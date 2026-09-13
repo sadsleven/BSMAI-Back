@@ -29,7 +29,14 @@ export class QueryOrdersDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['draft', 'in_progress', 'attended', 'report_issued', 'finalized', 'cancelled'])
+  @IsIn([
+    'draft',
+    'in_progress',
+    'attended',
+    'report_issued',
+    'finalized',
+    'cancelled',
+  ])
   status?: string;
 
   @IsOptional()
@@ -69,7 +76,14 @@ export class QueryOrdersDto {
   appointmentDateTo?: string;
 
   @IsOptional()
-  @IsIn(['orderNumber', 'orderDate', 'appointmentDate', 'priceAmount', 'createdAt', 'updatedAt'])
+  @IsIn([
+    'orderNumber',
+    'orderDate',
+    'appointmentDate',
+    'priceAmount',
+    'createdAt',
+    'updatedAt',
+  ])
   sortBy?: string;
 
   @IsOptional()

@@ -25,7 +25,13 @@ export class CreateDoctors1782000300000 implements MigrationInterface {
           { name: 'firstName', type: 'varchar', length: '150' },
           { name: 'lastName', type: 'varchar', length: '150' },
           { name: 'isLegalEntity', type: 'boolean', default: false },
-          { name: 'rif', type: 'varchar', length: '24', isNullable: true, isUnique: true },
+          {
+            name: 'rif',
+            type: 'varchar',
+            length: '24',
+            isNullable: true,
+            isUnique: true,
+          },
           { name: 'isActive', type: 'boolean', default: true },
           { name: 'createdAt', type: 'timestamptz', default: 'now()' },
           { name: 'updatedAt', type: 'timestamptz', default: 'now()' },
@@ -67,7 +73,10 @@ export class CreateDoctors1782000300000 implements MigrationInterface {
     );
     await queryRunner.createIndex(
       'doctor_phones',
-      new TableIndex({ name: 'IDX_doctor_phones_doctorId', columnNames: ['doctorId'] }),
+      new TableIndex({
+        name: 'IDX_doctor_phones_doctorId',
+        columnNames: ['doctorId'],
+      }),
     );
 
     await queryRunner.createTable(
@@ -86,11 +95,36 @@ export class CreateDoctors1782000300000 implements MigrationInterface {
           { name: 'type', type: 'varchar', length: '24' },
           { name: 'isActive', type: 'boolean', default: true },
           { name: 'bankCode', type: 'varchar', length: '8', isNullable: true },
-          { name: 'phoneNumber', type: 'varchar', length: '11', isNullable: true },
-          { name: 'idDocument', type: 'varchar', length: '24', isNullable: true },
-          { name: 'accountNumber', type: 'varchar', length: '20', isNullable: true },
-          { name: 'accountHolderName', type: 'varchar', length: '200', isNullable: true },
-          { name: 'description', type: 'varchar', length: '500', isNullable: true },
+          {
+            name: 'phoneNumber',
+            type: 'varchar',
+            length: '11',
+            isNullable: true,
+          },
+          {
+            name: 'idDocument',
+            type: 'varchar',
+            length: '24',
+            isNullable: true,
+          },
+          {
+            name: 'accountNumber',
+            type: 'varchar',
+            length: '20',
+            isNullable: true,
+          },
+          {
+            name: 'accountHolderName',
+            type: 'varchar',
+            length: '200',
+            isNullable: true,
+          },
+          {
+            name: 'description',
+            type: 'varchar',
+            length: '500',
+            isNullable: true,
+          },
           { name: 'createdAt', type: 'timestamptz', default: 'now()' },
           { name: 'updatedAt', type: 'timestamptz', default: 'now()' },
           { name: 'deletedAt', type: 'timestamptz', isNullable: true },

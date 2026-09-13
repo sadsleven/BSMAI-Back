@@ -116,7 +116,10 @@ export function splitOrderPortionsUsd(order: Order): {
  * Target Bs de una porción (USD × tasa fija de la orden). Null si la orden no
  * está en modo tasa fija o no tiene tasa snapshot.
  */
-export function targetBsForPortion(order: Order, portionUsd: number): number | null {
+export function targetBsForPortion(
+  order: Order,
+  portionUsd: number,
+): number | null {
   if (!order.useFixedRate || !order.fixedExchangeRate) return null;
   const rateBs = Number(order.fixedExchangeRate.amountBs);
   if (!Number.isFinite(rateBs) || !Number.isFinite(portionUsd)) return null;

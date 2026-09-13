@@ -34,7 +34,13 @@ export class CreatePaymentAccountDto {
   @MaxLength(200)
   name: string;
 
-  @IsIn(['mobile_payment', 'bank_transfer', 'bank_transfer_usd', 'card', 'other'])
+  @IsIn([
+    'mobile_payment',
+    'bank_transfer',
+    'bank_transfer_usd',
+    'card',
+    'other',
+  ])
   type: PaymentAccountType;
 
   @IsOptional()
@@ -79,7 +85,9 @@ export class CreatePaymentAccountDto {
   // ---- mobile_payment ----
   @ValidateIf((o) => o.type === 'mobile_payment')
   @IsString()
-  @Matches(PHONE_PATTERN, { message: 'El teléfono debe tener exactamente 11 dígitos' })
+  @Matches(PHONE_PATTERN, {
+    message: 'El teléfono debe tener exactamente 11 dígitos',
+  })
   phoneNumber?: string;
 
   // ---- bank_transfer + bank_transfer_usd ----

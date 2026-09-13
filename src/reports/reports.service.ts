@@ -6,7 +6,10 @@ import { ExchangeRate } from '../exchange-rates/entities/exchange-rate.entity';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { TaxUnitsService } from '../tax-units/tax-units.service';
 import { resolveUsdRate } from '../shared/utils/payment-conversion';
-import { calcRetention, SeniatPersonType } from '../shared/utils/seniat-retention';
+import {
+  calcRetention,
+  SeniatPersonType,
+} from '../shared/utils/seniat-retention';
 import {
   QueryPayablesReportDto,
   QueryReceivablesReportDto,
@@ -57,7 +60,9 @@ export class ReportsService {
   // Scope de sucursal (Super Admin ve todo; nunca confiar en el FE).
   // Devuelve null si el usuario es Super Admin (sin filtro); sino el array de ids.
   // ---------------------------------------------------------------------------
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },
@@ -97,7 +102,10 @@ export class ReportsService {
     query: QueryReportsDto,
     alias = 'o',
   ): Promise<{ sql: string; params: unknown[]; blocked: boolean }> {
-    const where: string[] = [`${alias}.status = 'finalized'`, `${alias}."deletedAt" IS NULL`];
+    const where: string[] = [
+      `${alias}.status = 'finalized'`,
+      `${alias}."deletedAt" IS NULL`,
+    ];
     const params: unknown[] = [];
 
     const allowed = await this.resolveUserBranchIds(user);
@@ -225,8 +233,11 @@ export class ReportsService {
     // filas, lotes y summary se calculen sobre el mismo conjunto.
     const obligations = query.status
       ? allObligations.filter((r) => {
-          const state = r.payableId ? (r.payableStatus ?? 'unpaid') : 'sin_lote';
-          if (query.status === 'unpaid') return state === 'unpaid' || state === 'sin_lote';
+          const state = r.payableId
+            ? (r.payableStatus ?? 'unpaid')
+            : 'sin_lote';
+          if (query.status === 'unpaid')
+            return state === 'unpaid' || state === 'sin_lote';
           return state === query.status;
         })
       : allObligations;
@@ -247,11 +258,21 @@ export class ReportsService {
     const loteNoRetention = new Set<string>();
     for (const r of obligations) {
       if (!r.payableId) continue;
-      const rateBs = r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
+      const rateBs =
+        r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
       const grossBs = num(r.grossUsd) * rateBs;
-      loteGrossBs.set(r.payableId, (loteGrossBs.get(r.payableId) ?? 0) + grossBs);
-      loteGrossUsd.set(r.payableId, (loteGrossUsd.get(r.payableId) ?? 0) + num(r.grossUsd));
-      lotePersonType.set(r.payableId, this.personTypeFor(r.providerType, r.doctorIsLegal));
+      loteGrossBs.set(
+        r.payableId,
+        (loteGrossBs.get(r.payableId) ?? 0) + grossBs,
+      );
+      loteGrossUsd.set(
+        r.payableId,
+        (loteGrossUsd.get(r.payableId) ?? 0) + num(r.grossUsd),
+      );
+      lotePersonType.set(
+        r.payableId,
+        this.personTypeFor(r.providerType, r.doctorIsLegal),
+      );
       if (r.payableApplyRetention === false) loteNoRetention.add(r.payableId);
     }
     // Neto Bs por lote = bruto − retención REAL (calculada sobre el bruto agregado).
@@ -270,7 +291,8 @@ export class ReportsService {
 
     // ---- Filas por obligación (estimado de retención por fila) ----
     const perObligationRows = obligations.map((r) => {
-      const rateBs = r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
+      const rateBs =
+        r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
       const grossBs = round2(num(r.grossUsd) * rateBs);
       const personType = this.personTypeFor(r.providerType, r.doctorIsLegal);
       // Estimado: retención sobre el bruto de esta sola obligación. En un lote
@@ -278,10 +300,16 @@ export class ReportsService {
       const retentionBs =
         r.payableApplyRetention === false
           ? 0
-          : round2(calcRetention({ grossBs, personType, taxUnitBs }).taxAmountBs);
+          : round2(
+              calcRetention({ grossBs, personType, taxUnitBs }).taxAmountBs,
+            );
       const netBs = round2(grossBs - retentionBs);
-      const state: string = r.payableId ? (r.payableStatus ?? 'unpaid') : 'sin_lote';
-      const meta = r.payableId ? paymentMetaByPayable.get(r.payableId) : undefined;
+      const state: string = r.payableId
+        ? (r.payableStatus ?? 'unpaid')
+        : 'sin_lote';
+      const meta = r.payableId
+        ? paymentMetaByPayable.get(r.payableId)
+        : undefined;
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
@@ -337,8 +365,14 @@ export class ReportsService {
       pendingBs: number;
     };
     const provMap = new Map<string, ProvAgg>();
-    const provKey = (r: { providerType: string; doctorId: string | null; careCenterId: string | null }) =>
-      r.providerType === 'doctor' ? `doctor:${r.doctorId}` : `cc:${r.careCenterId}`;
+    const provKey = (r: {
+      providerType: string;
+      doctorId: string | null;
+      careCenterId: string | null;
+    }) =>
+      r.providerType === 'doctor'
+        ? `doctor:${r.doctorId}`
+        : `cc:${r.careCenterId}`;
 
     // Acumula bruto/neto por proveedor desde las obligaciones (incluye sin lote).
     for (let i = 0; i < obligations.length; i++) {
@@ -387,7 +421,8 @@ export class ReportsService {
           const paidBs = round2(paidByPayable.get(r.payableId) ?? 0);
           agg.netBs += netBs;
           agg.paidBs += paidBs;
-          if (r.payableStatus !== 'paid') agg.pendingBs += Math.max(0, round2(netBs - paidBs));
+          if (r.payableStatus !== 'paid')
+            agg.pendingBs += Math.max(0, round2(netBs - paidBs));
         }
       } else {
         // Sin lote: neto de la obligación cuenta como pendiente; netoBs aporta a netBs.
@@ -423,10 +458,14 @@ export class ReportsService {
   }
 
   /** Σ amountInBs de pagos de cada lote AP. */
-  private async paidBsByPayable(payableIds: string[]): Promise<Map<string, number>> {
+  private async paidBsByPayable(
+    payableIds: string[],
+  ): Promise<Map<string, number>> {
     const out = new Map<string, number>();
     if (payableIds.length === 0) return out;
-    const rows = await this.dataSource.query<Array<{ payableId: string; paid: string }>>(
+    const rows = await this.dataSource.query<
+      Array<{ payableId: string; paid: string }>
+    >(
       `SELECT l."payableId", COALESCE(SUM(p."amountInBs"), 0)::text AS paid
        FROM "accounts_payable_payment_links" l
        JOIN "accounts_payable_payments" p ON p.id = l."paymentId"
@@ -461,17 +500,31 @@ export class ReportsService {
   }
 
   private emptyPayableSummary(): Record<string, number> {
-    return { count: 0, grossUsd: 0, grossBs: 0, netBs: 0, paidBs: 0, pendingBs: 0 };
+    return {
+      count: 0,
+      grossUsd: 0,
+      grossBs: 0,
+      netBs: 0,
+      paidBs: 0,
+      pendingBs: 0,
+    };
   }
 
   private computePayableSummary(
-    obligations: Array<{ payableId: string | null; payableStatus: string | null }>,
+    obligations: Array<{
+      payableId: string | null;
+      payableStatus: string | null;
+    }>,
     ctx: {
       paidByPayable: Map<string, number>;
       loteGrossBs: Map<string, number>;
       loteGrossUsd: Map<string, number>;
       loteNetBs: Map<string, number>;
-      perObligationRows: Array<{ grossUsd: number; grossBs: number; netBs: number }>;
+      perObligationRows: Array<{
+        grossUsd: number;
+        grossBs: number;
+        netBs: number;
+      }>;
     },
   ): Record<string, number> {
     let grossUsd = 0;
@@ -526,7 +579,8 @@ export class ReportsService {
     user: AuthenticatedUser,
   ): Promise<{ rows: unknown[]; summary: Record<string, number> }> {
     const scope = await this.orderScopeWhere(user, query);
-    if (scope.blocked) return { rows: [], summary: this.emptyReceivableSummary() };
+    if (scope.blocked)
+      return { rows: [], summary: this.emptyReceivableSummary() };
 
     const where = [scope.sql];
     const params = [...scope.params];
@@ -543,7 +597,8 @@ export class ReportsService {
       where.push(`o."holderId" = $${params.length}`);
     }
     if (query.status === 'insurance') where.push(`o."type" = 'insurance'`);
-    if (query.status === 'holder') where.push(`o."type" IN ('credit','cashea')`);
+    if (query.status === 'holder')
+      where.push(`o."type" IN ('credit','cashea')`);
     if (query.search && query.search.trim()) {
       params.push(`%${query.search.trim().toLowerCase()}%`);
       const n = params.length;
@@ -656,7 +711,8 @@ export class ReportsService {
     const receivableIds = Array.from(
       new Set(orders.map((r) => r.receivableId).filter(Boolean) as string[]),
     );
-    const { collectedUsd, collectedBs } = await this.collectedByReceivable(receivableIds);
+    const { collectedUsd, collectedBs } =
+      await this.collectedByReceivable(receivableIds);
 
     // Modo del lote (fixed si alguna orden usa tasa fija) y target agregado por lote.
     const loteMode = new Map<string, 'usd' | 'fixed'>();
@@ -667,13 +723,23 @@ export class ReportsService {
     const loteAdjustment = new Map<string, number>();
     // Modo efectivo de la fila: la porción manda sobre el flag de la orden
     // (porción indexada de una orden tasa fija = modo USD).
-    const rowFixed = (r: { portion: string; useFixedRate: boolean }): boolean =>
-      r.portion === 'fixed' ? true : r.portion === 'indexed' ? false : r.useFixedRate;
+    const rowFixed = (r: {
+      portion: string;
+      useFixedRate: boolean;
+    }): boolean =>
+      r.portion === 'fixed'
+        ? true
+        : r.portion === 'indexed'
+          ? false
+          : r.useFixedRate;
     for (const r of orders) {
       if (!r.receivableId) continue;
       const isFixed = rowFixed(r);
       const prior = loteMode.get(r.receivableId);
-      loteMode.set(r.receivableId, prior === 'fixed' || isFixed ? 'fixed' : 'usd');
+      loteMode.set(
+        r.receivableId,
+        prior === 'fixed' || isFixed ? 'fixed' : 'usd',
+      );
       loteTargetUsd.set(
         r.receivableId,
         (loteTargetUsd.get(r.receivableId) ?? 0) + num(r.arTargetUsd),
@@ -688,18 +754,26 @@ export class ReportsService {
     for (const [lote, adj] of loteAdjustment) {
       if (!adj) continue;
       if (loteMode.get(lote) === 'fixed') {
-        loteTargetBs.set(lote, Math.max(0, (loteTargetBs.get(lote) ?? 0) + adj));
+        loteTargetBs.set(
+          lote,
+          Math.max(0, (loteTargetBs.get(lote) ?? 0) + adj),
+        );
       } else {
-        loteTargetUsd.set(lote, Math.max(0, (loteTargetUsd.get(lote) ?? 0) + adj));
+        loteTargetUsd.set(
+          lote,
+          Math.max(0, (loteTargetUsd.get(lote) ?? 0) + adj),
+        );
       }
     }
 
     const perOrderRows = orders.map((r) => {
-      const debtorType: 'insurance' | 'holder' = r.orderType === 'insurance' ? 'insurance' : 'holder';
+      const debtorType: 'insurance' | 'holder' =
+        r.orderType === 'insurance' ? 'insurance' : 'holder';
       const debtorName =
         debtorType === 'insurance'
-          ? r.insuranceName ?? '—'
-          : r.businessName ?? (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
+          ? (r.insuranceName ?? '—')
+          : (r.businessName ??
+            (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—'));
       // Target por porción: 'full' replica ar-targets; 'fixed'/'indexed'
       // reparten el priceAmount según los STs indexados de la orden.
       let targetUsd: number | null;
@@ -714,12 +788,17 @@ export class ReportsService {
           targetBs = null;
         } else {
           targetUsd = null;
-          targetBs = round2(Math.max(0, price - indexedUsd) * num(r.fixedRateBs));
+          targetBs = round2(
+            Math.max(0, price - indexedUsd) * num(r.fixedRateBs),
+          );
         }
       }
-      const state: string = r.receivableId ? (r.receivableStatus ?? 'uncollected') : 'sin_lote';
+      const state: string = r.receivableId
+        ? (r.receivableStatus ?? 'uncollected')
+        : 'sin_lote';
       const holderName =
-        r.businessName ?? (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
+        r.businessName ??
+        (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
       const isFixedRow = rowFixed(r);
       return {
         orderId: r.orderId,
@@ -783,7 +862,8 @@ export class ReportsService {
     for (let i = 0; i < orders.length; i++) {
       const r = orders[i];
       const row = perOrderRows[i];
-      if (query.groupBy === 'insurance' && row.debtorType !== 'insurance') continue;
+      if (query.groupBy === 'insurance' && row.debtorType !== 'insurance')
+        continue;
       if (query.groupBy === 'holder' && row.debtorType !== 'holder') continue;
       const key = `${row.debtorType}:${row.debtorId}`;
       let agg = map.get(key);
@@ -820,14 +900,20 @@ export class ReportsService {
             const tgt = round2(loteTargetBs.get(r.receivableId) ?? 0);
             const col = round2(collectedBs.get(r.receivableId) ?? 0);
             agg.collectedBs += col;
-            if (r.receivableStatus !== 'collected' && r.receivableStatus !== 'overcollected') {
+            if (
+              r.receivableStatus !== 'collected' &&
+              r.receivableStatus !== 'overcollected'
+            ) {
               agg.pendingBs += Math.max(0, round2(tgt - col));
             }
           } else {
             const tgt = round2(loteTargetUsd.get(r.receivableId) ?? 0);
             const col = round2(collectedUsd.get(r.receivableId) ?? 0);
             agg.collectedUsd += col;
-            if (r.receivableStatus !== 'collected' && r.receivableStatus !== 'overcollected') {
+            if (
+              r.receivableStatus !== 'collected' &&
+              r.receivableStatus !== 'overcollected'
+            ) {
               agg.pendingUsd += Math.max(0, round2(tgt - col));
             }
           }
@@ -899,9 +985,10 @@ export class ReportsService {
     return { targetUsd: round2(price), targetBs: null };
   }
 
-  private async collectedByReceivable(
-    ids: string[],
-  ): Promise<{ collectedUsd: Map<string, number>; collectedBs: Map<string, number> }> {
+  private async collectedByReceivable(ids: string[]): Promise<{
+    collectedUsd: Map<string, number>;
+    collectedBs: Map<string, number>;
+  }> {
     const collectedUsd = new Map<string, number>();
     const collectedBs = new Map<string, number>();
     if (ids.length === 0) return { collectedUsd, collectedBs };
@@ -942,7 +1029,11 @@ export class ReportsService {
       receivableStatus: string | null;
       useFixedRate: boolean;
     }>,
-    perOrderRows: Array<{ targetUsd: number | null; targetBs: number | null; useFixedRate: boolean }>,
+    perOrderRows: Array<{
+      targetUsd: number | null;
+      targetBs: number | null;
+      useFixedRate: boolean;
+    }>,
     ctx: {
       collectedUsd: Map<string, number>;
       collectedBs: Map<string, number>;
@@ -987,14 +1078,20 @@ export class ReportsService {
           const tgt = round2(ctx.loteTargetBs.get(r.receivableId) ?? 0);
           const col = round2(ctx.collectedBs.get(r.receivableId) ?? 0);
           collBs += col;
-          if (r.receivableStatus !== 'collected' && r.receivableStatus !== 'overcollected') {
+          if (
+            r.receivableStatus !== 'collected' &&
+            r.receivableStatus !== 'overcollected'
+          ) {
             pendingBs += Math.max(0, round2(tgt - col));
           }
         } else {
           const tgt = round2(ctx.loteTargetUsd.get(r.receivableId) ?? 0);
           const col = round2(ctx.collectedUsd.get(r.receivableId) ?? 0);
           collUsd += col;
-          if (r.receivableStatus !== 'collected' && r.receivableStatus !== 'overcollected') {
+          if (
+            r.receivableStatus !== 'collected' &&
+            r.receivableStatus !== 'overcollected'
+          ) {
             pendingUsd += Math.max(0, round2(tgt - col));
           }
         }
@@ -1027,7 +1124,10 @@ export class ReportsService {
   ): Promise<{ rows: unknown[]; summary: Record<string, number> }> {
     const allowed = await this.resolveUserBranchIds(user);
     if (!user.isSuperAdmin && allowed.length === 0) {
-      return { rows: [], summary: { count: 0, taxAmountBs: 0, paidBs: 0, pendingBs: 0 } };
+      return {
+        rows: [],
+        summary: { count: 0, taxAmountBs: 0, paidBs: 0, pendingBs: 0 },
+      };
     }
 
     // El scope de sucursal de una retención cuelga de su lote AP → órdenes → branch.
@@ -1144,7 +1244,10 @@ export class ReportsService {
     const batchTarget = new Map<string, number>();
     for (const t of taxes) {
       if (!t.taxBatchId) continue;
-      batchTarget.set(t.taxBatchId, (batchTarget.get(t.taxBatchId) ?? 0) + num(t.taxAmountBs));
+      batchTarget.set(
+        t.taxBatchId,
+        (batchTarget.get(t.taxBatchId) ?? 0) + num(t.taxAmountBs),
+      );
     }
     // Target TOTAL del lote (todas sus obligaciones, sin filtro): si un filtro
     // (search/from/to) deja fuera parte de las obligaciones, los pagos del lote
@@ -1155,7 +1258,8 @@ export class ReportsService {
     for (const [batchId, paid] of paidByBatch) {
       const filteredTarget = batchTarget.get(batchId) ?? 0;
       const fullTarget = batchFullTarget.get(batchId) ?? 0;
-      const share = fullTarget > 0 ? Math.min(1, filteredTarget / fullTarget) : 1;
+      const share =
+        fullTarget > 0 ? Math.min(1, filteredTarget / fullTarget) : 1;
       paidShareByBatch.set(batchId, round2(paid * share));
     }
 
@@ -1169,7 +1273,9 @@ export class ReportsService {
       grossAmountBs: round2(num(t.grossAmountBs)),
       taxRate: num(t.taxRate),
       taxAmountBs: round2(num(t.taxAmountBs)),
-      internalNumbers: t.sourcePayableId ? internalByPayable.get(t.sourcePayableId) ?? [] : [],
+      internalNumbers: t.sourcePayableId
+        ? (internalByPayable.get(t.sourcePayableId) ?? [])
+        : [],
       taxBatchId: t.taxBatchId,
       taxBatchNumber: t.taxBatchNumber,
       state: t.taxBatchId ? t.status : 'sin_lote',
@@ -1207,7 +1313,9 @@ export class ReportsService {
     };
   }
 
-  private async internalNumbersByPayable(ids: string[]): Promise<Map<string, string[]>> {
+  private async internalNumbersByPayable(
+    ids: string[],
+  ): Promise<Map<string, string[]>> {
     const out = new Map<string, string[]>();
     if (ids.length === 0) return out;
     const rows = await this.dataSource.query<
@@ -1231,7 +1339,9 @@ export class ReportsService {
   private async paidBsByTaxBatch(ids: string[]): Promise<Map<string, number>> {
     const out = new Map<string, number>();
     if (ids.length === 0) return out;
-    const rows = await this.dataSource.query<Array<{ batchId: string; paid: string }>>(
+    const rows = await this.dataSource.query<
+      Array<{ batchId: string; paid: string }>
+    >(
       `SELECT l."batchId", COALESCE(SUM(p."amountInBs"), 0)::text AS paid
        FROM "tax_payment_batch_payment_links" l
        JOIN "taxes_payable_payments" p ON p.id = l."paymentId"
@@ -1244,10 +1354,14 @@ export class ReportsService {
   }
 
   /** Σ taxAmountBs de TODAS las obligaciones de cada lote SENIAT (sin filtro). */
-  private async fullTargetByTaxBatch(ids: string[]): Promise<Map<string, number>> {
+  private async fullTargetByTaxBatch(
+    ids: string[],
+  ): Promise<Map<string, number>> {
     const out = new Map<string, number>();
     if (ids.length === 0) return out;
-    const rows = await this.dataSource.query<Array<{ batchId: string; total: string }>>(
+    const rows = await this.dataSource.query<
+      Array<{ batchId: string; total: string }>
+    >(
       `SELECT tp."taxPaymentBatchId" AS "batchId",
               COALESCE(SUM(tp."taxAmountBs"), 0)::text AS total
        FROM "taxes_payable" tp
@@ -1473,7 +1587,11 @@ export class ReportsService {
       });
     }
 
-    return { period: { from, to, year }, beneficiaries: Array.from(map.values()), years };
+    return {
+      period: { from, to, year },
+      beneficiaries: Array.from(map.values()),
+      years,
+    };
   }
 
   // ===========================================================================
@@ -1580,7 +1698,11 @@ export class ReportsService {
     });
     return {
       rows: out,
-      summary: { count: out.length, totalUsd: round2(totalUsd), totalBs: round2(totalBs) },
+      summary: {
+        count: out.length,
+        totalUsd: round2(totalUsd),
+        totalBs: round2(totalBs),
+      },
     };
   }
 
@@ -1692,7 +1814,11 @@ export class ReportsService {
     });
     return {
       rows: out,
-      summary: { count: out.length, totalUsd: round2(totalUsd), totalBs: round2(totalBs) },
+      summary: {
+        count: out.length,
+        totalUsd: round2(totalUsd),
+        totalBs: round2(totalBs),
+      },
     };
   }
 
@@ -1708,8 +1834,14 @@ export class ReportsService {
   }> {
     // Reusa los reportes per-obligación (que ya incluyen Pendientes) y agrupa por
     // bucket de antigüedad de orderDate.
-    const payablesRes = await this.payables({ ...query, groupBy: undefined }, user);
-    const receivablesRes = await this.receivables({ ...query, groupBy: undefined }, user);
+    const payablesRes = await this.payables(
+      { ...query, groupBy: undefined },
+      user,
+    );
+    const receivablesRes = await this.receivables(
+      { ...query, groupBy: undefined },
+      user,
+    );
 
     const fallbackRateBs = await this.fallbackUsdRateBs();
     // Edad en días CALENDARIO: fecha-solo vs fecha-solo (ambas ancladas a
@@ -1717,12 +1849,17 @@ export class ReportsService {
     // durante las últimas horas del día según la TZ del servidor.
     const now = new Date();
     const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-    const bucketOf = (orderDate: string | Date): '0-30' | '31-60' | '61-90' | '90+' => {
+    const bucketOf = (
+      orderDate: string | Date,
+    ): '0-30' | '31-60' | '61-90' | '90+' => {
       const iso =
         orderDate instanceof Date ? orderDate.toISOString() : String(orderDate);
       const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
       if (!y || !m || !d) return '0-30';
-      const days = Math.max(0, Math.round((todayUtc - Date.UTC(y, m - 1, d)) / 86_400_000));
+      const days = Math.max(
+        0,
+        Math.round((todayUtc - Date.UTC(y, m - 1, d)) / 86_400_000),
+      );
       if (days <= 30) return '0-30';
       if (days <= 60) return '31-60';
       if (days <= 90) return '61-90';
@@ -1756,7 +1893,8 @@ export class ReportsService {
       receivableBuckets[b].count += 1;
       if (row.useFixedRate) {
         receivableBuckets[b].amountBs += num(row.targetBs);
-        receivableBuckets[b].amountUsd += num(row.targetBs) / (fallbackRateBs || 1);
+        receivableBuckets[b].amountUsd +=
+          num(row.targetBs) / (fallbackRateBs || 1);
       } else {
         receivableBuckets[b].amountUsd += num(row.targetUsd);
         receivableBuckets[b].amountBs += num(row.targetUsd) * fallbackRateBs;
@@ -1776,9 +1914,15 @@ export class ReportsService {
     return {
       rows: { payable: payableRows, receivable: receivableRows },
       summary: {
-        payablePendingBs: round2(payableRows.reduce((s, r) => s + r.amountBs, 0)),
-        receivablePendingUsd: round2(receivableRows.reduce((s, r) => s + r.amountUsd, 0)),
-        receivablePendingBs: round2(receivableRows.reduce((s, r) => s + r.amountBs, 0)),
+        payablePendingBs: round2(
+          payableRows.reduce((s, r) => s + r.amountBs, 0),
+        ),
+        receivablePendingUsd: round2(
+          receivableRows.reduce((s, r) => s + r.amountUsd, 0),
+        ),
+        receivablePendingBs: round2(
+          receivableRows.reduce((s, r) => s + r.amountBs, 0),
+        ),
       },
     };
   }

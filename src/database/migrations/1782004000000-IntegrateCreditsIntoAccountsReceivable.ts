@@ -14,9 +14,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *  - Drop `credits_receivable_payment_links`, `credits_receivable_payments`,
  *    `credits_receivable` y la sequence `credits_receivable_seq`.
  */
-export class IntegrateCreditsIntoAccountsReceivable1782004000000
-  implements MigrationInterface
-{
+export class IntegrateCreditsIntoAccountsReceivable1782004000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- Schema ---
     await queryRunner.query(
@@ -88,8 +86,12 @@ export class IntegrateCreditsIntoAccountsReceivable1782004000000
       `);
 
       // 4. Drop tablas y sequence del módulo eliminado.
-      await queryRunner.query(`DROP TABLE IF EXISTS "credits_receivable_payment_links"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "credits_receivable_payments"`);
+      await queryRunner.query(
+        `DROP TABLE IF EXISTS "credits_receivable_payment_links"`,
+      );
+      await queryRunner.query(
+        `DROP TABLE IF EXISTS "credits_receivable_payments"`,
+      );
       await queryRunner.query(`DROP TABLE IF EXISTS "credits_receivable"`);
       await queryRunner.query(`DROP SEQUENCE IF EXISTS credits_receivable_seq`);
     }
@@ -106,7 +108,9 @@ export class IntegrateCreditsIntoAccountsReceivable1782004000000
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Restaurar tablas/sequence credits_receivable.
-    await queryRunner.query(`CREATE SEQUENCE IF NOT EXISTS credits_receivable_seq START 1`);
+    await queryRunner.query(
+      `CREATE SEQUENCE IF NOT EXISTS credits_receivable_seq START 1`,
+    );
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "credits_receivable" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4() PRIMARY KEY,

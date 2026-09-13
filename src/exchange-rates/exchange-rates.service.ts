@@ -11,10 +11,13 @@ import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 @Injectable()
 export class ExchangeRatesService {
   constructor(
-    @InjectRepository(ExchangeRate) private readonly repo: Repository<ExchangeRate>,
+    @InjectRepository(ExchangeRate)
+    private readonly repo: Repository<ExchangeRate>,
   ) {}
 
-  async findAll(query: QueryExchangeRatesDto): Promise<PaginatedResponse<ExchangeRate>> {
+  async findAll(
+    query: QueryExchangeRatesDto,
+  ): Promise<PaginatedResponse<ExchangeRate>> {
     const {
       page = 1,
       limit = 10,
@@ -28,7 +31,9 @@ export class ExchangeRatesService {
       effectiveDateTo,
     } = query;
 
-    const qb = this.repo.createQueryBuilder('rate').orderBy(`rate.${sortBy}`, sortDir);
+    const qb = this.repo
+      .createQueryBuilder('rate')
+      .orderBy(`rate.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('rate.deletedAt IS NOT NULL');
@@ -58,7 +63,9 @@ export class ExchangeRatesService {
       order: { effectiveDate: 'DESC', createdAt: 'DESC' },
     });
     if (!rate) {
-      throw new NotFoundException(`No hay tasa de cambio activa para ${currency}`);
+      throw new NotFoundException(
+        `No hay tasa de cambio activa para ${currency}`,
+      );
     }
     return rate;
   }

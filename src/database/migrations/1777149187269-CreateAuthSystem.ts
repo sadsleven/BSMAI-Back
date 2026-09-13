@@ -1,4 +1,10 @@
-import { MigrationInterface, QueryRunner, Table, TableForeignKey, TableIndex } from 'typeorm';
+import {
+  MigrationInterface,
+  QueryRunner,
+  Table,
+  TableForeignKey,
+  TableIndex,
+} from 'typeorm';
 
 export class CreateAuthSystem1777149187269 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -17,7 +23,12 @@ export class CreateAuthSystem1777149187269 implements MigrationInterface {
           { name: 'name', type: 'varchar', length: '120', isUnique: true },
           { name: 'resource', type: 'varchar', length: '60' },
           { name: 'action', type: 'varchar', length: '60' },
-          { name: 'description', type: 'varchar', length: '255', isNullable: true },
+          {
+            name: 'description',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
           { name: 'createdAt', type: 'timestamptz', default: 'now()' },
           { name: 'updatedAt', type: 'timestamptz', default: 'now()' },
         ],
@@ -38,7 +49,12 @@ export class CreateAuthSystem1777149187269 implements MigrationInterface {
             generationStrategy: 'uuid',
           },
           { name: 'name', type: 'varchar', length: '80', isUnique: true },
-          { name: 'description', type: 'varchar', length: '255', isNullable: true },
+          {
+            name: 'description',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
           { name: 'createdAt', type: 'timestamptz', default: 'now()' },
           { name: 'updatedAt', type: 'timestamptz', default: 'now()' },
           { name: 'deletedAt', type: 'timestamptz', isNullable: true },
@@ -62,7 +78,12 @@ export class CreateAuthSystem1777149187269 implements MigrationInterface {
           { name: 'firstName', type: 'varchar', length: '120' },
           { name: 'lastName', type: 'varchar', length: '120' },
           { name: 'email', type: 'varchar', length: '180', isUnique: true },
-          { name: 'phoneNumber', type: 'varchar', length: '40', isNullable: true },
+          {
+            name: 'phoneNumber',
+            type: 'varchar',
+            length: '40',
+            isNullable: true,
+          },
           { name: 'password', type: 'varchar', length: '255' },
           { name: 'isActive', type: 'boolean', default: true },
           { name: 'isSuperAdmin', type: 'boolean', default: false },
@@ -84,7 +105,10 @@ export class CreateAuthSystem1777149187269 implements MigrationInterface {
       }),
       true,
     );
-    await queryRunner.createPrimaryKey('roles_permissions', ['roleId', 'permissionId']);
+    await queryRunner.createPrimaryKey('roles_permissions', [
+      'roleId',
+      'permissionId',
+    ]);
     await queryRunner.createForeignKey(
       'roles_permissions',
       new TableForeignKey({
@@ -105,11 +129,17 @@ export class CreateAuthSystem1777149187269 implements MigrationInterface {
     );
     await queryRunner.createIndex(
       'roles_permissions',
-      new TableIndex({ name: 'IDX_roles_permissions_role', columnNames: ['roleId'] }),
+      new TableIndex({
+        name: 'IDX_roles_permissions_role',
+        columnNames: ['roleId'],
+      }),
     );
     await queryRunner.createIndex(
       'roles_permissions',
-      new TableIndex({ name: 'IDX_roles_permissions_permission', columnNames: ['permissionId'] }),
+      new TableIndex({
+        name: 'IDX_roles_permissions_permission',
+        columnNames: ['permissionId'],
+      }),
     );
 
     await queryRunner.createTable(

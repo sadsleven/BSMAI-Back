@@ -24,7 +24,8 @@ export function resolveStorageDriver(config: ConfigService): StorageDriver {
   const raw = config.get<string>('STORAGE_DRIVER')?.trim().toLowerCase();
 
   if (raw === 'minio' || raw === 's3') return 'minio';
-  if (raw === 'vercel_blob' || raw === 'vercel' || raw === 'blob') return 'vercel_blob';
+  if (raw === 'vercel_blob' || raw === 'vercel' || raw === 'blob')
+    return 'vercel_blob';
   if (raw && raw !== 'auto') {
     logger.warn(`STORAGE_DRIVER desconocido: "${raw}" — se usa autodetección`);
   }

@@ -46,7 +46,9 @@ export class CareCentersService {
     private readonly providerAccounts: ProviderAccountsService,
   ) {}
 
-  async findAll(query: QueryCareCentersDto): Promise<PaginatedResponse<CareCenter>> {
+  async findAll(
+    query: QueryCareCentersDto,
+  ): Promise<PaginatedResponse<CareCenter>> {
     const {
       page = 1,
       limit = 10,
@@ -120,7 +122,8 @@ export class CareCentersService {
       relationLoadStrategy: 'query',
       withDeleted,
     });
-    if (!center) throw new NotFoundException('Centro de atención no encontrado');
+    if (!center)
+      throw new NotFoundException('Centro de atención no encontrado');
     return center;
   }
 
@@ -144,7 +147,9 @@ export class CareCentersService {
       centerAddress: dto.centerAddress?.trim() || null,
       isActive: dto.isActive ?? true,
       specialties,
-      phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
+      phones: dto.phones.map((p) =>
+        this.phonesRepo.create(this.phonePayload(p)),
+      ),
       paymentMethods: (dto.paymentMethods ?? []).map((m) =>
         this.methodsRepo.create(this.methodPayload(m)),
       ),
@@ -219,7 +224,10 @@ export class CareCentersService {
     if (dto.phones) {
       await this.phonesRepo.delete({ careCenterId: center.id });
       center.phones = dto.phones.map((p) =>
-        this.phonesRepo.create({ ...this.phonePayload(p), careCenterId: center.id }),
+        this.phonesRepo.create({
+          ...this.phonePayload(p),
+          careCenterId: center.id,
+        }),
       );
     }
 
@@ -227,7 +235,10 @@ export class CareCentersService {
       await this.validatePaymentMethods(dto.paymentMethods);
       await this.methodsRepo.delete({ careCenterId: center.id });
       center.paymentMethods = dto.paymentMethods.map((m) =>
-        this.methodsRepo.create({ ...this.methodPayload(m), careCenterId: center.id }),
+        this.methodsRepo.create({
+          ...this.methodPayload(m),
+          careCenterId: center.id,
+        }),
       );
     }
 
@@ -299,7 +310,9 @@ export class CareCentersService {
     await this.providerAccounts.setPassword(center.userId, dto.newPassword);
   }
 
-  private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
+  private async validateServicePrices(
+    prices: ServicePriceDto[],
+  ): Promise<void> {
     if (!prices.length) return;
     const ids = prices.map((p) => p.serviceTypeId);
     if (new Set(ids).size !== ids.length) {
@@ -339,8 +352,12 @@ export class CareCentersService {
   }
 
   async restore(id: string): Promise<CareCenter> {
-    const center = await this.repo.findOne({ where: { id }, withDeleted: true });
-    if (!center) throw new NotFoundException('Centro de atención no encontrado');
+    const center = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
+    if (!center)
+      throw new NotFoundException('Centro de atención no encontrado');
     if (!center.deletedAt) return center;
     await this.repo.restore(id);
     await this.providerAccounts.setAccountActive(center.userId, true);
@@ -370,14 +387,18 @@ export class CareCentersService {
     if (!ids.length) {
       throw new BadRequestException('Debe asignar al menos una especialidad');
     }
-    const specialties = await this.specialtiesRepo.find({ where: { id: In(ids) } });
+    const specialties = await this.specialtiesRepo.find({
+      where: { id: In(ids) },
+    });
     if (specialties.length !== ids.length) {
       throw new BadRequestException('Algunas especialidades no existen');
     }
     return specialties;
   }
 
-  private async validatePaymentMethods(methods: PaymentMethodDto[]): Promise<void> {
+  private async validatePaymentMethods(
+    methods: PaymentMethodDto[],
+  ): Promise<void> {
     const codes = methods
       .filter((m) => m.type === 'mobile_payment' && m.bankCode)
       .map((m) => m.bankCode!);
@@ -392,17 +413,29 @@ export class CareCentersService {
   }
 
   private async assertUniqueBusinessName(businessName: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { businessName }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un centro con esa razón social');
+    const existing = await this.repo.findOne({
+      where: { businessName },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un centro con esa razón social');
   }
 
   private async assertUniqueEmail(email: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un centro con ese email');
+    const existing = await this.repo.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un centro con ese email');
   }
 
   private async assertUniqueRif(rif: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { rif }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un centro con ese RIF');
+    const existing = await this.repo.findOne({
+      where: { rif },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un centro con ese RIF');
   }
 }

@@ -2,7 +2,11 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CURRENCIES, Currency, ExchangeRate } from '../entities/exchange-rate.entity';
+import {
+  CURRENCIES,
+  Currency,
+  ExchangeRate,
+} from '../entities/exchange-rate.entity';
 import { BcvScraperService, BcvScrapedRates } from './bcv-scraper.service';
 import { VE_TIME_ZONE } from './bcv.constants';
 import { isDayAfter, veDay, veDayStartIso, veNextDay } from './ve-date.util';
@@ -17,7 +21,11 @@ export interface BcvSyncResult {
   skippedReason?: string;
   /** `Fecha Valor` publicada por el BCV (ISO con offset VE). */
   effectiveDate?: string;
-  rates?: Array<{ currency: Currency; amountBs: number; action: BcvRateAction }>;
+  rates?: Array<{
+    currency: Currency;
+    amountBs: number;
+    action: BcvRateAction;
+  }>;
 }
 
 /**
@@ -49,7 +57,8 @@ export class BcvRatesSyncService implements OnModuleInit {
   private running = false;
 
   constructor(
-    @InjectRepository(ExchangeRate) private readonly repo: Repository<ExchangeRate>,
+    @InjectRepository(ExchangeRate)
+    private readonly repo: Repository<ExchangeRate>,
     private readonly scraper: BcvScraperService,
   ) {}
 
@@ -110,7 +119,10 @@ export class BcvRatesSyncService implements OnModuleInit {
    */
   async syncNow(force = false): Promise<BcvSyncResult> {
     if (this.running) {
-      return { ran: false, skippedReason: 'Ya hay una sincronización en curso' };
+      return {
+        ran: false,
+        skippedReason: 'Ya hay una sincronización en curso',
+      };
     }
     return this.sync(force);
   }
@@ -124,20 +136,28 @@ export class BcvRatesSyncService implements OnModuleInit {
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.logger.error(`[${trigger}] falló la sincronización con el BCV: ${reason}`);
+      this.logger.error(
+        `[${trigger}] falló la sincronización con el BCV: ${reason}`,
+      );
     }
   }
 
   private async sync(force: boolean): Promise<BcvSyncResult> {
     if (this.running) {
-      return { ran: false, skippedReason: 'Ya hay una sincronización en curso' };
+      return {
+        ran: false,
+        skippedReason: 'Ya hay una sincronización en curso',
+      };
     }
 
     const today = veDay();
 
     if (!force) {
       if (this.satisfiedForDay === today) {
-        return { ran: false, skippedReason: `Ya se obtuvo la tasa futura hoy (${today})` };
+        return {
+          ran: false,
+          skippedReason: `Ya se obtuvo la tasa futura hoy (${today})`,
+        };
       }
       // Tras un reinicio la memoria está vacía: se consulta la BD antes de
       // salir a internet.
@@ -163,7 +183,9 @@ export class BcvRatesSyncService implements OnModuleInit {
             .join(', ')}`,
         );
       } else {
-        this.logger.debug(`BCV ${scraped.effectiveDay}: sin cambios respecto a lo guardado.`);
+        this.logger.debug(
+          `BCV ${scraped.effectiveDay}: sin cambios respecto a lo guardado.`,
+        );
       }
 
       // Publicada la tasa del próximo día hábil → no hay nada más que esperar hoy.
@@ -198,13 +220,19 @@ export class BcvRatesSyncService implements OnModuleInit {
 
   private async persistAll(
     scraped: BcvScrapedRates,
-  ): Promise<Array<{ currency: Currency; amountBs: number; action: BcvRateAction }>> {
+  ): Promise<
+    Array<{ currency: Currency; amountBs: number; action: BcvRateAction }>
+  > {
     const pairs: Array<[Currency, number]> = [
       ['USD', scraped.usdBs],
       ['EUR', scraped.eurBs],
     ];
 
-    const results: Array<{ currency: Currency; amountBs: number; action: BcvRateAction }> = [];
+    const results: Array<{
+      currency: Currency;
+      amountBs: number;
+      action: BcvRateAction;
+    }> = [];
     for (const [currency, amountBs] of pairs) {
       const action = await this.persist(currency, amountBs, scraped);
       results.push({ currency, amountBs, action });

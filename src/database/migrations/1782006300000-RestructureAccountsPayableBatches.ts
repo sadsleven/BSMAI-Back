@@ -14,9 +14,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * No hay datos reales → DROP/recrea limpio, sin backfill.
  */
-export class RestructureAccountsPayableBatches1782006300000
-  implements MigrationInterface
-{
+export class RestructureAccountsPayableBatches1782006300000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     // Drop dependientes (FK a accounts_payable) y el modelo viejo.
     await q.query(`DROP TABLE IF EXISTS "taxes_payable_payables"`);
@@ -45,9 +43,15 @@ export class RestructureAccountsPayableBatches1782006300000
         CONSTRAINT "ck_ap_status" CHECK ("status" IN ('unpaid', 'partially_paid', 'paid'))
       )
     `);
-    await q.query(`CREATE INDEX "idx_ap_status" ON "accounts_payable"("status")`);
-    await q.query(`CREATE INDEX "idx_ap_doctor" ON "accounts_payable"("doctorId")`);
-    await q.query(`CREATE INDEX "idx_ap_careCenter" ON "accounts_payable"("careCenterId")`);
+    await q.query(
+      `CREATE INDEX "idx_ap_status" ON "accounts_payable"("status")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ap_doctor" ON "accounts_payable"("doctorId")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ap_careCenter" ON "accounts_payable"("careCenterId")`,
+    );
 
     // Pivot lote ↔ orden interna (con snapshot del monto bruto USD).
     await q.query(`
@@ -125,9 +129,15 @@ export class RestructureAccountsPayableBatches1782006300000
         "deletedAt" timestamptz NULL
       )
     `);
-    await q.query(`CREATE INDEX "idx_ap_status" ON "accounts_payable"("status")`);
-    await q.query(`CREATE INDEX "idx_ap_doctor" ON "accounts_payable"("doctorId")`);
-    await q.query(`CREATE INDEX "idx_ap_careCenter" ON "accounts_payable"("careCenterId")`);
+    await q.query(
+      `CREATE INDEX "idx_ap_status" ON "accounts_payable"("status")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ap_doctor" ON "accounts_payable"("doctorId")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ap_careCenter" ON "accounts_payable"("careCenterId")`,
+    );
     await q.query(`
       CREATE UNIQUE INDEX "UQ_ap_order_doctor" ON "accounts_payable" ("orderId", "doctorId")
       WHERE "doctorId" IS NOT NULL AND "deletedAt" IS NULL

@@ -18,9 +18,7 @@ import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 
 function ensureNotSystem(role: Role, action: string): void {
   if (role.isSystem) {
-    throw new ForbiddenException(
-      `No se puede ${action} un rol del sistema`,
-    );
+    throw new ForbiddenException(`No se puede ${action} un rol del sistema`);
   }
 }
 
@@ -28,7 +26,8 @@ function ensureNotSystem(role: Role, action: string): void {
 export class RolesService {
   constructor(
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
-    @InjectRepository(Permission) private readonly permissionsRepo: Repository<Permission>,
+    @InjectRepository(Permission)
+    private readonly permissionsRepo: Repository<Permission>,
   ) {}
 
   async findAll(query: QueryRolesDto): Promise<PaginatedResponse<Role>> {
@@ -55,9 +54,12 @@ export class RolesService {
     }
 
     if (search && search.trim()) {
-      qb.andWhere('(LOWER(role.name) LIKE :s OR LOWER(role.description) LIKE :s)', {
-        s: `%${search.trim().toLowerCase()}%`,
-      });
+      qb.andWhere(
+        '(LOWER(role.name) LIKE :s OR LOWER(role.description) LIKE :s)',
+        {
+          s: `%${search.trim().toLowerCase()}%`,
+        },
+      );
     }
 
     if (origin === 'system') qb.andWhere('role.isSystem = true');
@@ -95,7 +97,10 @@ export class RolesService {
   }
 
   async create(dto: CreateRoleDto): Promise<Role> {
-    const exists = await this.rolesRepo.findOne({ where: { name: dto.name }, withDeleted: true });
+    const exists = await this.rolesRepo.findOne({
+      where: { name: dto.name },
+      withDeleted: true,
+    });
     if (exists) throw new ConflictException('Ya existe un rol con ese nombre');
     const permissions = await this.resolvePermissions(dto.permissionIds);
     const role = this.rolesRepo.create({
@@ -111,11 +116,15 @@ export class RolesService {
     const role = await this.findOne(id);
     ensureNotSystem(role, 'modificar');
     if (dto.name && dto.name !== role.name) {
-      const dupe = await this.rolesRepo.findOne({ where: { name: dto.name }, withDeleted: true });
+      const dupe = await this.rolesRepo.findOne({
+        where: { name: dto.name },
+        withDeleted: true,
+      });
       if (dupe) throw new ConflictException('Ya existe un rol con ese nombre');
       role.name = dto.name;
     }
-    if (dto.description !== undefined) role.description = dto.description ?? null;
+    if (dto.description !== undefined)
+      role.description = dto.description ?? null;
     if (dto.isActive !== undefined) role.isActive = dto.isActive;
     if (dto.permissionIds) {
       role.permissions = await this.resolvePermissions(dto.permissionIds);
@@ -123,7 +132,10 @@ export class RolesService {
     return this.rolesRepo.save(role);
   }
 
-  async assignPermissions(id: string, dto: AssignPermissionsDto): Promise<Role> {
+  async assignPermissions(
+    id: string,
+    dto: AssignPermissionsDto,
+  ): Promise<Role> {
     const role = await this.findOne(id);
     ensureNotSystem(role, 'modificar permisos de');
     role.permissions = await this.resolvePermissions(dto.permissionIds);
@@ -143,7 +155,10 @@ export class RolesService {
   }
 
   async restore(id: string): Promise<Role> {
-    const role = await this.rolesRepo.findOne({ where: { id }, withDeleted: true });
+    const role = await this.rolesRepo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!role) throw new NotFoundException('Rol no encontrado');
     if (!role.deletedAt) return role;
     await this.rolesRepo.restore(id);
@@ -152,7 +167,9 @@ export class RolesService {
 
   private async resolvePermissions(ids?: string[]): Promise<Permission[]> {
     if (!ids || ids.length === 0) return [];
-    const permissions = await this.permissionsRepo.find({ where: { id: In(ids) } });
+    const permissions = await this.permissionsRepo.find({
+      where: { id: In(ids) },
+    });
     if (permissions.length !== ids.length) {
       throw new BadRequestException('Algunos permisos no existen');
     }

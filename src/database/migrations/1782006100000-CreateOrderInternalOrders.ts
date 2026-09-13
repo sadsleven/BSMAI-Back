@@ -19,9 +19,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * proveedor 1, sin cambio visible para órdenes de un solo proveedor); cada
  * proveedor siguiente extrae un `nextval('orders_seq')` fresco.
  */
-export class CreateOrderInternalOrders1782006100000
-  implements MigrationInterface
-{
+export class CreateOrderInternalOrders1782006100000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     // 1. Tabla + constraints + índices.
     await q.query(`
@@ -159,7 +157,8 @@ export class CreateOrderInternalOrders1782006100000
       `SELECT count(*)::int AS c FROM "order_internal_orders"
        WHERE "internalNumber" IS NULL OR "internalNumber" !~ '^[0-9]+$'`,
     );
-    if (a1[0].c > 0) throw new Error('internalNumber inválido en order_internal_orders');
+    if (a1[0].c > 0)
+      throw new Error('internalNumber inválido en order_internal_orders');
 
     const a2: Array<{ total: number; uniq: number }> = await q.query(
       `SELECT count(*)::int AS total, count(DISTINCT "internalNumber")::int AS uniq
@@ -176,7 +175,8 @@ export class CreateOrderInternalOrders1782006100000
           AND iio."internalNumber" = o."orderNumber"
       )
     `);
-    if (a3[0].c > 0) throw new Error(`base != proveedor 1 en ${a3[0].c} órdenes`);
+    if (a3[0].c > 0)
+      throw new Error(`base != proveedor 1 en ${a3[0].c} órdenes`);
 
     const a4: Array<{ c: number }> = await q.query(`
       SELECT count(*)::int AS c FROM (
@@ -189,7 +189,9 @@ export class CreateOrderInternalOrders1782006100000
       ) t WHERE prov <> iio
     `);
     if (a4[0].c > 0) {
-      throw new Error(`conteo proveedores != internal_orders en ${a4[0].c} órdenes`);
+      throw new Error(
+        `conteo proveedores != internal_orders en ${a4[0].c} órdenes`,
+      );
     }
 
     const a5: Array<{ seq: number; mx: number }> = await q.query(

@@ -19,9 +19,7 @@ const PRICE_TABLES: Array<[string, string]> = [
   ['care_center_service_prices', 'careCenterId'],
 ];
 
-export class RenameServiceTypeStragglers1782007400000
-  implements MigrationInterface
-{
+export class RenameServiceTypeStragglers1782007400000 implements MigrationInterface {
   private async mergeInto(
     qr: QueryRunner,
     survivor: string,

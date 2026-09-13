@@ -1,5 +1,13 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBooleanString, IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBooleanString,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 import { CURRENCIES, Currency } from '../entities/exchange-rate.entity';
 
 export class QueryExchangeRatesDto {
@@ -18,11 +26,18 @@ export class QueryExchangeRatesDto {
 
   @IsOptional()
   @IsIn(['effectiveDate', 'amountBs', 'currency', 'createdAt', 'updatedAt'])
-  sortBy?: 'effectiveDate' | 'amountBs' | 'currency' | 'createdAt' | 'updatedAt' = 'effectiveDate';
+  sortBy?:
+    | 'effectiveDate'
+    | 'amountBs'
+    | 'currency'
+    | 'createdAt'
+    | 'updatedAt' = 'effectiveDate';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
   sortDir?: 'ASC' | 'DESC' = 'DESC';
 
   @IsOptional()

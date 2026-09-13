@@ -48,7 +48,10 @@ export class InsurancesController {
 
   @RequirePermissions(PERMISSIONS.INSURANCES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateInsuranceDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateInsuranceDto,
+  ) {
     return this.service.update(id, dto);
   }
 

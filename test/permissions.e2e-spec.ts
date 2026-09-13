@@ -26,7 +26,7 @@ describe('PermissionsController (e2e)', () => {
       .set(authHeader(token))
       .expect(200);
     const body = res.body as Array<unknown> | { data?: unknown[] };
-    const items = Array.isArray(body) ? body : body.data ?? [];
+    const items = Array.isArray(body) ? body : (body.data ?? []);
     expect(items.length).toBeGreaterThan(0);
   });
 });

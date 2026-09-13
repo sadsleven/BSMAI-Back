@@ -79,7 +79,10 @@ describe('Provider accounts (e2e)', () => {
         .get('/auth/me')
         .set(authHeader(providerToken))
         .expect(200);
-      expect(res.body.providerLink).toMatchObject({ type: 'doctor', id: doctorId });
+      expect(res.body.providerLink).toMatchObject({
+        type: 'doctor',
+        id: doctorId,
+      });
     });
 
     it('proveedor puede listar órdenes (orders.list)', async () => {

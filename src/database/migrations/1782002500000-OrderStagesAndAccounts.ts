@@ -58,8 +58,12 @@ export class OrderStagesAndAccounts1782002500000 implements MigrationInterface {
         "deletedAt" timestamptz NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_ap_status" ON "accounts_payable"("status")`);
-    await queryRunner.query(`CREATE INDEX "idx_ap_doctor" ON "accounts_payable"("doctorId")`);
+    await queryRunner.query(
+      `CREATE INDEX "idx_ap_status" ON "accounts_payable"("status")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_ap_doctor" ON "accounts_payable"("doctorId")`,
+    );
     await queryRunner.query(
       `CREATE INDEX "idx_ap_careCenter" ON "accounts_payable"("careCenterId")`,
     );
@@ -111,7 +115,9 @@ export class OrderStagesAndAccounts1782002500000 implements MigrationInterface {
         "deletedAt" timestamptz NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_ar_status" ON "accounts_receivable"("status")`);
+    await queryRunner.query(
+      `CREATE INDEX "idx_ar_status" ON "accounts_receivable"("status")`,
+    );
     await queryRunner.query(
       `CREATE INDEX "idx_ar_insurance" ON "accounts_receivable"("insuranceId")`,
     );
@@ -169,10 +175,16 @@ export class OrderStagesAndAccounts1782002500000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "accounts_receivable_payment_links"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "accounts_receivable_payments"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "accounts_receivable_payment_links"`,
+    );
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "accounts_receivable_payments"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "accounts_receivable"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "accounts_payable_payment_links"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "accounts_payable_payment_links"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "accounts_payable_payments"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "accounts_payable"`);
     await queryRunner.query(
@@ -184,9 +196,17 @@ export class OrderStagesAndAccounts1782002500000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "orders" DROP COLUMN IF EXISTS "doctorAmountCurrency"`,
     );
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "doctorAmount"`);
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "otherStudies"`);
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "attendedAt"`);
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "attended"`);
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "doctorAmount"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "otherStudies"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "attendedAt"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "attended"`,
+    );
   }
 }

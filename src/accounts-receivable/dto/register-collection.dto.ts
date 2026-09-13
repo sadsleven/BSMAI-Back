@@ -178,7 +178,11 @@ export class QueryAccountsReceivableDto {
 
   @IsOptional()
   @IsIn(['collected', 'uncollected', 'partially_collected', 'overcollected'])
-  status?: 'collected' | 'uncollected' | 'partially_collected' | 'overcollected';
+  status?:
+    | 'collected'
+    | 'uncollected'
+    | 'partially_collected'
+    | 'overcollected';
 
   @IsOptional()
   @IsUUID()

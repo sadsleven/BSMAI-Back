@@ -22,10 +22,7 @@ import { PaymentMethodDto } from './dto/payment-method.dto';
 import { ChangePasswordDto } from '../users/dto/change-password.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
-import {
-  normalizeCedula,
-  normalizeRif,
-} from '../shared/validators/ve-formats';
+import { normalizeCedula, normalizeRif } from '../shared/validators/ve-formats';
 import { ProviderAccountsService } from '../provider-accounts/provider-accounts.service';
 
 @Injectable()
@@ -87,7 +84,8 @@ export class DoctorsService {
     }
 
     if (entityType === 'legal') qb.andWhere('doctor.isLegalEntity = true');
-    else if (entityType === 'natural') qb.andWhere('doctor.isLegalEntity = false');
+    else if (entityType === 'natural')
+      qb.andWhere('doctor.isLegalEntity = false');
 
     if (specialtyId) {
       qb.andWhere(
@@ -166,7 +164,9 @@ export class DoctorsService {
       centerAddress: dto.centerAddress?.trim() || null,
       isActive: dto.isActive ?? true,
       specialties,
-      phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
+      phones: dto.phones.map((p) =>
+        this.phonesRepo.create(this.phonePayload(p)),
+      ),
       paymentMethods: (dto.paymentMethods ?? []).map((m) =>
         this.methodsRepo.create(this.methodPayload(m)),
       ),
@@ -221,7 +221,10 @@ export class DoctorsService {
         accountFieldsChanged = true;
       }
     }
-    if (dto.firstName !== undefined && dto.firstName.trim() !== doctor.firstName) {
+    if (
+      dto.firstName !== undefined &&
+      dto.firstName.trim() !== doctor.firstName
+    ) {
       doctor.firstName = dto.firstName.trim();
       accountFieldsChanged = true;
     }
@@ -236,7 +239,12 @@ export class DoctorsService {
 
     // isLegalEntity / rif coupled rules
     const nextLegal = dto.isLegalEntity ?? doctor.isLegalEntity;
-    const nextRif = dto.rif !== undefined ? (dto.rif ? normalizeRif(dto.rif) : null) : doctor.rif;
+    const nextRif =
+      dto.rif !== undefined
+        ? dto.rif
+          ? normalizeRif(dto.rif)
+          : null
+        : doctor.rif;
     if (nextLegal && !nextRif) {
       throw new BadRequestException(
         'El RIF es obligatorio cuando el doctor es persona jurídica',
@@ -260,7 +268,10 @@ export class DoctorsService {
     if (dto.phones) {
       await this.phonesRepo.delete({ doctorId: doctor.id });
       doctor.phones = dto.phones.map((p) =>
-        this.phonesRepo.create({ ...this.phonePayload(p), doctorId: doctor.id }),
+        this.phonesRepo.create({
+          ...this.phonePayload(p),
+          doctorId: doctor.id,
+        }),
       );
     }
 
@@ -268,7 +279,10 @@ export class DoctorsService {
       await this.validatePaymentMethods(dto.paymentMethods);
       await this.methodsRepo.delete({ doctorId: doctor.id });
       doctor.paymentMethods = dto.paymentMethods.map((m) =>
-        this.methodsRepo.create({ ...this.methodPayload(m), doctorId: doctor.id }),
+        this.methodsRepo.create({
+          ...this.methodPayload(m),
+          doctorId: doctor.id,
+        }),
       );
     }
 
@@ -340,7 +354,9 @@ export class DoctorsService {
     await this.providerAccounts.setPassword(doctor.userId, dto.newPassword);
   }
 
-  private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
+  private async validateServicePrices(
+    prices: ServicePriceDto[],
+  ): Promise<void> {
     if (!prices.length) return;
     const ids = prices.map((p) => p.serviceTypeId);
     if (new Set(ids).size !== ids.length) {
@@ -380,7 +396,10 @@ export class DoctorsService {
   }
 
   async restore(id: string): Promise<Doctor> {
-    const doctor = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const doctor = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!doctor) throw new NotFoundException('Doctor no encontrado');
     if (!doctor.deletedAt) return doctor;
     await this.repo.restore(id);
@@ -411,14 +430,18 @@ export class DoctorsService {
     if (!ids.length) {
       throw new BadRequestException('Debe asignar al menos una especialidad');
     }
-    const specialties = await this.specialtiesRepo.find({ where: { id: In(ids) } });
+    const specialties = await this.specialtiesRepo.find({
+      where: { id: In(ids) },
+    });
     if (specialties.length !== ids.length) {
       throw new BadRequestException('Algunas especialidades no existen');
     }
     return specialties;
   }
 
-  private async validatePaymentMethods(methods: PaymentMethodDto[]): Promise<void> {
+  private async validatePaymentMethods(
+    methods: PaymentMethodDto[],
+  ): Promise<void> {
     const codes = methods
       .filter((m) => m.type === 'mobile_payment' && m.bankCode)
       .map((m) => m.bankCode!);
@@ -433,17 +456,29 @@ export class DoctorsService {
   }
 
   private async assertUniqueCedula(cedula: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { cedula }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un doctor con esa cédula');
+    const existing = await this.repo.findOne({
+      where: { cedula },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un doctor con esa cédula');
   }
 
   private async assertUniqueEmail(email: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un doctor con ese email');
+    const existing = await this.repo.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un doctor con ese email');
   }
 
   private async assertUniqueRif(rif: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { rif }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un doctor con ese RIF');
+    const existing = await this.repo.findOne({
+      where: { rif },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un doctor con ese RIF');
   }
 }

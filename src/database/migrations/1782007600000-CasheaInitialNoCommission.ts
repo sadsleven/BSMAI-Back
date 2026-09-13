@@ -33,9 +33,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Idempotente vía IF EXISTS / IF NOT EXISTS / ON CONFLICT / bloques DO.
  */
-export class CasheaInitialNoCommission1782007600000
-  implements MigrationInterface
-{
+export class CasheaInitialNoCommission1782007600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // --- app_config: nuevas keys, quitar viejas ---
     await queryRunner.query(

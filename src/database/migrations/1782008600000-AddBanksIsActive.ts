@@ -21,6 +21,8 @@ export class AddBanksIsActive1782008600000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "banks" DROP COLUMN IF EXISTS "isActive"`);
+    await queryRunner.query(
+      `ALTER TABLE "banks" DROP COLUMN IF EXISTS "isActive"`,
+    );
   }
 }

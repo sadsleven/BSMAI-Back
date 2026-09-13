@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { TaxUnit } from './entities/tax-unit.entity';
@@ -27,7 +31,9 @@ export class TaxUnitsService {
       effectiveDateTo,
     } = query;
 
-    const qb = this.repo.createQueryBuilder('ut').orderBy(`ut.${sortBy}`, sortDir);
+    const qb = this.repo
+      .createQueryBuilder('ut')
+      .orderBy(`ut.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('ut.deletedAt IS NOT NULL');
@@ -35,8 +41,10 @@ export class TaxUnitsService {
       qb.withDeleted();
     }
 
-    if (effectiveDateFrom) qb.andWhere('ut.effectiveDate >= :df', { df: effectiveDateFrom });
-    if (effectiveDateTo) qb.andWhere('ut.effectiveDate <= :dt', { dt: effectiveDateTo });
+    if (effectiveDateFrom)
+      qb.andWhere('ut.effectiveDate >= :df', { df: effectiveDateFrom });
+    if (effectiveDateTo)
+      qb.andWhere('ut.effectiveDate <= :dt', { dt: effectiveDateTo });
     if (isActive === 'true' || isActive === 'false') {
       qb.andWhere('ut.isActive = :a', { a: isActive === 'true' });
     }

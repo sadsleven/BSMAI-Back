@@ -10,7 +10,9 @@ import { BcvRatesSyncService } from './exchange-rates/bcv/bcv-rates-sync.service
  *   node dist/sync-bcv.js       # dentro del contenedor (ver `make bcv-sync`)
  */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'warn', 'error'],
+  });
   const sync = app.get(BcvRatesSyncService);
   const result = await sync.syncNow(true);
   console.log(JSON.stringify(result, null, 2));

@@ -16,7 +16,9 @@ import { ServiceType } from '../../service-types/entities/service-type.entity';
  * Un Seguro carga sólo los STs que efectivamente cubre.
  */
 @Entity({ name: 'insurance_service_prices' })
-@Index('UQ_isp_insurance_st', ['insuranceId', 'serviceTypeId'], { unique: true })
+@Index('UQ_isp_insurance_st', ['insuranceId', 'serviceTypeId'], {
+  unique: true,
+})
 export class InsuranceServicePrice {
   @PrimaryGeneratedColumn('uuid')
   id: string;

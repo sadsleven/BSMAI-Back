@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
-import { PaymentAccount, PaymentAccountType } from './entities/payment-account.entity';
+import {
+  PaymentAccount,
+  PaymentAccountType,
+} from './entities/payment-account.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { CreatePaymentAccountDto } from './dto/create-payment-account.dto';
 import { UpdatePaymentAccountDto } from './dto/update-payment-account.dto';
@@ -25,7 +28,9 @@ export class PaymentAccountsService {
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
   ) {}
 
-  async findAll(query: QueryPaymentAccountsDto): Promise<PaginatedResponse<PaymentAccount>> {
+  async findAll(
+    query: QueryPaymentAccountsDto,
+  ): Promise<PaginatedResponse<PaymentAccount>> {
     const {
       page = 1,
       limit = 10,
@@ -90,8 +95,14 @@ export class PaymentAccountsService {
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('El nombre es obligatorio');
 
-    const exists = await this.repo.findOne({ where: { name }, withDeleted: false });
-    if (exists) throw new ConflictException('Ya existe una cuenta bancaria con ese nombre');
+    const exists = await this.repo.findOne({
+      where: { name },
+      withDeleted: false,
+    });
+    if (exists)
+      throw new ConflictException(
+        'Ya existe una cuenta bancaria con ese nombre',
+      );
 
     await this.assertBankExists(dto.type, dto.bankCode);
 
@@ -99,7 +110,10 @@ export class PaymentAccountsService {
     return this.repo.save(acc);
   }
 
-  async update(id: string, dto: UpdatePaymentAccountDto): Promise<PaymentAccount> {
+  async update(
+    id: string,
+    dto: UpdatePaymentAccountDto,
+  ): Promise<PaymentAccount> {
     const acc = await this.findOne(id);
 
     if (dto.type && dto.type !== acc.type) {
@@ -112,7 +126,9 @@ export class PaymentAccountsService {
       const name = dto.name.trim();
       const dupe = await this.repo.findOne({ where: { name } });
       if (dupe && dupe.id !== id) {
-        throw new ConflictException('Ya existe una cuenta bancaria con ese nombre');
+        throw new ConflictException(
+          'Ya existe una cuenta bancaria con ese nombre',
+        );
       }
       acc.name = name;
     }
@@ -130,22 +146,27 @@ export class PaymentAccountsService {
     if (dto.isActive !== undefined) acc.isActive = patch.isActive!;
     if (t === 'mobile_payment') {
       if (dto.bankCode !== undefined) acc.bankCode = patch.bankCode ?? null;
-      if (dto.phoneNumber !== undefined) acc.phoneNumber = patch.phoneNumber ?? null;
-      if (dto.idDocument !== undefined) acc.idDocument = patch.idDocument ?? null;
+      if (dto.phoneNumber !== undefined)
+        acc.phoneNumber = patch.phoneNumber ?? null;
+      if (dto.idDocument !== undefined)
+        acc.idDocument = patch.idDocument ?? null;
       if (dto.accountHolderName !== undefined)
         acc.accountHolderName = patch.accountHolderName ?? null;
     } else if (t === 'bank_transfer' || t === 'bank_transfer_usd') {
       if (dto.bankCode !== undefined) acc.bankCode = patch.bankCode ?? null;
-      if (dto.accountNumber !== undefined) acc.accountNumber = patch.accountNumber ?? null;
+      if (dto.accountNumber !== undefined)
+        acc.accountNumber = patch.accountNumber ?? null;
       if (dto.accountHolderName !== undefined)
         acc.accountHolderName = patch.accountHolderName ?? null;
-      if (dto.idDocument !== undefined) acc.idDocument = patch.idDocument ?? null;
+      if (dto.idDocument !== undefined)
+        acc.idDocument = patch.idDocument ?? null;
     } else if (t === 'card') {
       if (dto.bankCode !== undefined) acc.bankCode = patch.bankCode ?? null;
       if (dto.accountHolderName !== undefined)
         acc.accountHolderName = patch.accountHolderName ?? null;
     } else {
-      if (dto.description !== undefined) acc.description = patch.description ?? null;
+      if (dto.description !== undefined)
+        acc.description = patch.description ?? null;
     }
 
     return this.repo.save(acc);

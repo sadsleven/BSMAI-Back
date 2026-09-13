@@ -34,7 +34,9 @@ export class CreateDoctorDto {
 
   /** Opcional; requerido sólo para habilitar el acceso (password). `''`→null. */
   @IsOptional()
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
   email?: string;
@@ -42,13 +44,17 @@ export class CreateDoctorDto {
   @IsString()
   @MinLength(1)
   @MaxLength(150)
-  @Matches(NAME_PATTERN, { message: 'El nombre solo permite letras y espacios' })
+  @Matches(NAME_PATTERN, {
+    message: 'El nombre solo permite letras y espacios',
+  })
   firstName: string;
 
   @IsString()
   @MinLength(1)
   @MaxLength(150)
-  @Matches(NAME_PATTERN, { message: 'El apellido solo permite letras y espacios' })
+  @Matches(NAME_PATTERN, {
+    message: 'El apellido solo permite letras y espacios',
+  })
   lastName: string;
 
   @IsOptional()
@@ -64,7 +70,9 @@ export class CreateDoctorDto {
   /** Dirección del centro donde atiende el doctor. Opcional. */
   @IsOptional()
   @IsString()
-  @MaxLength(500, { message: 'La dirección del centro no puede superar 500 caracteres' })
+  @MaxLength(500, {
+    message: 'La dirección del centro no puede superar 500 caracteres',
+  })
   centerAddress?: string;
 
   @IsArray()
@@ -106,7 +114,9 @@ export class CreateDoctorDto {
    * doctor como usuario proveedor. En edición, cambia/establece la contraseña.
    */
   @IsOptional()
-  @ValidateIf((o) => o.password !== undefined && o.password !== null && o.password !== '')
+  @ValidateIf(
+    (o) => o.password !== undefined && o.password !== null && o.password !== '',
+  )
   @IsString()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   @MaxLength(100)

@@ -48,7 +48,10 @@ export class SpecialtiesController {
 
   @RequirePermissions(PERMISSIONS.SPECIALTIES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateSpecialtyDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateSpecialtyDto,
+  ) {
     return this.service.update(id, dto);
   }
 

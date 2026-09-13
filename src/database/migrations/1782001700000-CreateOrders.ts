@@ -22,7 +22,12 @@ export class CreateOrders1782001700000 implements MigrationInterface {
             isGenerated: true,
             generationStrategy: 'uuid',
           },
-          { name: 'orderNumber', type: 'varchar', length: '32', isUnique: true },
+          {
+            name: 'orderNumber',
+            type: 'varchar',
+            length: '32',
+            isUnique: true,
+          },
           { name: 'branchId', type: 'uuid' },
           { name: 'type', type: 'varchar', length: '16' },
           { name: 'status', type: 'varchar', length: '24', default: "'draft'" },
@@ -78,9 +83,15 @@ export class CreateOrders1782001700000 implements MigrationInterface {
     await queryRunner.createIndices('orders', [
       new TableIndex({ name: 'idx_orders_branch', columnNames: ['branchId'] }),
       new TableIndex({ name: 'idx_orders_holder', columnNames: ['holderId'] }),
-      new TableIndex({ name: 'idx_orders_patient', columnNames: ['patientId'] }),
+      new TableIndex({
+        name: 'idx_orders_patient',
+        columnNames: ['patientId'],
+      }),
       new TableIndex({ name: 'idx_orders_status', columnNames: ['status'] }),
-      new TableIndex({ name: 'idx_orders_orderDate', columnNames: ['orderDate'] }),
+      new TableIndex({
+        name: 'idx_orders_orderDate',
+        columnNames: ['orderDate'],
+      }),
     ]);
 
     await queryRunner.createTable(
@@ -98,7 +109,12 @@ export class CreateOrders1782001700000 implements MigrationInterface {
           { name: 'orderId', type: 'uuid' },
           { name: 'type', type: 'varchar', length: '24' },
           { name: 'paymentDate', type: 'date' },
-          { name: 'referenceNumber', type: 'varchar', length: '20', isNullable: true },
+          {
+            name: 'referenceNumber',
+            type: 'varchar',
+            length: '20',
+            isNullable: true,
+          },
           { name: 'bankCode', type: 'varchar', length: '8', isNullable: true },
           { name: 'exchangeRateId', type: 'uuid', isNullable: true },
           { name: 'amountCurrency', type: 'varchar', length: '3' },
@@ -134,7 +150,10 @@ export class CreateOrders1782001700000 implements MigrationInterface {
 
     await queryRunner.createIndex(
       'order_payments',
-      new TableIndex({ name: 'idx_order_payments_order', columnNames: ['orderId'] }),
+      new TableIndex({
+        name: 'idx_order_payments_order',
+        columnNames: ['orderId'],
+      }),
     );
   }
 

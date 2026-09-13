@@ -132,7 +132,11 @@ describe('Order provider reports (e2e)', () => {
       .send({
         otherStudies: 'nota general e2e',
         providerReports: [
-          { providerType: 'doctor', doctorId, observations: 'obs del doctor (staff)' },
+          {
+            providerType: 'doctor',
+            doctorId,
+            observations: 'obs del doctor (staff)',
+          },
         ],
       });
     expect([200, 204]).toContain(res.status);
@@ -170,7 +174,11 @@ describe('Order provider reports (e2e)', () => {
       .set(authHeader(doctorToken))
       .send({
         providerReports: [
-          { providerType: 'doctor', doctorId, observations: 'obs por el propio doctor' },
+          {
+            providerType: 'doctor',
+            doctorId,
+            observations: 'obs por el propio doctor',
+          },
         ],
       });
     expect([200, 204]).toContain(res.status);
@@ -184,7 +192,11 @@ describe('Order provider reports (e2e)', () => {
       .set(authHeader(doctorToken))
       .send({
         providerReports: [
-          { providerType: 'care_center', careCenterId: otherId, observations: 'no permitido' },
+          {
+            providerType: 'care_center',
+            careCenterId: otherId,
+            observations: 'no permitido',
+          },
         ],
       });
     expect([400, 403]).toContain(res.status);

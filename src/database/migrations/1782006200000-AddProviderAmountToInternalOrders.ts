@@ -8,9 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * "unidad de deuda" / pendiente del módulo Cuentas por pagar. Se escribe en el
  * Paso 4 (`OrdersService.billing`) y se consume al armar un lote de pago.
  */
-export class AddProviderAmountToInternalOrders1782006200000
-  implements MigrationInterface
-{
+export class AddProviderAmountToInternalOrders1782006200000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     await q.query(
       `ALTER TABLE "order_internal_orders" ADD COLUMN IF NOT EXISTS "providerAmountUsd" numeric(14,2) NULL`,

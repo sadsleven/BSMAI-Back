@@ -13,9 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `tax_payment_batches`. (La restricción "un proveedor por lote" permanece sólo
  * en Cuentas por pagar, donde sí se paga a un proveedor concreto.)
  */
-export class DropProviderFromTaxPaymentBatches1782006700000
-  implements MigrationInterface
-{
+export class DropProviderFromTaxPaymentBatches1782006700000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     await q.query(
       `ALTER TABLE "tax_payment_batches" DROP CONSTRAINT IF EXISTS "ck_tpb_provider_xor"`,
@@ -25,7 +23,9 @@ export class DropProviderFromTaxPaymentBatches1782006700000
     await q.query(
       `ALTER TABLE "tax_payment_batches" DROP COLUMN IF EXISTS "recipientType"`,
     );
-    await q.query(`ALTER TABLE "tax_payment_batches" DROP COLUMN IF EXISTS "doctorId"`);
+    await q.query(
+      `ALTER TABLE "tax_payment_batches" DROP COLUMN IF EXISTS "doctorId"`,
+    );
     await q.query(
       `ALTER TABLE "tax_payment_batches" DROP COLUMN IF EXISTS "careCenterId"`,
     );

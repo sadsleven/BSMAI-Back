@@ -18,7 +18,10 @@ import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryOrderNumberDto } from './dto/query-order-number.dto';
 import { QueryInvoiceNumberDto } from './dto/query-invoice-number.dto';
 import { QueryServiceKeyDto } from './dto/query-service-key.dto';
-import { CreateOrderPaymentDto, UpdateOrderPaymentDto } from './dto/order-payment.dto';
+import {
+  CreateOrderPaymentDto,
+  UpdateOrderPaymentDto,
+} from './dto/order-payment.dto';
 import {
   AttendOrderDto,
   AuthorizeOrderAmountDto,
@@ -40,7 +43,10 @@ export class OrdersController {
 
   @RequirePermissions(PERMISSIONS.ORDERS.LIST)
   @Get()
-  findAll(@Query() query: QueryOrdersDto, @CurrentUser() user: AuthenticatedUser) {
+  findAll(
+    @Query() query: QueryOrdersDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.findAll(query, user);
   }
 
@@ -244,6 +250,20 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.billing(id, dto, user);
+  }
+
+  /**
+   * Órdenes que se pueden AGRUPAR en la misma factura que esta (mismo
+   * contratante, mismo tipo, finalizadas y sin factura vigente). Alimenta el
+   * selector "Agrupar otras órdenes" del Paso 4.
+   */
+  @RequirePermissions(PERMISSIONS.ORDERS.STAGE_BILLING)
+  @Get(':id/invoiceable')
+  invoiceableOrders(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.invoiceableOrders(id, user);
   }
 
   /**

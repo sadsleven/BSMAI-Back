@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import axios from 'axios';
 import { Agent } from 'https';
 import {
@@ -86,7 +90,8 @@ export class BcvScraperService {
           headers: {
             'User-Agent':
               'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'es-VE,es;q=0.9',
             'Cache-Control': 'no-cache',
           },
@@ -100,7 +105,9 @@ export class BcvScraperService {
       } catch (error) {
         lastError = error;
         const reason = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Intento ${attempt}/${attempts} falló al leer el BCV: ${reason}`);
+        this.logger.warn(
+          `Intento ${attempt}/${attempts} falló al leer el BCV: ${reason}`,
+        );
         if (attempt < attempts) {
           await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
         }
@@ -175,14 +182,18 @@ export class BcvScraperService {
     if (fromContent) {
       const parsed = new Date(fromContent[1]);
       if (!Number.isNaN(parsed.getTime())) return fromContent[1];
-      this.logger.warn(`El atributo content del BCV no es una fecha válida: ${fromContent[1]}`);
+      this.logger.warn(
+        `El atributo content del BCV no es una fecha válida: ${fromContent[1]}`,
+      );
     }
 
     const fromText = /Fecha\s*Valor:\s*(?:<[^>]*>\s*)*([^<]+)/i.exec(html);
     if (fromText) {
       const iso = this.parseSpanishDate(fromText[1]);
       if (iso) return iso;
-      this.logger.warn(`No se pudo interpretar la fecha del BCV: "${fromText[1].trim()}"`);
+      this.logger.warn(
+        `No se pudo interpretar la fecha del BCV: "${fromText[1].trim()}"`,
+      );
     }
 
     throw new ServiceUnavailableException(

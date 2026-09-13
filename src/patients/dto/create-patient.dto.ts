@@ -27,14 +27,18 @@ import { PERSON_TYPES, PersonType } from '../entities/patient.entity';
 const NAME_PATTERN = /^[A-Za-zÀ-ÿñÑ\s]+$/;
 
 export class CreatePatientDto {
-  @IsIn(PERSON_TYPES, { message: 'El tipo de persona debe ser natural o legal_entity' })
+  @IsIn(PERSON_TYPES, {
+    message: 'El tipo de persona debe ser natural o legal_entity',
+  })
   personType: PersonType;
 
   /* ---------- Persona natural ---------- */
 
   // Cédula opcional. Si se informa, debe respetar formato VE.
   @IsOptional()
-  @ValidateIf((o) => o.cedula !== undefined && o.cedula !== null && o.cedula !== '')
+  @ValidateIf(
+    (o) => o.cedula !== undefined && o.cedula !== null && o.cedula !== '',
+  )
   @IsString()
   @Matches(PATIENT_CEDULA_PATTERN, { message: PATIENT_CEDULA_MESSAGE })
   cedula?: string;
@@ -43,14 +47,18 @@ export class CreatePatientDto {
   @IsString()
   @MinLength(1)
   @MaxLength(150)
-  @Matches(NAME_PATTERN, { message: 'El nombre solo permite letras y espacios' })
+  @Matches(NAME_PATTERN, {
+    message: 'El nombre solo permite letras y espacios',
+  })
   firstName?: string;
 
   @ValidateIf((o) => o.personType === 'natural')
   @IsString()
   @MinLength(1)
   @MaxLength(150)
-  @Matches(NAME_PATTERN, { message: 'El apellido solo permite letras y espacios' })
+  @Matches(NAME_PATTERN, {
+    message: 'El apellido solo permite letras y espacios',
+  })
   lastName?: string;
 
   /* ---------- Persona jurídica ---------- */
@@ -69,20 +77,27 @@ export class CreatePatientDto {
   /* ---------- Comunes ---------- */
 
   @IsOptional()
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
   email?: string;
 
   // Fecha de nacimiento opcional. Si se informa, debe ser fecha válida.
   @IsOptional()
-  @ValidateIf((o) => o.birthDate !== undefined && o.birthDate !== null && o.birthDate !== '')
+  @ValidateIf(
+    (o) =>
+      o.birthDate !== undefined && o.birthDate !== null && o.birthDate !== '',
+  )
   @IsDateString({}, { message: 'Fecha de nacimiento inválida' })
   birthDate?: string;
 
   // Dirección opcional. Si se informa, entre 3 y 500 caracteres.
   @IsOptional()
-  @ValidateIf((o) => o.address !== undefined && o.address !== null && o.address !== '')
+  @ValidateIf(
+    (o) => o.address !== undefined && o.address !== null && o.address !== '',
+  )
   @IsString()
   @MinLength(3)
   @MaxLength(500)

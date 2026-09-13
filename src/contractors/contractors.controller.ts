@@ -48,7 +48,10 @@ export class ContractorsController {
 
   @RequirePermissions(PERMISSIONS.CONTRACTORS.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateContractorDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateContractorDto,
+  ) {
     return this.service.update(id, dto);
   }
 

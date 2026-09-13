@@ -48,7 +48,10 @@ export class BranchesController {
 
   @RequirePermissions(PERMISSIONS.BRANCHES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateBranchDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
     return this.service.update(id, dto);
   }
 

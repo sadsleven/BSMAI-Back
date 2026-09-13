@@ -17,7 +17,9 @@ export interface LoginResult {
   };
 }
 
-export async function loginAsSuperAdmin(app: INestApplication): Promise<string> {
+export async function loginAsSuperAdmin(
+  app: INestApplication,
+): Promise<string> {
   if (cachedToken) return cachedToken;
   const email = process.env.SUPER_ADMIN_EMAIL ?? 'admin@afmi.local';
   const password = process.env.SUPER_ADMIN_PASSWORD ?? 'ChangeMe123!';
@@ -29,7 +31,10 @@ export async function loginAsSuperAdmin(app: INestApplication): Promise<string> 
       `Super Admin login failed (status=${res.status}): ${JSON.stringify(res.body)}`,
     );
   }
-  const body = res.body as LoginResult & { access_token?: string; token?: string };
+  const body = res.body as LoginResult & {
+    access_token?: string;
+    token?: string;
+  };
   const token = body.accessToken ?? body.access_token ?? body.token;
   if (!token) {
     throw new Error(

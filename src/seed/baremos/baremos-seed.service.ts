@@ -108,7 +108,11 @@ const ST_REFERENCES: Array<{ table: string; owner: string; extra?: string }> = [
 ];
 
 /** Baremos que puede sembrar el seeder; el CLI acepta cualquier subconjunto. */
-export const BAREMO_TARGETS = ['insurances', 'doctors', 'care-centers'] as const;
+export const BAREMO_TARGETS = [
+  'insurances',
+  'doctors',
+  'care-centers',
+] as const;
 
 export type BaremoTarget = (typeof BAREMO_TARGETS)[number];
 
@@ -219,7 +223,9 @@ export function selectBaremos(
  * Idempotente: re-ejecutable. Match de tipos de servicio por clave normalizada
  * (sin acentos). Los precios son **insert-only por defecto**: sólo se dan de
  * alta los pares que faltan y los ya registrados se dejan como están (no se
- * revierte lo editado en la UI). Con `--update-prices` los precios que
+ * revierte lo editado en la UI). Con el token `actualizar-precios` (alias
+ * `--update-prices` al invocar el script directo; con `npm run` va SIN
+ * guiones porque npm se come los `--`) los precios que
  * cambiaron en el baremo SÍ se pisan y se reporta cuántos. Nunca se borra un
  * precio: un servicio que el baremo dejó de listar conserva el suyo.
  *
@@ -231,7 +237,7 @@ export function selectBaremos(
 export class BaremosSeedService {
   private readonly logger = new Logger(BaremosSeedService.name);
 
-  /** `--update-prices`: pisar los precios que cambiaron en vez de sólo insertar. */
+  /** `actualizar-precios` (alias `--update-prices`): pisar en vez de sólo insertar. */
   private update = false;
 
   constructor(
@@ -273,7 +279,7 @@ export class BaremosSeedService {
         (names.length ? ` | filtro de nombre: ${names.join(' | ')}` : '') +
         (this.update
           ? ' | precios: SE PISAN los que cambiaron'
-          : ' | precios: insert-only (usa --update-prices para pisarlos)'),
+          : ' | precios: insert-only (agrega el token actualizar-precios para pisarlos)'),
     );
 
     const { insurances, doctors, centers } = selectBaremos(targets, names);
@@ -485,7 +491,9 @@ export class BaremosSeedService {
     let matched = 0;
     for (const ins of insurances) {
       const key = ins.name.toUpperCase();
-      const candidateKeys = [ins.name, ...(ins.aliases ?? [])].map(insuranceKey);
+      const candidateKeys = [ins.name, ...(ins.aliases ?? [])].map(
+        insuranceKey,
+      );
       const matches = candidateKeys.flatMap((k) => byKey.get(k) ?? []);
       const unique = [...new Map(matches.map((m) => [m.id, m])).values()];
       if (unique.length > 1) {
@@ -577,6 +585,7 @@ export class BaremosSeedService {
   ): Promise<void> {
     let inserted = 0;
     let updated = 0;
+    let same = 0;
     let skipped = 0;
     let collapsed = 0;
     for (const ins of insurances) {
@@ -608,7 +617,10 @@ export class BaremosSeedService {
         const existing = byST.get(serviceTypeId);
         const price = priceUsd.toFixed(2);
         if (existing) {
-          if (this.update && existing.priceUsd !== price) {
+          // se separa "ya vale lo mismo" de "cambió pero no se pisó": sin esa
+          // distinción un baremo nuevo que no entra parece idéntico al que sí
+          if (existing.priceUsd === price) same++;
+          else if (this.update) {
             existing.priceUsd = price;
             toUpdate.push(existing);
           } else skipped++;
@@ -624,7 +636,9 @@ export class BaremosSeedService {
       updated += toUpdate.length;
     }
     this.logger.log(
-      `Precios de seguro: insertados=${inserted} actualizados=${updated} ya registrados (omitidos)=${skipped} filas colapsadas al mismo ST=${collapsed}`,
+      `Precios de seguro: insertados=${inserted} actualizados=${updated} sin cambios=${same}` +
+        this.pendingHint(skipped) +
+        ` | filas colapsadas al mismo ST=${collapsed}`,
     );
   }
 
@@ -655,6 +669,7 @@ export class BaremosSeedService {
     let createdServiceTypes = 0;
     let pricesInserted = 0;
     let pricesUpdated = 0;
+    let pricesSame = 0;
     let pricesSkipped = 0;
     for (const d of doctors) {
       const nameKey = `${d.firstName}|${d.lastName}`.toUpperCase();
@@ -705,17 +720,23 @@ export class BaremosSeedService {
         createdServiceTypes++;
       }
 
-      // precio ya registrado => se respeta salvo --update-prices
+      // precio ya registrado => se respeta salvo actualizar-precios
       const price = d.priceUsd.toFixed(2);
       const existing = await this.dspRepo.findOne({
         where: { doctorId: doctor.id, serviceTypeId },
       });
       if (!existing) {
         await this.dspRepo.save(
-          this.dspRepo.create({ doctorId: doctor.id, serviceTypeId, priceUsd: price }),
+          this.dspRepo.create({
+            doctorId: doctor.id,
+            serviceTypeId,
+            priceUsd: price,
+          }),
         );
         pricesInserted++;
-      } else if (this.update && existing.priceUsd !== price) {
+      } else if (existing.priceUsd === price) {
+        pricesSame++;
+      } else if (this.update) {
         existing.priceUsd = price;
         await this.dspRepo.save(existing);
         pricesUpdated++;
@@ -724,7 +745,8 @@ export class BaremosSeedService {
       }
     }
     this.logger.log(
-      `Doctores: creados=${createdDoctors}/${doctors.length} especialidades=${specByKey.size} STs nuevos=${createdServiceTypes} | precios insertados=${pricesInserted} actualizados=${pricesUpdated} ya registrados (omitidos)=${pricesSkipped}`,
+      `Doctores: creados=${createdDoctors}/${doctors.length} especialidades=${specByKey.size} STs nuevos=${createdServiceTypes} | precios insertados=${pricesInserted} actualizados=${pricesUpdated} sin cambios=${pricesSame}` +
+        this.pendingHint(pricesSkipped),
     );
   }
 
@@ -736,6 +758,13 @@ export class BaremosSeedService {
    * del catálogo: es fuente explícita de negocio, a diferencia del relleno
    * por-defecto (máximo de seguros) de seedServiceTypes, que sólo aplica si
    * está vacío. Los STs se resuelven por canónico y se crean si faltan.
+   *
+   * Varias filas del baremo pueden resolver al MISMO tipo de servicio y ahí el
+   * conteo de la UI no cuadra con el del PDF: BAREMOS CIMA.pdf numera 61
+   * estudios pero el Nº 61 repite al Nº 44 ("ANGIOTAC ABDOMINAL CON CONTRASTE
+   * EV[.] Y RECONSTRUCCIÓN 3D", mismos montos), así que el centro queda con 60
+   * precios. Igual que en los baremos de seguros gana el precio MAYOR y el log
+   * reporta `filas colapsadas al mismo ST=N`.
    */
   private async seedCareCenters(
     stIdByKey: Map<string, string>,
@@ -756,7 +785,9 @@ export class BaremosSeedService {
     let createdServiceTypes = 0;
     let pricesInserted = 0;
     let pricesUpdated = 0;
+    let pricesSame = 0;
     let pricesSkipped = 0;
+    let collapsedRows = 0;
     let particularOverridden = 0;
     for (const c of centers) {
       const specialty = specByKey.get(c.specialtyName.toUpperCase());
@@ -822,8 +853,12 @@ export class BaremosSeedService {
       );
       const toInsert: CareCenterServicePrice[] = [];
       const toUpdate: CareCenterServicePrice[] = [];
-      const particularByStId = new Map<string, string>();
-      const seen = new Set<string>();
+      // serviceTypeId -> precio a registrar; varias filas del baremo pueden
+      // colapsar al mismo ST (el PDF de CIMA lista dos veces el ANGIOTAC
+      // ABDOMINAL ... 3D, Nº 44 y Nº 61, con el mismo monto) => gana el MAYOR,
+      // igual que en los baremos de seguros, y se reporta cuántas colapsaron.
+      const wanted = new Map<string, number>();
+      const wantedParticular = new Map<string, number>();
       for (const s of c.services) {
         const cname = canonicalName(s.name);
         if (cname === null) continue;
@@ -831,29 +866,37 @@ export class BaremosSeedService {
         let serviceTypeId = stIdByKey.get(key);
         if (!serviceTypeId) {
           const createdSt = await this.stRepo.save(
-            this.stRepo.create({
-              name: cname,
-              particularPriceUsd:
-                s.particularPriceUsd != null
-                  ? s.particularPriceUsd.toFixed(2)
-                  : null,
-              isActive: true,
-            }),
+            this.stRepo.create({ name: cname, isActive: true }),
           );
           serviceTypeId = createdSt.id;
           stIdByKey.set(key, serviceTypeId);
           createdServiceTypes++;
-        } else if (s.particularPriceUsd != null) {
-          particularByStId.set(serviceTypeId, s.particularPriceUsd.toFixed(2));
         }
-        // dos variantes del baremo que colapsan al mismo ST: primera gana
-        if (seen.has(serviceTypeId)) continue;
-        seen.add(serviceTypeId);
-        // precio ya registrado => se respeta salvo --update-prices
-        const price = s.priceUsd.toFixed(2);
+        if (s.particularPriceUsd != null) {
+          const prevPart = wantedParticular.get(serviceTypeId);
+          if (prevPart === undefined || s.particularPriceUsd > prevPart) {
+            wantedParticular.set(serviceTypeId, s.particularPriceUsd);
+          }
+        }
+        const prev = wanted.get(serviceTypeId);
+        if (prev === undefined) {
+          wanted.set(serviceTypeId, s.priceUsd);
+          continue;
+        }
+        collapsedRows++;
+        if (s.priceUsd > prev) wanted.set(serviceTypeId, s.priceUsd);
+      }
+
+      const particularByStId = new Map(
+        [...wantedParticular].map(([id, v]) => [id, v.toFixed(2)] as const),
+      );
+      for (const [serviceTypeId, priceUsd] of wanted) {
+        // precio ya registrado => se respeta salvo actualizar-precios
+        const price = priceUsd.toFixed(2);
         const already = byST.get(serviceTypeId);
         if (already) {
-          if (this.update && already.priceUsd !== price) {
+          if (already.priceUsd === price) pricesSame++;
+          else if (this.update) {
             already.priceUsd = price;
             toUpdate.push(already);
           } else pricesSkipped++;
@@ -888,7 +931,10 @@ export class BaremosSeedService {
       }
     }
     this.logger.log(
-      `Centros de atención: creados=${createdCenters}/${centers.length} STs nuevos=${createdServiceTypes} | precios centro insertados=${pricesInserted} actualizados=${pricesUpdated} ya registrados (omitidos)=${pricesSkipped} | particulares AFMI pisados=${particularOverridden}`,
+      `Centros de atención: creados=${createdCenters}/${centers.length} STs nuevos=${createdServiceTypes} | precios centro insertados=${pricesInserted} actualizados=${pricesUpdated} sin cambios=${pricesSame}` +
+        this.pendingHint(pricesSkipped) +
+        ` | filas colapsadas al mismo ST=${collapsedRows}` +
+        ` | particulares AFMI pisados=${particularOverridden}`,
     );
   }
 
@@ -921,6 +967,21 @@ export class BaremosSeedService {
       }
     }
     return byKey;
+  }
+
+  /**
+   * Cola del log para los precios que difieren del baremo y NO se pisaron.
+   * Vacía cuando no hay ninguno, para que la línea no sugiera un pendiente
+   * inexistente.
+   */
+  private pendingHint(skipped: number): string {
+    if (skipped === 0) return '';
+    // sin guiones a propósito: npm descarta los argumentos que empiezan por
+    // "--" y el flag nunca llega al seeder (ver parseArgs en seed-baremos.ts)
+    return (
+      ` | distintos SIN pisar=${skipped} ` +
+      `(vuelve a correr agregando el token actualizar-precios)`
+    );
   }
 
   private async chunkedSave<T>(repo: Repository<T>, rows: T[]): Promise<void> {

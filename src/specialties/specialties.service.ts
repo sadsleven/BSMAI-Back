@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Specialty } from './entities/specialty.entity';
@@ -14,7 +18,9 @@ export class SpecialtiesService {
     @InjectRepository(Specialty) private readonly repo: Repository<Specialty>,
   ) {}
 
-  async findAll(query: QuerySpecialtiesDto): Promise<PaginatedResponse<Specialty>> {
+  async findAll(
+    query: QuerySpecialtiesDto,
+  ): Promise<PaginatedResponse<Specialty>> {
     const {
       page = 1,
       limit = 10,
@@ -26,7 +32,9 @@ export class SpecialtiesService {
       isActive,
     } = query;
 
-    const qb = this.repo.createQueryBuilder('specialty').orderBy(`specialty.${sortBy}`, sortDir);
+    const qb = this.repo
+      .createQueryBuilder('specialty')
+      .orderBy(`specialty.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('specialty.deletedAt IS NOT NULL');
@@ -66,7 +74,8 @@ export class SpecialtiesService {
       where: { name: dto.name },
       withDeleted: true,
     });
-    if (exists) throw new ConflictException('Ya existe una especialidad con ese nombre');
+    if (exists)
+      throw new ConflictException('Ya existe una especialidad con ese nombre');
     const specialty = this.repo.create({
       name: dto.name,
       description: dto.description ?? null,
@@ -82,10 +91,14 @@ export class SpecialtiesService {
         where: { name: dto.name },
         withDeleted: true,
       });
-      if (dupe) throw new ConflictException('Ya existe una especialidad con ese nombre');
+      if (dupe)
+        throw new ConflictException(
+          'Ya existe una especialidad con ese nombre',
+        );
       specialty.name = dto.name;
     }
-    if (dto.description !== undefined) specialty.description = dto.description ?? null;
+    if (dto.description !== undefined)
+      specialty.description = dto.description ?? null;
     if (dto.isActive !== undefined) specialty.isActive = dto.isActive;
     return this.repo.save(specialty);
   }
@@ -107,7 +120,10 @@ export class SpecialtiesService {
   }
 
   async restore(id: string): Promise<Specialty> {
-    const specialty = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const specialty = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!specialty) throw new NotFoundException('Especialidad no encontrada');
     if (!specialty.deletedAt) return specialty;
     await this.repo.restore(id);

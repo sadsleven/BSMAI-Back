@@ -48,7 +48,10 @@ export class PathologiesController {
 
   @RequirePermissions(PERMISSIONS.PATHOLOGIES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdatePathologyDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdatePathologyDto,
+  ) {
     return this.service.update(id, dto);
   }
 

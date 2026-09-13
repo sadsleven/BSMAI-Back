@@ -34,7 +34,8 @@ const RESULT_LIMIT = 5;
 @Injectable()
 export class SearchService {
   constructor(
-    @InjectRepository(Patient) private readonly patientsRepo: Repository<Patient>,
+    @InjectRepository(Patient)
+    private readonly patientsRepo: Repository<Patient>,
     @InjectRepository(Doctor) private readonly doctorsRepo: Repository<Doctor>,
     @InjectRepository(CareCenter)
     private readonly careCentersRepo: Repository<CareCenter>,
@@ -53,7 +54,8 @@ export class SearchService {
     };
     if (q.length < 2) return empty;
 
-    const hasPerm = (p: string) => user.isSuperAdmin || user.permissions.includes(p);
+    const hasPerm = (p: string) =>
+      user.isSuperAdmin || user.permissions.includes(p);
 
     const tasks: Array<Promise<void>> = [];
     if (hasPerm(PERMISSIONS.PATIENTS.LIST))
@@ -61,9 +63,13 @@ export class SearchService {
     if (hasPerm(PERMISSIONS.DOCTORS.LIST))
       tasks.push(this.searchDoctors(q).then((r) => void (empty.doctors = r)));
     if (hasPerm(PERMISSIONS.CARE_CENTERS.LIST))
-      tasks.push(this.searchCareCenters(q).then((r) => void (empty.careCenters = r)));
+      tasks.push(
+        this.searchCareCenters(q).then((r) => void (empty.careCenters = r)),
+      );
     if (hasPerm(PERMISSIONS.ORDERS.LIST))
-      tasks.push(this.searchOrders(q, user).then((r) => void (empty.orders = r)));
+      tasks.push(
+        this.searchOrders(q, user).then((r) => void (empty.orders = r)),
+      );
 
     await Promise.all(tasks);
     return empty;
@@ -76,12 +82,12 @@ export class SearchService {
       .where('p.deletedAt IS NULL')
       .andWhere(
         new Brackets((qb) => {
-          qb.where('LOWER(COALESCE(p.firstName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(p.lastName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(p.businessName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(p.cedula, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(p.rif, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(p.email, \'\')) LIKE :like', { like });
+          qb.where("LOWER(COALESCE(p.firstName, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(p.lastName, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(p.businessName, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(p.cedula, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(p.rif, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(p.email, '')) LIKE :like", { like });
         }),
       )
       .orderBy('p.updatedAt', 'DESC')
@@ -91,11 +97,13 @@ export class SearchService {
     return rows.map((p) => {
       const isNatural = p.personType === 'natural';
       const label = isNatural
-        ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || p.email || 'Paciente'
+        ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() ||
+          p.email ||
+          'Paciente'
         : p.businessName || 'Paciente jurídico';
       const sublabel = isNatural
-        ? p.cedula ?? p.email ?? null
-        : p.rif ?? p.email ?? null;
+        ? (p.cedula ?? p.email ?? null)
+        : (p.rif ?? p.email ?? null);
       return {
         id: p.id,
         label,
@@ -115,8 +123,8 @@ export class SearchService {
           qb.where('LOWER(d.firstName) LIKE :like', { like })
             .orWhere('LOWER(d.lastName) LIKE :like', { like })
             .orWhere('LOWER(d.cedula) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(d.rif, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(d.email, \'\')) LIKE :like', { like });
+            .orWhere("LOWER(COALESCE(d.rif, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(d.email, '')) LIKE :like", { like });
         }),
       )
       .orderBy('d.updatedAt', 'DESC')
@@ -139,8 +147,8 @@ export class SearchService {
       .andWhere(
         new Brackets((qb) => {
           qb.where('LOWER(c.businessName) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(c.rif, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(c.email, \'\')) LIKE :like', { like });
+            .orWhere("LOWER(COALESCE(c.rif, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(c.email, '')) LIKE :like", { like });
         }),
       )
       .orderBy('c.updatedAt', 'DESC')
@@ -172,14 +180,26 @@ export class SearchService {
               'EXISTS (SELECT 1 FROM "order_internal_orders" iio WHERE iio."orderId" = o.id AND LOWER(iio."internalNumber") LIKE :like)',
               { like },
             )
-            .orWhere('LOWER(COALESCE(holder.firstName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(holder.lastName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(holder.businessName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(holder.cedula, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(holder.rif, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(patient.firstName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(patient.lastName, \'\')) LIKE :like', { like })
-            .orWhere('LOWER(COALESCE(patient.cedula, \'\')) LIKE :like', { like });
+            .orWhere("LOWER(COALESCE(holder.firstName, '')) LIKE :like", {
+              like,
+            })
+            .orWhere("LOWER(COALESCE(holder.lastName, '')) LIKE :like", {
+              like,
+            })
+            .orWhere("LOWER(COALESCE(holder.businessName, '')) LIKE :like", {
+              like,
+            })
+            .orWhere("LOWER(COALESCE(holder.cedula, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(holder.rif, '')) LIKE :like", { like })
+            .orWhere("LOWER(COALESCE(patient.firstName, '')) LIKE :like", {
+              like,
+            })
+            .orWhere("LOWER(COALESCE(patient.lastName, '')) LIKE :like", {
+              like,
+            })
+            .orWhere("LOWER(COALESCE(patient.cedula, '')) LIKE :like", {
+              like,
+            });
         }),
       )
       .addSelect([
@@ -207,7 +227,7 @@ export class SearchService {
       const h = o.holder;
       const holderName = h
         ? h.personType === 'legal_entity'
-          ? h.businessName ?? ''
+          ? (h.businessName ?? '')
           : `${h.firstName ?? ''} ${h.lastName ?? ''}`.trim()
         : '';
       return {
@@ -231,7 +251,9 @@ export class SearchService {
     return map[status] ?? status;
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },

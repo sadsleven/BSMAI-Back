@@ -8,9 +8,10 @@ describe('selectBaremos', () => {
   });
 
   it('filtra un seguro por su razón social', () => {
-    const { insurances } = selectBaremos(['insurances'], [
-      'SEGUROS VENEZUELA C.A',
-    ]);
+    const { insurances } = selectBaremos(
+      ['insurances'],
+      ['SEGUROS VENEZUELA C.A'],
+    );
     expect(insurances.map((i) => i.name)).toEqual(['SEGUROS VENEZUELA C.A']);
   });
 
@@ -27,10 +28,10 @@ describe('selectBaremos', () => {
   });
 
   it('acepta varios nombres a la vez', () => {
-    const { insurances } = selectBaremos(['insurances'], [
-      'venezuela',
-      'piramide',
-    ]);
+    const { insurances } = selectBaremos(
+      ['insurances'],
+      ['venezuela', 'piramide'],
+    );
     expect(insurances).toHaveLength(2);
   });
 

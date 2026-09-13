@@ -62,7 +62,8 @@ export class MinioStorageProvider implements StorageProvider {
     const endpoint = this.str('MINIO_ENDPOINT');
     const bucket = this.str('MINIO_BUCKET');
     // Preferimos un service account dedicado; caemos a las root creds del compose.
-    const accessKeyId = this.str('MINIO_ACCESS_KEY') ?? this.str('MINIO_ROOT_USER');
+    const accessKeyId =
+      this.str('MINIO_ACCESS_KEY') ?? this.str('MINIO_ROOT_USER');
     const secretAccessKey =
       this.str('MINIO_SECRET_KEY') ?? this.str('MINIO_ROOT_PASSWORD');
 
@@ -73,7 +74,9 @@ export class MinioStorageProvider implements StorageProvider {
       !secretAccessKey && 'MINIO_SECRET_KEY (o MINIO_ROOT_PASSWORD)',
     ].filter(Boolean) as string[];
     if (missing.length > 0) {
-      throw new Error(`Storage MinIO mal configurado. Falta: ${missing.join(', ')}`);
+      throw new Error(
+        `Storage MinIO mal configurado. Falta: ${missing.join(', ')}`,
+      );
     }
 
     const trimTrailing = (u: string) => u.replace(/\/+$/, '');
@@ -85,7 +88,9 @@ export class MinioStorageProvider implements StorageProvider {
       secretAccessKey: secretAccessKey!,
       // MinIO habla S3 path-style (`/bucket/key`), no virtual-host style.
       forcePathStyle: this.str('MINIO_FORCE_PATH_STYLE') !== 'false',
-      publicEndpoint: trimTrailing(this.str('MINIO_PUBLIC_ENDPOINT') ?? endpoint!),
+      publicEndpoint: trimTrailing(
+        this.str('MINIO_PUBLIC_ENDPOINT') ?? endpoint!,
+      ),
     };
   }
 
@@ -111,7 +116,9 @@ export class MinioStorageProvider implements StorageProvider {
   async checkConnection(): Promise<boolean> {
     try {
       const cfg = this.cfg();
-      await this.getClient().send(new HeadBucketCommand({ Bucket: cfg.bucket }));
+      await this.getClient().send(
+        new HeadBucketCommand({ Bucket: cfg.bucket }),
+      );
       this.logger.log(`MinIO OK — bucket "${cfg.bucket}" en ${cfg.endpoint}`);
       return true;
     } catch (err) {
@@ -207,8 +214,8 @@ export class MinioStorageProvider implements StorageProvider {
     } catch (err) {
       if (err instanceof NotFoundException) throw err;
       const name = (err as { name?: string }).name;
-      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata
-        ?.httpStatusCode;
+      const status = (err as { $metadata?: { httpStatusCode?: number } })
+        .$metadata?.httpStatusCode;
       if (name === 'NoSuchKey' || name === 'NotFound' || status === 404) {
         throw new NotFoundException('Archivo no disponible en storage');
       }
@@ -220,10 +227,15 @@ export class MinioStorageProvider implements StorageProvider {
     try {
       const cfg = this.cfg();
       await this.getClient().send(
-        new DeleteObjectCommand({ Bucket: cfg.bucket, Key: this.objectKey(url) }),
+        new DeleteObjectCommand({
+          Bucket: cfg.bucket,
+          Key: this.objectKey(url),
+        }),
       );
     } catch (err) {
-      this.logger.warn(`No se pudo borrar objeto ${url}: ${(err as Error).message}`);
+      this.logger.warn(
+        `No se pudo borrar objeto ${url}: ${(err as Error).message}`,
+      );
     }
   }
 }

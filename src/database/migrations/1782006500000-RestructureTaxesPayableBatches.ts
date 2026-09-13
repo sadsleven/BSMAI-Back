@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * No hay datos reales → DROP/recrea limpio, sin backfill.
  */
-export class RestructureTaxesPayableBatches1782006500000
-  implements MigrationInterface
-{
+export class RestructureTaxesPayableBatches1782006500000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     // Quitar el plumbing viejo (la retención ya no agrupa órdenes ni linkea pagos directo).
     await q.query(`DROP TABLE IF EXISTS "taxes_payable_payment_links"`);
@@ -45,9 +43,15 @@ export class RestructureTaxesPayableBatches1782006500000
         CONSTRAINT "ck_tpb_status" CHECK ("status" IN ('unpaid', 'partially_paid', 'paid'))
       )
     `);
-    await q.query(`CREATE INDEX "idx_tpb_status" ON "tax_payment_batches"("status")`);
-    await q.query(`CREATE INDEX "idx_tpb_doctor" ON "tax_payment_batches"("doctorId")`);
-    await q.query(`CREATE INDEX "idx_tpb_careCenter" ON "tax_payment_batches"("careCenterId")`);
+    await q.query(
+      `CREATE INDEX "idx_tpb_status" ON "tax_payment_batches"("status")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_tpb_doctor" ON "tax_payment_batches"("doctorId")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_tpb_careCenter" ON "tax_payment_batches"("careCenterId")`,
+    );
 
     // taxes_payable: ligar a su lote AP de origen (1:1) y al lote SENIAT.
     await q.query(
@@ -99,8 +103,12 @@ export class RestructureTaxesPayableBatches1782006500000
     await q.query(`DROP TABLE IF EXISTS "tax_payment_batch_obligations"`);
     await q.query(`DROP INDEX IF EXISTS "idx_tp_batch"`);
     await q.query(`DROP INDEX IF EXISTS "uq_tp_source_payable"`);
-    await q.query(`ALTER TABLE "taxes_payable" DROP COLUMN IF EXISTS "taxPaymentBatchId"`);
-    await q.query(`ALTER TABLE "taxes_payable" DROP COLUMN IF EXISTS "sourcePayableId"`);
+    await q.query(
+      `ALTER TABLE "taxes_payable" DROP COLUMN IF EXISTS "taxPaymentBatchId"`,
+    );
+    await q.query(
+      `ALTER TABLE "taxes_payable" DROP COLUMN IF EXISTS "sourcePayableId"`,
+    );
     await q.query(`DROP TABLE IF EXISTS "tax_payment_batches"`);
 
     // Recrear plumbing viejo de retenciones.

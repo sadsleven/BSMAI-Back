@@ -15,8 +15,12 @@ export class CloseCriticalGaps1782002600000 implements MigrationInterface {
     );
 
     // ---- Accounts Payable / Receivable numbers ----
-    await queryRunner.query(`CREATE SEQUENCE IF NOT EXISTS accounts_payable_seq START 1`);
-    await queryRunner.query(`CREATE SEQUENCE IF NOT EXISTS accounts_receivable_seq START 1`);
+    await queryRunner.query(
+      `CREATE SEQUENCE IF NOT EXISTS accounts_payable_seq START 1`,
+    );
+    await queryRunner.query(
+      `CREATE SEQUENCE IF NOT EXISTS accounts_receivable_seq START 1`,
+    );
 
     // payableNumber
     await queryRunner.query(
@@ -67,6 +71,8 @@ export class CloseCriticalGaps1782002600000 implements MigrationInterface {
     );
     await queryRunner.query(`DROP SEQUENCE IF EXISTS accounts_payable_seq`);
     await queryRunner.query(`DROP SEQUENCE IF EXISTS accounts_receivable_seq`);
-    await queryRunner.query(`ALTER TABLE "insurances" DROP COLUMN IF EXISTS "policyNumber"`);
+    await queryRunner.query(
+      `ALTER TABLE "insurances" DROP COLUMN IF EXISTS "policyNumber"`,
+    );
   }
 }

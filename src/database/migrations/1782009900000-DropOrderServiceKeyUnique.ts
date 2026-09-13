@@ -11,7 +11,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  */
 export class DropOrderServiceKeyUnique1782009900000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "ux_orders_service_key_active"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "ux_orders_service_key_active"`,
+    );
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "idx_orders_service_key_active"
          ON "orders" ("serviceKey")
@@ -20,7 +22,9 @@ export class DropOrderServiceKeyUnique1782009900000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_orders_service_key_active"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_orders_service_key_active"`,
+    );
     // Falla si la base tiene claves repetidas entre órdenes vivas (que es
     // justamente el motivo por el que se quitó el único).
     await queryRunner.query(

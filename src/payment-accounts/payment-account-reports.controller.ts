@@ -12,7 +12,10 @@ export class PaymentAccountReportsController {
 
   @RequirePermissions(PERMISSIONS.REPORTS.PAYMENT_ACCOUNT_INFLOWS_LIST)
   @Get('inflows')
-  inflows(@Query() query: QueryInflowsDto, @CurrentUser() user: AuthenticatedUser) {
+  inflows(
+    @Query() query: QueryInflowsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.inflows(query, user);
   }
 }

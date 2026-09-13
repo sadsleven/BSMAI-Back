@@ -28,7 +28,10 @@ import {
   computeAmountInUsd,
   resolveUsdRate,
 } from '../shared/utils/payment-conversion';
-import { calcRetention, SeniatPersonType } from '../shared/utils/seniat-retention';
+import {
+  calcRetention,
+  SeniatPersonType,
+} from '../shared/utils/seniat-retention';
 
 const TOLERANCE_BS = 0.01;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -71,7 +74,8 @@ export class AccountsPayableService {
     private readonly paymentsRepo: Repository<AccountsPayablePayment>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
     @InjectRepository(Bank) private readonly banksRepo: Repository<Bank>,
-    @InjectRepository(ExchangeRate) private readonly ratesRepo: Repository<ExchangeRate>,
+    @InjectRepository(ExchangeRate)
+    private readonly ratesRepo: Repository<ExchangeRate>,
     @InjectRepository(Doctor) private readonly doctorsRepo: Repository<Doctor>,
     private readonly dataSource: DataSource,
     private readonly taxUnits: TaxUnitsService,
@@ -80,7 +84,9 @@ export class AccountsPayableService {
     void this.doctorsRepo;
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },
@@ -107,7 +113,14 @@ export class AccountsPayableService {
     query: QueryPendingPayableDto,
     user: AuthenticatedUser,
   ): Promise<PaginatedResponse<PendingPayable>> {
-    const { page = 1, limit = 10, search, doctorId, careCenterId, branchId } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      doctorId,
+      careCenterId,
+      branchId,
+    } = query;
     const params: unknown[] = [];
     const where: string[] = [
       `o.status = 'finalized'`,
@@ -171,7 +184,11 @@ export class AccountsPayableService {
     );
     return {
       data: rows,
-      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+      metadata: {
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
@@ -222,7 +239,8 @@ export class AccountsPayableService {
     }
     if (status) qb.andWhere('ap.status = :status', { status });
     if (doctorId) qb.andWhere('ap.doctorId = :doctorId', { doctorId });
-    if (careCenterId) qb.andWhere('ap.careCenterId = :careCenterId', { careCenterId });
+    if (careCenterId)
+      qb.andWhere('ap.careCenterId = :careCenterId', { careCenterId });
     if (branchId) {
       qb.andWhere(
         `EXISTS (SELECT 1 FROM "accounts_payable_orders" apo3
@@ -250,13 +268,21 @@ export class AccountsPayableService {
     for (const b of data) this.computeFigures(b, taxUnitBs);
     return {
       data,
-      metadata: { total, page, lastPage: Math.max(1, Math.ceil(total / limit)) },
+      metadata: {
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
-  async findOneBatch(id: string, user: AuthenticatedUser): Promise<AccountsPayable> {
+  async findOneBatch(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<AccountsPayable> {
     const batch = await this.loadBatch(this.dataSource.manager, id);
-    if (!batch) throw new NotFoundException('Lote de cuentas por pagar no encontrado');
+    if (!batch)
+      throw new NotFoundException('Lote de cuentas por pagar no encontrado');
     await this.assertVisibility(batch, user);
     this.computeFigures(batch, await this.currentTaxUnitBs());
     return batch;
@@ -272,7 +298,9 @@ export class AccountsPayableService {
         doctor: true,
         careCenter: true,
         taxUnit: true,
-        orders: { internalOrder: { order: { branch: true, billingExchangeRate: true } } },
+        orders: {
+          internalOrder: { order: { branch: true, billingExchangeRate: true } },
+        },
         payments: { exchangeRate: true },
       },
     });
@@ -320,7 +348,10 @@ export class AccountsPayableService {
   }
 
   /** Calcula y adjunta los campos transient (gross/retención/neto/pagado/pendiente). */
-  private computeFigures(batch: AccountsPayable, fallbackTaxUnitBs: number): void {
+  private computeFigures(
+    batch: AccountsPayable,
+    fallbackTaxUnitBs: number,
+  ): void {
     let grossUsd = 0;
     let grossBs = 0;
     for (const apo of batch.orders ?? []) {
@@ -370,11 +401,17 @@ export class AccountsPayableService {
       const rateBs = order?.billingExchangeRate
         ? Number(order.billingExchangeRate.amountBs)
         : Number(
-            (await resolveUsdRate(this.ratesRepo, order?.billingExchangeRateId ?? null))
-              .amountBs,
+            (
+              await resolveUsdRate(
+                this.ratesRepo,
+                order?.billingExchangeRateId ?? null,
+              )
+            ).amountBs,
           );
       if (!Number.isFinite(rateBs) || rateBs <= 0) {
-        throw new BadRequestException('Tasa de facturación inválida en una orden del lote');
+        throw new BadRequestException(
+          'Tasa de facturación inválida en una orden del lote',
+        );
       }
       grossBs += g * rateBs;
     }
@@ -470,12 +507,15 @@ export class AccountsPayableService {
         'No se pueden agregar órdenes a un lote pagado. Edita o quita un pago primero.',
       );
     }
-    const providerId = batch.recipientType === 'doctor' ? batch.doctorId : batch.careCenterId;
+    const providerId =
+      batch.recipientType === 'doctor' ? batch.doctorId : batch.careCenterId;
     const rows = await this.validatePendingRows(internalOrderIds, user);
     for (const r of rows) {
       const rPid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
       if (r.providerType !== batch.recipientType || rPid !== providerId) {
-        throw new BadRequestException('La orden no pertenece al proveedor del lote');
+        throw new BadRequestException(
+          'La orden no pertenece al proveedor del lote',
+        );
       }
     }
     await this.dataSource.transaction(async (mgr) => {
@@ -566,7 +606,8 @@ export class AccountsPayableService {
         'El lote ya está pagado. Para cambiar la retención, edita o elimina un pago primero.',
       );
     }
-    if (this.appliesRetention(batch) === applyRetention) return this.findOneBatch(id, user);
+    if (this.appliesRetention(batch) === applyRetention)
+      return this.findOneBatch(id, user);
     await this.dataSource.transaction(async (mgr) => {
       await mgr.update(AccountsPayable, id, { applyRetention });
       await this.recomputeBatchStatus(mgr, id);
@@ -615,13 +656,18 @@ export class AccountsPayableService {
       throw new BadRequestException('Alguna orden interna no existe');
     }
     let allowed: Set<string> | null = null;
-    if (!user.isSuperAdmin) allowed = new Set(await this.resolveUserBranchIds(user));
+    if (!user.isSuperAdmin)
+      allowed = new Set(await this.resolveUserBranchIds(user));
     for (const r of rows) {
       if (r.status !== 'finalized') {
-        throw new BadRequestException('Sólo se pueden pagar órdenes finalizadas');
+        throw new BadRequestException(
+          'Sólo se pueden pagar órdenes finalizadas',
+        );
       }
       if (r.grossUsd === null) {
-        throw new BadRequestException('Una orden no tiene monto facturado para su proveedor');
+        throw new BadRequestException(
+          'Una orden no tiene monto facturado para su proveedor',
+        );
       }
       if (r.inBatch) {
         throw new BadRequestException(
@@ -661,7 +707,8 @@ export class AccountsPayableService {
     }
 
     const net = await this.computeNet(batch);
-    const usdRateId = batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ?? null;
+    const usdRateId =
+      batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ?? null;
     const priorPaidBs = round2(
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
     );
@@ -686,7 +733,9 @@ export class AccountsPayableService {
 
     await this.dataSource.transaction(async (mgr) => {
       for (const payload of payloads) {
-        const saved = await mgr.save(mgr.create(AccountsPayablePayment, payload));
+        const saved = await mgr.save(
+          mgr.create(AccountsPayablePayment, payload),
+        );
         await mgr.query(
           `INSERT INTO "accounts_payable_payment_links" ("payableId", "paymentId")
            VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -711,7 +760,8 @@ export class AccountsPayableService {
     if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
       throw new NotFoundException('Pago no encontrado en este lote');
     }
-    const usdRateId = batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ?? null;
+    const usdRateId =
+      batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ?? null;
     await this.dataSource.transaction(async (mgr) => {
       const payload = await this.resolvePaymentForSave(dto, usdRateId);
       await mgr.update(AccountsPayablePayment, paymentId, payload);
@@ -736,7 +786,9 @@ export class AccountsPayableService {
         `DELETE FROM "accounts_payable_payment_links" WHERE "payableId" = $1 AND "paymentId" = $2`,
         [id, paymentId],
       );
-      await mgr.query(`DELETE FROM "accounts_payable_payments" WHERE id = $1`, [paymentId]);
+      await mgr.query(`DELETE FROM "accounts_payable_payments" WHERE id = $1`, [
+        paymentId,
+      ]);
       await this.recomputeBatchStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -763,7 +815,10 @@ export class AccountsPayableService {
       // Borrar pagos del lote (los links caen por CASCADE al borrar el lote).
       const payIds = (batch.payments ?? []).map((p) => p.id);
       if (payIds.length) {
-        await mgr.query(`DELETE FROM "accounts_payable_payments" WHERE id = ANY($1)`, [payIds]);
+        await mgr.query(
+          `DELETE FROM "accounts_payable_payments" WHERE id = ANY($1)`,
+          [payIds],
+        );
       }
       // Borrar el lote: CASCADE limpia pivot de órdenes, links y la retención (sourcePayableId).
       await mgr.query(`DELETE FROM "accounts_payable" WHERE id = $1`, [id]);
@@ -773,7 +828,10 @@ export class AccountsPayableService {
   // ---------------------------------------------------------------------------
   // Recompute + retención.
   // ---------------------------------------------------------------------------
-  private async recomputeBatchStatus(mgr: EntityManager, id: string): Promise<void> {
+  private async recomputeBatchStatus(
+    mgr: EntityManager,
+    id: string,
+  ): Promise<void> {
     const batch = await this.loadBatch(mgr, id);
     if (!batch) return;
     const net = await this.computeNet(batch);
@@ -781,13 +839,14 @@ export class AccountsPayableService {
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
     );
     let status: 'unpaid' | 'partially_paid' | 'paid';
-    if (cumulativeBs + TOLERANCE_BS >= net.netBs && cumulativeBs > 0) status = 'paid';
+    if (cumulativeBs + TOLERANCE_BS >= net.netBs && cumulativeBs > 0)
+      status = 'paid';
     else if (cumulativeBs > 0) status = 'partially_paid';
     else status = 'unpaid';
 
     await mgr.update(AccountsPayable, id, {
       status,
-      paidAt: status === 'paid' ? batch.paidAt ?? new Date() : null,
+      paidAt: status === 'paid' ? (batch.paidAt ?? new Date()) : null,
     });
 
     // La obligación SENIAT nace sólo si el lote quedó pagado Y descuenta retención.
@@ -804,7 +863,9 @@ export class AccountsPayableService {
     batch: AccountsPayable,
     net: BatchNet,
   ): Promise<void> {
-    const existing = await mgr.query<{ id: string; taxPaymentBatchId: string | null }[]>(
+    const existing = await mgr.query<
+      { id: string; taxPaymentBatchId: string | null }[]
+    >(
       `SELECT id, "taxPaymentBatchId" FROM "taxes_payable" WHERE "sourcePayableId" = $1`,
       [batch.id],
     );
@@ -863,7 +924,11 @@ export class AccountsPayableService {
     batchId: string,
   ): Promise<void> {
     const existing = await mgr.query<
-      { id: string; taxPaymentBatchId: string | null; batchStatus: string | null }[]
+      {
+        id: string;
+        taxPaymentBatchId: string | null;
+        batchStatus: string | null;
+      }[]
     >(
       `SELECT tp.id, tp."taxPaymentBatchId", tpb.status AS "batchStatus"
        FROM "taxes_payable" tp
@@ -877,7 +942,9 @@ export class AccountsPayableService {
         'La retención de este lote ya fue pagada al SENIAT; no se puede revertir el pago.',
       );
     }
-    await mgr.query(`DELETE FROM "taxes_payable" WHERE id = $1`, [existing[0].id]);
+    await mgr.query(`DELETE FROM "taxes_payable" WHERE id = $1`, [
+      existing[0].id,
+    ]);
   }
 
   // ---------------------------------------------------------------------------
@@ -904,22 +971,34 @@ export class AccountsPayableService {
 
     if (p.type === 'mobile_payment' || p.type === 'bank_transfer') {
       if (!p.bankCode) throw new BadRequestException('bankCode requerido');
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
-        throw new BadRequestException('Pago móvil/transferencia debe ser en BS');
-      const bank = await this.banksRepo.findOne({ where: { code: p.bankCode } });
+        throw new BadRequestException(
+          'Pago móvil/transferencia debe ser en BS',
+        );
+      const bank = await this.banksRepo.findOne({
+        where: { code: p.bankCode },
+      });
       if (!bank) throw new BadRequestException('Banco no encontrado');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('Pago en BS requiere tasa USD/Bs');
       out.bankCode = p.bankCode;
       out.exchangeRateId = p.exchangeRateId;
       usdCtxId = p.exchangeRateId;
     } else if (p.type === 'cash_bs') {
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido');
-      if (p.amountCurrency !== 'BS') throw new BadRequestException('cash_bs debe ser en BS');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido');
+      if (p.amountCurrency !== 'BS')
+        throw new BadRequestException('cash_bs debe ser en BS');
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'USD')
         throw new BadRequestException('cash_bs requiere tasa USD/Bs');
       out.exchangeRateId = p.exchangeRateId;
@@ -928,7 +1007,9 @@ export class AccountsPayableService {
       if (p.amountCurrency !== 'USD')
         throw new BadRequestException('cash_usd debe ser en USD');
       if (p.exchangeRateId) {
-        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        const rate = await this.ratesRepo.findOne({
+          where: { id: p.exchangeRateId },
+        });
         if (!rate || rate.currency !== 'USD')
           throw new BadRequestException('cash_usd requiere tasa USD/Bs');
         usdCtxId = p.exchangeRateId;
@@ -937,18 +1018,26 @@ export class AccountsPayableService {
     } else if (p.type === 'cash_eur') {
       if (p.amountCurrency !== 'EUR')
         throw new BadRequestException('cash_eur debe ser en EUR');
-      if (!p.exchangeRateId) throw new BadRequestException('exchangeRateId requerido (EUR)');
-      const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+      if (!p.exchangeRateId)
+        throw new BadRequestException('exchangeRateId requerido (EUR)');
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
       if (!rate || rate.currency !== 'EUR')
-        throw new BadRequestException('cash_eur requiere una tasa de cambio en EUR');
+        throw new BadRequestException(
+          'cash_eur requiere una tasa de cambio en EUR',
+        );
       out.exchangeRateId = p.exchangeRateId;
     } else if (p.type === 'other') {
-      if (!p.referenceNumber) throw new BadRequestException('referenceNumber requerido');
+      if (!p.referenceNumber)
+        throw new BadRequestException('referenceNumber requerido');
       if (p.amountCurrency !== 'USD')
         throw new BadRequestException('other: amountCurrency debe ser USD');
       out.accountNumber = p.accountNumber ?? null;
       if (p.exchangeRateId) {
-        const rate = await this.ratesRepo.findOne({ where: { id: p.exchangeRateId } });
+        const rate = await this.ratesRepo.findOne({
+          where: { id: p.exchangeRateId },
+        });
         if (!rate || rate.currency !== 'USD')
           throw new BadRequestException('other requiere tasa USD/Bs');
         out.exchangeRateId = p.exchangeRateId;

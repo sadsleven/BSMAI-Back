@@ -30,7 +30,16 @@ export class QueryPatientsDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['firstName', 'lastName', 'businessName', 'cedula', 'rif', 'email', 'createdAt', 'updatedAt'])
+  @IsIn([
+    'firstName',
+    'lastName',
+    'businessName',
+    'cedula',
+    'rif',
+    'email',
+    'createdAt',
+    'updatedAt',
+  ])
   sortBy?:
     | 'firstName'
     | 'lastName'
@@ -43,7 +52,9 @@ export class QueryPatientsDto {
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
   sortDir?: 'ASC' | 'DESC' = 'DESC';
 
   @IsOptional()

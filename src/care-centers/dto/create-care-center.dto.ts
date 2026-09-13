@@ -15,10 +15,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import {
-  RIF_MESSAGE,
-  RIF_PATTERN,
-} from '../../shared/validators/ve-formats';
+import { RIF_MESSAGE, RIF_PATTERN } from '../../shared/validators/ve-formats';
 import { PhoneDto } from './phone.dto';
 import { PaymentMethodDto } from './payment-method.dto';
 import { ServicePriceDto } from '../../shared/dto/service-price.dto';
@@ -31,7 +28,9 @@ export class CreateCareCenterDto {
 
   /** Opcional; requerido sólo para habilitar el acceso (password). `''`→null. */
   @IsOptional()
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
   email?: string;
@@ -45,7 +44,9 @@ export class CreateCareCenterDto {
   /** Dirección del centro de atención. Opcional. */
   @IsOptional()
   @IsString()
-  @MaxLength(500, { message: 'La dirección del centro no puede superar 500 caracteres' })
+  @MaxLength(500, {
+    message: 'La dirección del centro no puede superar 500 caracteres',
+  })
   centerAddress?: string;
 
   @IsArray()
@@ -87,7 +88,9 @@ export class CreateCareCenterDto {
    * como usuario proveedor. En edición, cambia/establece la contraseña.
    */
   @IsOptional()
-  @ValidateIf((o) => o.password !== undefined && o.password !== null && o.password !== '')
+  @ValidateIf(
+    (o) => o.password !== undefined && o.password !== null && o.password !== '',
+  )
   @IsString()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   @MaxLength(100)

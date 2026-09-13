@@ -28,6 +28,8 @@ export class AddOrderServiceKeyUnique1782009600000 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_orders_service_key_active"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_orders_service_key_active"`,
+    );
   }
 }

@@ -25,7 +25,9 @@ export class CreateInsuranceDto {
   /** Nombre corto / abreviatura del seguro. Opcional. */
   @IsOptional()
   @IsString()
-  @MaxLength(100, { message: 'El nombre corto no puede superar 100 caracteres' })
+  @MaxLength(100, {
+    message: 'El nombre corto no puede superar 100 caracteres',
+  })
   shortName?: string;
 
   @IsOptional()
@@ -34,14 +36,18 @@ export class CreateInsuranceDto {
   description?: string;
 
   @IsOptional()
-  @ValidateIf((o) => o.email !== undefined && o.email !== null && o.email !== '')
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
   @IsEmail({}, { message: 'Email inválido' })
   @MaxLength(200)
   email?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(500, { message: 'El dirección fiscal no puede superar 500 caracteres' })
+  @MaxLength(500, {
+    message: 'El dirección fiscal no puede superar 500 caracteres',
+  })
   fiscalAddress?: string;
 
   @IsOptional()

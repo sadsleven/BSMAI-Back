@@ -32,13 +32,19 @@ export class TaxesPayableController {
 
   @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.LIST)
   @Get('pending')
-  listPending(@Query() query: QueryPendingTaxDto, @CurrentUser() user: AuthenticatedUser) {
+  listPending(
+    @Query() query: QueryPendingTaxDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.listPending(query, user);
   }
 
   @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.LIST)
   @Get()
-  listBatches(@Query() query: QueryTaxesPayableDto, @CurrentUser() user: AuthenticatedUser) {
+  listBatches(
+    @Query() query: QueryTaxesPayableDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.listBatches(query, user);
   }
 
@@ -53,7 +59,10 @@ export class TaxesPayableController {
 
   @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.CREATE)
   @Post()
-  createBatch(@Body() dto: CreateTaxBatchDto, @CurrentUser() user: AuthenticatedUser) {
+  createBatch(
+    @Body() dto: CreateTaxBatchDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.service.createBatch(dto, user);
   }
 
@@ -94,7 +103,12 @@ export class TaxesPayableController {
     @Body() dto: SetTaxBatchComprobanteDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.setComprobante(id, dto.comprobanteNumber, dto.issueDate, user);
+    return this.service.setComprobante(
+      id,
+      dto.comprobanteNumber,
+      dto.issueDate,
+      user,
+    );
   }
 
   @RequirePermissions(PERMISSIONS.TAXES_PAYABLE.UPDATE)

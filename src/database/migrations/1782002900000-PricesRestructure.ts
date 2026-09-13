@@ -169,7 +169,9 @@ export class PricesRestructure1782002900000 implements MigrationInterface {
       `ALTER TABLE "orders" DROP COLUMN IF EXISTS "doctorAmountSuggested"`,
     );
     await queryRunner.query(`DROP TABLE IF EXISTS "order_service_pricing"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "care_center_service_prices"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "care_center_service_prices"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "doctor_service_prices"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "insurance_service_prices"`);
     await queryRunner.query(

@@ -35,7 +35,9 @@ export class PaymentMethodDto {
 
   @ValidateIf((o) => o.type === 'mobile_payment')
   @IsString()
-  @Matches(PHONE_PATTERN, { message: 'El teléfono debe tener exactamente 11 dígitos' })
+  @Matches(PHONE_PATTERN, {
+    message: 'El teléfono debe tener exactamente 11 dígitos',
+  })
   phoneNumber?: string;
 
   // ---- mobile_payment + bank_transfer ----

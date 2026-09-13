@@ -15,6 +15,7 @@ import { OrderServiceType } from './entities/order-service-type.entity';
 import { OrderProviderReport } from './entities/order-provider-report.entity';
 import { OrderInternalOrder } from './entities/order-internal-order.entity';
 import { OrderInvoice } from './entities/order-invoice.entity';
+import { OrderInvoiceOrder } from './entities/order-invoice-order.entity';
 import {
   OrderChangeAction,
   OrderChangeLog,
@@ -1243,14 +1244,65 @@ export class OrdersService implements OnModuleInit {
     return order;
   }
 
-  /** Facturas de la orden (vigente + anuladas), más antigua primero. */
+  /**
+   * Facturas que CUBREN la orden (vigente + anuladas), más antigua primero.
+   *
+   * Va por el pivot `order_invoice_orders`, NO por `order_invoices.orderId`:
+   * en una factura agrupada la orden puede no ser la emisora y aun así la
+   * factura es suya (por eso no se le ofrece emitir otra).
+   */
   private async loadInvoices(orderId: string): Promise<OrderInvoice[]> {
-    return this.repo.manager.getRepository(OrderInvoice).find({
-      where: { orderId },
-      relations: { cancelledBy: true, createdBy: true, exchangeRate: true },
-      loadEagerRelations: false,
-      order: { createdAt: 'ASC' },
-    });
+    const invoices = await this.repo.manager
+      .getRepository(OrderInvoice)
+      .createQueryBuilder('i')
+      .innerJoin('i.orders', 'p', 'p."orderId" = :orderId', { orderId })
+      .leftJoinAndSelect('i.cancelledBy', 'cancelledBy')
+      .leftJoinAndSelect('i.createdBy', 'createdBy')
+      .leftJoinAndSelect('i.exchangeRate', 'exchangeRate')
+      .orderBy('i.createdAt', 'ASC')
+      .getMany();
+    await this.attachCoveredOrders(invoices);
+    return invoices;
+  }
+
+  /**
+   * Llena el transient `coveredOrders` de cada factura (las órdenes que agrupa,
+   * la emisora incluida) en una sola consulta.
+   */
+  private async attachCoveredOrders(invoices: OrderInvoice[]): Promise<void> {
+    if (!invoices.length) return;
+    const rows = await this.repo.manager.query<
+      Array<{
+        invoiceId: string;
+        id: string;
+        orderNumber: string;
+        orderDate: string;
+        priceAmount: string;
+      }>
+    >(
+      `SELECT p."invoiceId", o."id", o."orderNumber",
+              to_char(o."orderDate", 'YYYY-MM-DD') AS "orderDate",
+              o."priceAmount"
+         FROM "order_invoice_orders" p
+         JOIN "orders" o ON o."id" = p."orderId"
+        WHERE p."invoiceId" = ANY($1::uuid[])
+        ORDER BY o."orderDate" ASC, o."orderNumber" ASC`,
+      [invoices.map((i) => i.id)],
+    );
+    const byInvoice = new Map<string, OrderInvoice['coveredOrders']>();
+    for (const r of rows) {
+      const list = byInvoice.get(r.invoiceId) ?? [];
+      list.push({
+        id: r.id,
+        orderNumber: r.orderNumber,
+        orderDate: r.orderDate,
+        priceAmount: r.priceAmount,
+      });
+      byInvoice.set(r.invoiceId, list);
+    }
+    for (const inv of invoices) {
+      inv.coveredOrders = byInvoice.get(inv.id) ?? [];
+    }
   }
 
   /**
@@ -2609,6 +2661,14 @@ export class OrdersService implements OnModuleInit {
     // manda la regla derivada: se imprime salvo en seguro no indexado.
     const showExchangeRate = dto.showExchangeRate ?? null;
 
+    // Factura AGRUPADA: órdenes ya finalizadas del mismo contratante que se
+    // emiten en esta misma factura. Sin factura, la lista se ignora.
+    const coveredExtra =
+      invoiceNumber !== null
+        ? await this.resolveCoveredOrders(order, dto.coveredOrderIds, user)
+        : [];
+    const coveredIds = coveredExtra.map((o) => o.id);
+
     // Total USD + validación cap.
     const priceAmount = Number(order.priceAmount);
     let totalUsd = 0;
@@ -2654,17 +2714,40 @@ export class OrdersService implements OnModuleInit {
       if (invoiceNumber !== null) {
         await this.lockInvoiceNumbers(mgr);
         await this.assertInvoiceNumberFree(mgr, invoiceNumber, order.id);
-        await mgr.insert(OrderInvoice, {
-          orderId: order.id,
-          number: String(invoiceNumber),
-          invoiceNumber: invoiceDisplay!,
-          controlNumber: controlNumber!,
+        await this.assertCoveredOrdersFree(mgr, [order.id, ...coveredIds]);
+        // La emisora va primero; detrás, las órdenes agrupadas.
+        await this.insertInvoiceWithOrders(
+          mgr,
+          {
+            orderId: order.id,
+            number: String(invoiceNumber),
+            invoiceNumber: invoiceDisplay!,
+            controlNumber: controlNumber!,
+            invoiceDate,
+            showExchangeRate,
+            exchangeRateId: dto.billingExchangeRateId,
+            status: 'active',
+            createdById: user.id,
+          },
+          [order.id, ...coveredIds],
+        );
+        // Las agrupadas apuntan a ESTA factura (sólo el espejo fiscal: su
+        // liquidación de CxP/CxC ya quedó cerrada en su propio Paso 4).
+        await this.writeInvoiceMirror(mgr, coveredIds, {
+          invoiceNumber: invoiceDisplay,
+          controlNumber,
           invoiceDate,
-          showExchangeRate,
-          exchangeRateId: dto.billingExchangeRateId,
-          status: 'active',
-          createdById: user.id,
+          invoiceShowExchangeRate: showExchangeRate,
+          invoiceExchangeRateId: dto.billingExchangeRateId,
         });
+        for (const covered of coveredExtra) {
+          await this.logChange(mgr, covered.id, user.id, 'invoice_issue', {
+            invoiceNumber: { to: invoiceDisplay },
+            controlNumber: { to: controlNumber },
+            invoiceDate: { to: invoiceDate },
+            groupedWithOrderNumber: { to: order.orderNumber },
+          });
+        }
       }
       // `update` por columnas — la orden trae `providerReports` cargada y
       // `save(order)` intentaría sincronizar esa relación (nullear FKs).
@@ -2735,6 +2818,13 @@ export class OrdersService implements OnModuleInit {
                 from: order.invoiceExchangeRateId ?? null,
                 to: dto.billingExchangeRateId,
               },
+              ...(coveredExtra.length
+                ? {
+                    coveredOrderNumbers: {
+                      to: coveredExtra.map((o) => o.orderNumber).join(', '),
+                    },
+                  }
+                : {}),
             }
           : { invoiceNumber: { to: null } }),
       });
@@ -2919,6 +3009,259 @@ export class OrdersService implements OnModuleInit {
     };
   }
 
+  // ---- Facturas agrupadas (una factura, varias órdenes) ----
+
+  /**
+   * Clave del CONTRATANTE de la factura. Sólo se pueden agrupar órdenes que la
+   * comparten, porque el encabezado del documento (razón social, RIF, dirección
+   * fiscal, contratante) sale de ahí.
+   *
+   *  - seguro → mismo seguro + misma vía (directo / vía contratista).
+   *  - contado / crédito / cashea → mismo titular.
+   */
+  private invoiceContratanteKey(order: Order): string {
+    if (order.type === 'insurance') {
+      return `insurance:${order.insuranceId ?? ''}:${order.insuranceSource ?? ''}:${order.contractorId ?? ''}`;
+    }
+    return `holder:${order.holderId}`;
+  }
+
+  /**
+   * Valida y carga las órdenes ADICIONALES que una factura agrupada cubre.
+   *
+   * Todas deben: existir y estar visibles, no estar canceladas, estar
+   * `finalized`, no tener factura vigente, y compartir sucursal, tipo y
+   * contratante con la orden emisora. La emisora NO se incluye acá (la agrega
+   * el llamador como primera orden cubierta).
+   */
+  private async resolveCoveredOrders(
+    issuer: Order,
+    ids: string[] | undefined,
+    user: AuthenticatedUser,
+  ): Promise<Order[]> {
+    const wanted = Array.from(new Set(ids ?? [])).filter(
+      (id) => id !== issuer.id,
+    );
+    if (!wanted.length) return [];
+
+    const found = await this.repo.find({
+      where: { id: In(wanted) },
+      loadEagerRelations: false,
+    });
+    const byId = new Map(found.map((o) => [o.id, o]));
+    const missing = wanted.filter((id) => !byId.has(id));
+    if (missing.length) {
+      throw new BadRequestException(
+        `No se encontraron ${missing.length} de las órdenes que quieres agrupar en la factura`,
+      );
+    }
+
+    const issuerKey = this.invoiceContratanteKey(issuer);
+    for (const o of found) {
+      await this.assertBranchVisibility(o.branchId, user);
+      if (o.status === 'cancelled') {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} está cancelada: no puede ir en la factura`,
+        );
+      }
+      if (o.status !== 'finalized') {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} todavía no pasó por facturación (Paso 4): finalízala antes de agruparla`,
+        );
+      }
+      if (o.branchId !== issuer.branchId) {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} es de otra sucursal: no se puede agrupar`,
+        );
+      }
+      if (o.type !== issuer.type) {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} es de otro tipo de orden: sólo se agrupan órdenes del mismo tipo (las condiciones de pago de la factura serían distintas)`,
+        );
+      }
+      if (this.invoiceContratanteKey(o) !== issuerKey) {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} tiene otro contratante: sólo se agrupan órdenes del mismo titular o del mismo seguro`,
+        );
+      }
+    }
+
+    // Una orden a lo sumo en UNA factura vigente (lo garantiza además el índice
+    // parcial `uq_oio_order_active`; acá el mensaje es entendible).
+    const taken = await this.repo.manager.query<
+      Array<{ orderNumber: string; invoiceNumber: string }>
+    >(
+      `SELECT o."orderNumber", i."invoiceNumber"
+         FROM "order_invoice_orders" p
+         JOIN "order_invoices" i ON i."id" = p."invoiceId"
+         JOIN "orders" o ON o."id" = p."orderId"
+        WHERE p."orderId" = ANY($1::uuid[]) AND NOT p."cancelled"`,
+      [wanted],
+    );
+    if (taken.length) {
+      const list = taken
+        .map((t) => `N° ${t.orderNumber} (factura ${t.invoiceNumber})`)
+        .join(', ');
+      throw new BadRequestException(
+        `Estas órdenes ya tienen factura vigente: ${list}. Anúlala primero si la quieres agrupar.`,
+      );
+    }
+
+    // Mismo orden en que las pidió el usuario.
+    return wanted.map((id) => byId.get(id)!);
+  }
+
+  /**
+   * Re-chequea DENTRO de la transacción (tras tomar el lock de numeración) que
+   * ninguna de las órdenes siga libre de factura vigente: entre la validación
+   * previa y el INSERT, otra sesión pudo facturarlas. Sin esto el choque sale
+   * como un error crudo del índice `uq_oio_order_active`.
+   */
+  private async assertCoveredOrdersFree(
+    mgr: EntityManager,
+    orderIds: string[],
+  ): Promise<void> {
+    if (!orderIds.length) return;
+    const taken = await mgr.query<
+      Array<{ orderNumber: string; invoiceNumber: string }>
+    >(
+      `SELECT o."orderNumber", i."invoiceNumber"
+         FROM "order_invoice_orders" p
+         JOIN "order_invoices" i ON i."id" = p."invoiceId"
+         JOIN "orders" o ON o."id" = p."orderId"
+        WHERE p."orderId" = ANY($1::uuid[]) AND NOT p."cancelled"`,
+      [orderIds],
+    );
+    if (taken.length) {
+      const list = taken
+        .map((t) => `N° ${t.orderNumber} (factura ${t.invoiceNumber})`)
+        .join(', ');
+      throw new BadRequestException(
+        `Estas órdenes ya tienen factura vigente: ${list}. Anúlala primero si la quieres agrupar.`,
+      );
+    }
+  }
+
+  /**
+   * Inserta la factura y su pivot de órdenes cubiertas (`orderIds[0]` es la
+   * emisora). Devuelve el id de la factura.
+   */
+  private async insertInvoiceWithOrders(
+    mgr: EntityManager,
+    data: Partial<OrderInvoice>,
+    orderIds: string[],
+  ): Promise<string> {
+    const res = await mgr.insert(OrderInvoice, data);
+    const invoiceId = String(res.identifiers[0].id);
+    await mgr.insert(
+      OrderInvoiceOrder,
+      orderIds.map((orderId) => ({ invoiceId, orderId, cancelled: false })),
+    );
+    return invoiceId;
+  }
+
+  /**
+   * Escribe (o limpia) en TODAS las órdenes cubiertas el espejo de la factura
+   * vigente. NO toca `billingExchangeRateId`: la liquidación de CxP/CxC de cada
+   * orden ya quedó cerrada en su propio Paso 4 y la factura no la altera.
+   */
+  private async writeInvoiceMirror(
+    mgr: EntityManager,
+    orderIds: string[],
+    mirror: {
+      invoiceNumber: string | null;
+      controlNumber: string | null;
+      invoiceDate: string | null;
+      invoiceShowExchangeRate: boolean | null;
+      invoiceExchangeRateId: string | null;
+    },
+  ): Promise<void> {
+    if (!orderIds.length) return;
+    await mgr.update(Order, { id: In(orderIds) }, mirror);
+  }
+
+  /**
+   * Órdenes que se pueden AGRUPAR en la misma factura que `id`: mismo
+   * contratante, mismo tipo, misma sucursal, ya finalizadas y todavía sin
+   * factura vigente. Alimenta el selector del Paso 4.
+   */
+  async invoiceableOrders(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<
+    Array<{
+      id: string;
+      orderNumber: string;
+      orderDate: string;
+      priceAmount: string;
+      serviceKey: string | null;
+      patientName: string;
+      serviceTypesCount: number;
+    }>
+  > {
+    const order = await this.findOne(id, user);
+    const isInsurance = order.type === 'insurance';
+    const rows = await this.repo.manager.query<
+      Array<{
+        id: string;
+        orderNumber: string;
+        orderDate: string;
+        priceAmount: string;
+        serviceKey: string | null;
+        patientName: string;
+        serviceTypesCount: string;
+      }>
+    >(
+      `SELECT o."id",
+              o."orderNumber",
+              to_char(o."orderDate", 'YYYY-MM-DD') AS "orderDate",
+              o."priceAmount",
+              o."serviceKey",
+              COALESCE(
+                NULLIF(BTRIM(CONCAT_WS(' ', pa."firstName", pa."lastName")), ''),
+                pa."businessName",
+                ''
+              ) AS "patientName",
+              (SELECT COUNT(*) FROM "order_service_types" ost
+                WHERE ost."orderId" = o."id") AS "serviceTypesCount"
+         FROM "orders" o
+         LEFT JOIN "patients" pa ON pa."id" = o."patientId"
+        WHERE o."deletedAt" IS NULL
+          AND o."id" <> $1
+          AND o."status" = 'finalized'
+          AND o."branchId" = $2
+          AND o."type" = $3
+          AND (
+            CASE WHEN $4::boolean
+              THEN o."insuranceId" IS NOT DISTINCT FROM $5::uuid
+               AND o."insuranceSource" IS NOT DISTINCT FROM $6::varchar
+               AND o."contractorId" IS NOT DISTINCT FROM $7::uuid
+              ELSE o."holderId" = $8::uuid
+            END
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM "order_invoice_orders" pv
+             WHERE pv."orderId" = o."id" AND NOT pv."cancelled"
+          )
+        ORDER BY o."orderDate" DESC, o."orderNumber" DESC
+        LIMIT 100`,
+      [
+        order.id,
+        order.branchId,
+        order.type,
+        isInsurance,
+        order.insuranceId ?? null,
+        order.insuranceSource ?? null,
+        order.contractorId ?? null,
+        order.holderId,
+      ],
+    );
+    return rows.map((r) => ({
+      ...r,
+      serviceTypesCount: Number(r.serviceTypesCount) || 0,
+    }));
+  }
+
   /**
    * Emite una factura NUEVA para una orden ya finalizada cuya factura vigente
    * fue anulada. No toca la liquidación por proveedor ni las conversiones de
@@ -2958,36 +3301,58 @@ export class OrdersService implements OnModuleInit {
       await resolveUsdRate(this.ratesRepo, dto.exchangeRateId);
     }
 
+    // Factura AGRUPADA: otras órdenes finalizadas del mismo contratante que
+    // salen en esta misma factura (el caso del paciente que se atendió varias
+    // veces y pide un solo documento).
+    const coveredExtra = await this.resolveCoveredOrders(
+      order,
+      dto.coveredOrderIds,
+      user,
+    );
+    const coveredIds = coveredExtra.map((o) => o.id);
+
     await this.dataSource.transaction(async (mgr) => {
       await this.lockInvoiceNumbers(mgr);
       await this.assertInvoiceNumberFree(mgr, number);
-      await mgr.insert(OrderInvoice, {
-        orderId: order.id,
-        number: String(number),
-        invoiceNumber: invoiceDisplay,
-        controlNumber,
-        invoiceDate,
-        showExchangeRate,
-        exchangeRateId: rateId,
-        status: 'active',
-        createdById: user.id,
-      });
-      await mgr.update(
-        Order,
-        { id: order.id },
+      await this.assertCoveredOrdersFree(mgr, [order.id, ...coveredIds]);
+      await this.insertInvoiceWithOrders(
+        mgr,
         {
+          orderId: order.id,
+          number: String(number),
           invoiceNumber: invoiceDisplay,
           controlNumber,
           invoiceDate,
-          invoiceShowExchangeRate: showExchangeRate,
-          invoiceExchangeRateId: rateId,
+          showExchangeRate,
+          exchangeRateId: rateId,
+          status: 'active',
+          createdById: user.id,
         },
+        [order.id, ...coveredIds],
       );
-      await this.logChange(mgr, order.id, user.id, 'invoice_issue', {
-        invoiceNumber: { to: invoiceDisplay },
-        controlNumber: { to: controlNumber },
-        invoiceDate: { to: invoiceDate },
+      await this.writeInvoiceMirror(mgr, [order.id, ...coveredIds], {
+        invoiceNumber: invoiceDisplay,
+        controlNumber,
+        invoiceDate,
+        invoiceShowExchangeRate: showExchangeRate,
+        invoiceExchangeRateId: rateId,
       });
+      for (const covered of [order, ...coveredExtra]) {
+        await this.logChange(mgr, covered.id, user.id, 'invoice_issue', {
+          invoiceNumber: { to: invoiceDisplay },
+          controlNumber: { to: controlNumber },
+          invoiceDate: { to: invoiceDate },
+          ...(covered.id === order.id
+            ? coveredExtra.length
+              ? {
+                  coveredOrderNumbers: {
+                    to: coveredExtra.map((o) => o.orderNumber).join(', '),
+                  },
+                }
+              : {}
+            : { groupedWithOrderNumber: { to: order.orderNumber } }),
+        });
+      }
     });
     return this.findOne(id, user);
   }
@@ -3011,6 +3376,10 @@ export class OrdersService implements OnModuleInit {
     if (invoice.status === 'cancelled') {
       throw new BadRequestException('La factura ya está anulada');
     }
+    // Todas las órdenes que cubre la factura (en una agrupada, varias).
+    const coveredIds = (invoice.coveredOrders ?? []).map((o) => o.id);
+    if (!coveredIds.includes(order.id)) coveredIds.push(order.id);
+
     await this.dataSource.transaction(async (mgr) => {
       await mgr.update(
         OrderInvoice,
@@ -3022,26 +3391,37 @@ export class OrdersService implements OnModuleInit {
           cancelledById: user.id,
         },
       );
-      // El espejo de la orden apunta a la factura vigente: al anularla queda
-      // vacío (reportes y estado de cuenta dejan de mostrar ese número).
-      if (order.invoiceNumber === invoice.invoiceNumber) {
-        await mgr.update(
-          Order,
-          { id: order.id },
-          {
-            invoiceNumber: null,
-            controlNumber: null,
-            invoiceDate: null,
-            invoiceShowExchangeRate: null,
-            invoiceExchangeRateId: null,
-          },
-        );
+      // Espejo del pivot: al quedar `cancelled`, las órdenes salen del índice
+      // parcial y vuelven a poder entrar en otra factura.
+      await mgr.update(
+        OrderInvoiceOrder,
+        { invoiceId: invoice.id },
+        { cancelled: true },
+      );
+      // El espejo de cada orden apunta a la factura vigente: al anularla queda
+      // vacío (reportes y estado de cuenta dejan de mostrar ese número). Sólo
+      // se limpian las que muestran ESTA factura.
+      await this.writeInvoiceMirror(
+        mgr,
+        coveredIds.filter(
+          (oid) =>
+            oid !== order.id || order.invoiceNumber === invoice.invoiceNumber,
+        ),
+        {
+          invoiceNumber: null,
+          controlNumber: null,
+          invoiceDate: null,
+          invoiceShowExchangeRate: null,
+          invoiceExchangeRateId: null,
+        },
+      );
+      for (const oid of coveredIds) {
+        await this.logChange(mgr, oid, user.id, 'invoice_cancel', {
+          invoiceNumber: { from: invoice.invoiceNumber, to: null },
+          controlNumber: { from: invoice.controlNumber, to: null },
+          cancelReason: { to: dto.reason },
+        });
       }
-      await this.logChange(mgr, order.id, user.id, 'invoice_cancel', {
-        invoiceNumber: { from: invoice.invoiceNumber, to: null },
-        controlNumber: { from: invoice.controlNumber, to: null },
-        cancelReason: { to: dto.reason },
-      });
     });
     return this.findOne(id, user);
   }

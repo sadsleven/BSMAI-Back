@@ -48,7 +48,8 @@ export class QueryUsersDto {
   @IsOptional()
   @Transform(({ value }) => {
     if (Array.isArray(value)) return value as string[];
-    if (typeof value === 'string' && value.length) return value.split(',').filter(Boolean);
+    if (typeof value === 'string' && value.length)
+      return value.split(',').filter(Boolean);
     return undefined;
   })
   @IsArray()
@@ -57,11 +58,14 @@ export class QueryUsersDto {
 
   @IsOptional()
   @IsIn(['firstName', 'lastName', 'email', 'createdAt', 'updatedAt'])
-  sortBy?: 'firstName' | 'lastName' | 'email' | 'createdAt' | 'updatedAt' = 'createdAt';
+  sortBy?: 'firstName' | 'lastName' | 'email' | 'createdAt' | 'updatedAt' =
+    'createdAt';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])
-  @Transform(({ value }) => (typeof value === 'string' ? value.toUpperCase() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toUpperCase() : value,
+  )
   sortDir?: 'ASC' | 'DESC' = 'DESC';
 
   @IsOptional()

@@ -12,6 +12,8 @@ export class AddOrderServiceKey1782003300000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "orders" DROP COLUMN IF EXISTS "serviceKey"`);
+    await queryRunner.query(
+      `ALTER TABLE "orders" DROP COLUMN IF EXISTS "serviceKey"`,
+    );
   }
 }

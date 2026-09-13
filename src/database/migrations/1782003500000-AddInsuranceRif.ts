@@ -12,6 +12,8 @@ export class AddInsuranceRif1782003500000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS "UQ_insurances_rif_partial"`);
-    await queryRunner.query(`ALTER TABLE "insurances" DROP COLUMN IF EXISTS "rif"`);
+    await queryRunner.query(
+      `ALTER TABLE "insurances" DROP COLUMN IF EXISTS "rif"`,
+    );
   }
 }

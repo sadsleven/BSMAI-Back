@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Pathology } from './entities/pathology.entity';
@@ -14,7 +18,9 @@ export class PathologiesService {
     @InjectRepository(Pathology) private readonly repo: Repository<Pathology>,
   ) {}
 
-  async findAll(query: QueryPathologiesDto): Promise<PaginatedResponse<Pathology>> {
+  async findAll(
+    query: QueryPathologiesDto,
+  ): Promise<PaginatedResponse<Pathology>> {
     const {
       page = 1,
       limit = 10,
@@ -26,7 +32,9 @@ export class PathologiesService {
       isActive,
     } = query;
 
-    const qb = this.repo.createQueryBuilder('pathology').orderBy(`pathology.${sortBy}`, sortDir);
+    const qb = this.repo
+      .createQueryBuilder('pathology')
+      .orderBy(`pathology.${sortBy}`, sortDir);
 
     if (onlyDeleted === 'true') {
       qb.withDeleted().andWhere('pathology.deletedAt IS NOT NULL');
@@ -49,7 +57,10 @@ export class PathologiesService {
   }
 
   async findAssignable(): Promise<Pathology[]> {
-    return this.repo.find({ where: { isActive: true }, order: { name: 'ASC' } });
+    return this.repo.find({
+      where: { isActive: true },
+      order: { name: 'ASC' },
+    });
   }
 
   async findOne(id: string, withDeleted = false): Promise<Pathology> {
@@ -59,8 +70,12 @@ export class PathologiesService {
   }
 
   async create(dto: CreatePathologyDto): Promise<Pathology> {
-    const exists = await this.repo.findOne({ where: { name: dto.name }, withDeleted: true });
-    if (exists) throw new ConflictException('Ya existe una patología con ese nombre');
+    const exists = await this.repo.findOne({
+      where: { name: dto.name },
+      withDeleted: true,
+    });
+    if (exists)
+      throw new ConflictException('Ya existe una patología con ese nombre');
     const pathology = this.repo.create({
       name: dto.name,
       description: dto.description ?? null,
@@ -72,11 +87,16 @@ export class PathologiesService {
   async update(id: string, dto: UpdatePathologyDto): Promise<Pathology> {
     const pathology = await this.findOne(id);
     if (dto.name && dto.name !== pathology.name) {
-      const dupe = await this.repo.findOne({ where: { name: dto.name }, withDeleted: true });
-      if (dupe) throw new ConflictException('Ya existe una patología con ese nombre');
+      const dupe = await this.repo.findOne({
+        where: { name: dto.name },
+        withDeleted: true,
+      });
+      if (dupe)
+        throw new ConflictException('Ya existe una patología con ese nombre');
       pathology.name = dto.name;
     }
-    if (dto.description !== undefined) pathology.description = dto.description ?? null;
+    if (dto.description !== undefined)
+      pathology.description = dto.description ?? null;
     if (dto.isActive !== undefined) pathology.isActive = dto.isActive;
     return this.repo.save(pathology);
   }
@@ -98,7 +118,10 @@ export class PathologiesService {
   }
 
   async restore(id: string): Promise<Pathology> {
-    const pathology = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const pathology = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!pathology) throw new NotFoundException('Patología no encontrada');
     if (!pathology.deletedAt) return pathology;
     await this.repo.restore(id);

@@ -1,4 +1,11 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
+} from 'typeorm';
 import { AccountsPayable } from './accounts-payable.entity';
 import { OrderInternalOrder } from '../../orders/entities/order-internal-order.entity';
 

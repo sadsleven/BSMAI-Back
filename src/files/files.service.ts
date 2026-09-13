@@ -72,13 +72,24 @@ export class FilesService {
       dto.kind ?? null,
     );
 
-    await this.assertOwnerAccess(dto.ownerType, dto.ownerId, user, 'upload', kind);
+    await this.assertOwnerAccess(
+      dto.ownerType,
+      dto.ownerId,
+      user,
+      'upload',
+      kind,
+    );
 
     if (!this.matchesAnyMime(file.mimetype, allowedContentTypes)) {
       throw new BadRequestException(`Tipo MIME no permitido: ${file.mimetype}`);
     }
 
-    const pathname = this.buildPathname(dto.ownerType, dto.ownerId, kind, file.originalname);
+    const pathname = this.buildPathname(
+      dto.ownerType,
+      dto.ownerId,
+      kind,
+      file.originalname,
+    );
     const uploadResult = await this.storage.upload({
       buffer: file.buffer,
       pathname,
@@ -136,7 +147,13 @@ export class FilesService {
   // ---- Listado / Get ----------------------------------------------------
 
   async list(q: QueryFilesDto, user: AuthenticatedUser): Promise<FileEntity[]> {
-    await this.assertOwnerAccess(q.ownerType, q.ownerId, user, 'view', q.kind ?? null);
+    await this.assertOwnerAccess(
+      q.ownerType,
+      q.ownerId,
+      user,
+      'view',
+      q.kind ?? null,
+    );
     return this.repo.find({
       where: {
         ownerType: q.ownerType,
@@ -155,7 +172,13 @@ export class FilesService {
       relations: { uploadedBy: true },
     });
     if (!file) throw new NotFoundException('Archivo no encontrado');
-    await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'view', file.kind);
+    await this.assertOwnerAccess(
+      file.ownerType,
+      file.ownerId,
+      user,
+      'view',
+      file.kind,
+    );
     return file;
   }
 
@@ -181,9 +204,17 @@ export class FilesService {
   // ---- Delete (hard — quita del storage también) ------------------------
 
   async remove(id: string, user: AuthenticatedUser): Promise<void> {
-    const file = await this.repo.findOne({ where: { id, deletedAt: IsNull() } });
+    const file = await this.repo.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
     if (!file) throw new NotFoundException('Archivo no encontrado');
-    await this.assertOwnerAccess(file.ownerType, file.ownerId, user, 'delete', file.kind);
+    await this.assertOwnerAccess(
+      file.ownerType,
+      file.ownerId,
+      user,
+      'delete',
+      file.kind,
+    );
     await this.storageRegistry.resolve(file.storageProvider).delete(file.url);
     await this.repo.softDelete(file.id);
   }
@@ -242,13 +273,16 @@ export class FilesService {
           user.permissions.includes(PERMISSIONS.ORDERS.LIST) ||
           user.permissions.includes(PERMISSIONS.ORDERS.STAGE_REPORT);
         if (!canList) {
-          throw new ForbiddenException('Sin permiso para ver archivos de la orden');
+          throw new ForbiddenException(
+            'Sin permiso para ver archivos de la orden',
+          );
         }
         return;
       }
 
       const canManage =
-        user.isSuperAdmin || user.permissions.includes(PERMISSIONS.ORDERS.STAGE_REPORT);
+        user.isSuperAdmin ||
+        user.permissions.includes(PERMISSIONS.ORDERS.STAGE_REPORT);
       if (!canManage) {
         throw new ForbiddenException(
           'Necesitás el permiso orders.stage-report para gestionar archivos del informe',
@@ -262,7 +296,9 @@ export class FilesService {
     throw new BadRequestException(`ownerType no soportado: ${ownerType}`);
   }
 
-  private async resolveUserBranchIds(user: AuthenticatedUser): Promise<string[]> {
+  private async resolveUserBranchIds(
+    user: AuthenticatedUser,
+  ): Promise<string[]> {
     if (user.isSuperAdmin) {
       const all = await this.branchesRepo.find({
         where: { isActive: true, deletedAt: IsNull() },

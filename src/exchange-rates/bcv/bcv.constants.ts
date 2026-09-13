@@ -34,7 +34,11 @@ export const BCV_CURRENCY_ELEMENT_ID = {
  * </div>
  * ```
  */
-export const BCV_DATE_CONTAINER_CLASSES = ['pull-right', 'dinpro', 'center'] as const;
+export const BCV_DATE_CONTAINER_CLASSES = [
+  'pull-right',
+  'dinpro',
+  'center',
+] as const;
 
 /** Meses en español, para el fallback de parseo de `Fecha Valor` sin `content`. */
 export const SPANISH_MONTHS: Record<string, number> = {

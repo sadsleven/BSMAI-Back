@@ -17,7 +17,9 @@ export class AddUserAcademicJobFields1782003400000 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "jobTitle"`);
+    await queryRunner.query(
+      `ALTER TABLE "users" DROP COLUMN IF EXISTS "jobTitle"`,
+    );
     await queryRunner.query(
       `ALTER TABLE "users" DROP COLUMN IF EXISTS "academicDegree"`,
     );

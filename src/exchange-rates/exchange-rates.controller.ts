@@ -76,7 +76,10 @@ export class ExchangeRatesController {
 
   @RequirePermissions(PERMISSIONS.EXCHANGE_RATES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateExchangeRateDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateExchangeRateDto,
+  ) {
     return this.service.update(id, dto);
   }
 

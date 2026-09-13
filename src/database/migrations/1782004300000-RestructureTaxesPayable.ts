@@ -20,7 +20,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class RestructureTaxesPayable1782004300000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Wipe estructura anterior
-    await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payment_links"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "taxes_payable_payment_links"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payments"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable"`);
 
@@ -53,10 +55,18 @@ export class RestructureTaxesPayable1782004300000 implements MigrationInterface 
         CONSTRAINT "ck_tp_status" CHECK ("status" IN ('unpaid', 'partially_paid', 'paid'))
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_tp_status" ON "taxes_payable"("status")`);
-    await queryRunner.query(`CREATE INDEX "idx_tp_doctor" ON "taxes_payable"("doctorId")`);
-    await queryRunner.query(`CREATE INDEX "idx_tp_careCenter" ON "taxes_payable"("careCenterId")`);
-    await queryRunner.query(`CREATE INDEX "idx_tp_taxUnit" ON "taxes_payable"("taxUnitId")`);
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_status" ON "taxes_payable"("status")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_doctor" ON "taxes_payable"("doctorId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_careCenter" ON "taxes_payable"("careCenterId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_tp_taxUnit" ON "taxes_payable"("taxUnitId")`,
+    );
 
     // Pivot tax_payable ↔ orders (factura agrupada lista órdenes)
     await queryRunner.query(`
@@ -135,7 +145,9 @@ export class RestructureTaxesPayable1782004300000 implements MigrationInterface 
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payment_links"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "taxes_payable_payment_links"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payments"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_payables"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "taxes_payable_orders"`);

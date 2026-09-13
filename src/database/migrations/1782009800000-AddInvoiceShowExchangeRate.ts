@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * (`!useFixedRate`). Por eso las órdenes ya facturadas NO se backfillean: su
  * factura histórica sale exactamente igual que antes.
  */
-export class AddInvoiceShowExchangeRate1782009800000
-  implements MigrationInterface
-{
+export class AddInvoiceShowExchangeRate1782009800000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "orders"

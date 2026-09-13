@@ -16,7 +16,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  */
 export class CreateCreditsReceivable1782003700000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE SEQUENCE IF NOT EXISTS credits_receivable_seq START 1`);
+    await queryRunner.query(
+      `CREATE SEQUENCE IF NOT EXISTS credits_receivable_seq START 1`,
+    );
 
     await queryRunner.query(`
       CREATE TABLE "credits_receivable" (
@@ -31,8 +33,12 @@ export class CreateCreditsReceivable1782003700000 implements MigrationInterface 
         "deletedAt" timestamptz NULL
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_cr_status" ON "credits_receivable"("status")`);
-    await queryRunner.query(`CREATE INDEX "idx_cr_holder" ON "credits_receivable"("holderId")`);
+    await queryRunner.query(
+      `CREATE INDEX "idx_cr_status" ON "credits_receivable"("status")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "idx_cr_holder" ON "credits_receivable"("holderId")`,
+    );
 
     await queryRunner.query(`
       CREATE TABLE "credits_receivable_payments" (
@@ -78,8 +84,12 @@ export class CreateCreditsReceivable1782003700000 implements MigrationInterface 
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "credits_receivable_payment_links"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "credits_receivable_payments"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "credits_receivable_payment_links"`,
+    );
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "credits_receivable_payments"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "credits_receivable"`);
     await queryRunner.query(`DROP SEQUENCE IF EXISTS credits_receivable_seq`);
   }

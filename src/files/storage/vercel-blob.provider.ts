@@ -66,7 +66,9 @@ export class VercelBlobProvider implements StorageProvider {
     try {
       await del(url, { token });
     } catch (err) {
-      this.logger.warn(`No se pudo borrar blob ${url}: ${(err as Error).message}`);
+      this.logger.warn(
+        `No se pudo borrar blob ${url}: ${(err as Error).message}`,
+      );
     }
   }
 }

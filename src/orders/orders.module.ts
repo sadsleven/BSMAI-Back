@@ -10,6 +10,7 @@ import { OrderProviderReport } from './entities/order-provider-report.entity';
 import { OrderInternalOrder } from './entities/order-internal-order.entity';
 import { OrderChangeLog } from './entities/order-change-log.entity';
 import { OrderInvoice } from './entities/order-invoice.entity';
+import { OrderInvoiceOrder } from './entities/order-invoice-order.entity';
 import { Patient } from '../patients/entities/patient.entity';
 import { Doctor } from '../doctors/entities/doctor.entity';
 import { CareCenter } from '../care-centers/entities/care-center.entity';
@@ -43,6 +44,7 @@ import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.m
       OrderInternalOrder,
       OrderChangeLog,
       OrderInvoice,
+      OrderInvoiceOrder,
       Patient,
       Doctor,
       CareCenter,

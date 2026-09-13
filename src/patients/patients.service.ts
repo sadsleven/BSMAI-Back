@@ -275,7 +275,9 @@ export class PatientsService {
 
     const patient = this.repo.create({
       ...base,
-      phones: dto.phones.map((p) => this.phonesRepo.create(this.phonePayload(p))),
+      phones: dto.phones.map((p) =>
+        this.phonesRepo.create(this.phonePayload(p)),
+      ),
       contractors,
       insurances: directInsurances,
     });
@@ -292,10 +294,13 @@ export class PatientsService {
     const merged = {
       personType: effectiveType,
       cedula: dto.cedula !== undefined ? dto.cedula : patient.cedula,
-      firstName: dto.firstName !== undefined ? dto.firstName : patient.firstName,
+      firstName:
+        dto.firstName !== undefined ? dto.firstName : patient.firstName,
       lastName: dto.lastName !== undefined ? dto.lastName : patient.lastName,
       businessName:
-        dto.businessName !== undefined ? dto.businessName : patient.businessName,
+        dto.businessName !== undefined
+          ? dto.businessName
+          : patient.businessName,
       rif: dto.rif !== undefined ? dto.rif : patient.rif,
     };
     this.assertPersonTypeFields(effectiveType, merged);
@@ -333,13 +338,17 @@ export class PatientsService {
     }
 
     if (dto.birthDate !== undefined) patient.birthDate = dto.birthDate || null;
-    if (dto.address !== undefined) patient.address = dto.address?.trim() || null;
+    if (dto.address !== undefined)
+      patient.address = dto.address?.trim() || null;
     if (dto.isActive !== undefined) patient.isActive = dto.isActive;
 
     if (dto.phones) {
       await this.phonesRepo.delete({ patientId: patient.id });
       patient.phones = dto.phones.map((p) =>
-        this.phonesRepo.create({ ...this.phonePayload(p), patientId: patient.id }),
+        this.phonesRepo.create({
+          ...this.phonePayload(p),
+          patientId: patient.id,
+        }),
       );
     }
 
@@ -382,7 +391,10 @@ export class PatientsService {
   }
 
   async restore(id: string): Promise<Patient> {
-    const patient = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const patient = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!patient) throw new NotFoundException('Paciente no encontrado');
     if (!patient.deletedAt) return patient;
     await this.repo.restore(id);
@@ -430,18 +442,30 @@ export class PatientsService {
   }
 
   private async assertUniqueCedula(cedula: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { cedula }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un paciente con esa cédula');
+    const existing = await this.repo.findOne({
+      where: { cedula },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un paciente con esa cédula');
   }
 
   private async assertUniqueRif(rif: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { rif }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un paciente con ese RIF');
+    const existing = await this.repo.findOne({
+      where: { rif },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un paciente con ese RIF');
   }
 
   private async assertUniqueEmail(email: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un paciente con ese email');
+    const existing = await this.repo.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un paciente con ese email');
   }
 
   /**
@@ -459,7 +483,9 @@ export class PatientsService {
       for (const c of contractors) {
         const covered = (c.insurances ?? []).some((i) => i.id === ins.id);
         if (covered) {
-          conflicts.push(`"${ins.name}" ya cubierto por contratista "${c.name}"`);
+          conflicts.push(
+            `"${ins.name}" ya cubierto por contratista "${c.name}"`,
+          );
           break;
         }
       }

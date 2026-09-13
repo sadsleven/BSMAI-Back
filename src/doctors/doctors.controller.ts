@@ -49,7 +49,10 @@ export class DoctorsController {
 
   @RequirePermissions(PERMISSIONS.DOCTORS.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateDoctorDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateDoctorDto,
+  ) {
     return this.service.update(id, dto);
   }
 

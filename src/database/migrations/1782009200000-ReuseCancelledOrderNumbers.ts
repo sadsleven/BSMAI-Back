@@ -20,9 +20,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * contando las canceladas, así que el rango automático nunca reparte un número
  * que una cancelada todavía muestra. La reutilización es siempre manual.
  */
-export class ReuseCancelledOrderNumbers1782009200000
-  implements MigrationInterface
-{
+export class ReuseCancelledOrderNumbers1782009200000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `ALTER TABLE "order_internal_orders"

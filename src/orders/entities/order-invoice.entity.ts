@@ -5,10 +5,12 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
+import { OrderInvoiceOrder } from './order-invoice-order.entity';
 import { User } from '../../users/entities/user.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
@@ -22,6 +24,10 @@ export type OrderInvoiceStatus = 'active' | 'cancelled';
  * `number` es el valor numérico del N° de factura y es UNIQUE global: un número
  * jamás se reutiliza, ni siquiera el de una factura anulada. `controlNumber` es
  * derivado (`number + 50` con dos ceros delante), no se captura a mano.
+ *
+ * Una factura puede AGRUPAR varias órdenes del mismo contratante: `orderId` es
+ * la orden EMISORA y `orders` (pivot `order_invoice_orders`) lista todas las
+ * cubiertas — la emisora incluida. Todas las lecturas van por el pivot.
  */
 @Entity({ name: 'order_invoices' })
 @Index('idx_order_invoices_order', ['orderId'])
@@ -35,6 +41,21 @@ export class OrderInvoice {
   @ManyToOne(() => Order, (o) => o.invoices, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'orderId' })
   order?: Order;
+
+  /** Órdenes cubiertas por esta factura (incluye la emisora). */
+  @OneToMany(() => OrderInvoiceOrder, (p) => p.invoice, { cascade: false })
+  orders?: OrderInvoiceOrder[];
+
+  /**
+   * TRANSIENT — resumen de las órdenes cubiertas, para el detalle y para que el
+   * front pueda rearmar el documento agrupado. Lo llena `OrdersService`.
+   */
+  coveredOrders?: Array<{
+    id: string;
+    orderNumber: string;
+    orderDate: string;
+    priceAmount: string;
+  }>;
 
   /**
    * Valor numérico del N° de factura (UNIQUE global, nunca reutilizable).

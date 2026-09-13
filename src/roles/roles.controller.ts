@@ -49,7 +49,10 @@ export class RolesController {
 
   @RequirePermissions(PERMISSIONS.ROLES.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateRoleDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateRoleDto,
+  ) {
     return this.service.update(id, dto);
   }
 

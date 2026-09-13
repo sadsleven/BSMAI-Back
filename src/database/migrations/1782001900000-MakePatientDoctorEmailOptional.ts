@@ -7,12 +7,12 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - Reemplaza por índice unique parcial (`WHERE email IS NOT NULL`),
  *   coherente con la convención del proyecto para `cedula` / `rif`.
  */
-export class MakePatientDoctorEmailOptional1782001900000
-  implements MigrationInterface
-{
+export class MakePatientDoctorEmailOptional1782001900000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // patients
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "email" DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "email" DROP NOT NULL`,
+    );
     await queryRunner.query(`
       DO $$
       DECLARE c text;
@@ -32,7 +32,9 @@ export class MakePatientDoctorEmailOptional1782001900000
     );
 
     // doctors
-    await queryRunner.query(`ALTER TABLE "doctors" ALTER COLUMN "email" DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "doctors" ALTER COLUMN "email" DROP NOT NULL`,
+    );
     await queryRunner.query(`
       DO $$
       DECLARE c text;
@@ -57,12 +59,16 @@ export class MakePatientDoctorEmailOptional1782001900000
     await queryRunner.query(
       `ALTER TABLE "doctors" ADD CONSTRAINT "UQ_doctors_email" UNIQUE ("email")`,
     );
-    await queryRunner.query(`ALTER TABLE "doctors" ALTER COLUMN "email" SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "doctors" ALTER COLUMN "email" SET NOT NULL`,
+    );
 
     await queryRunner.query(`DROP INDEX IF EXISTS "UQ_patients_email_partial"`);
     await queryRunner.query(
       `ALTER TABLE "patients" ADD CONSTRAINT "UQ_patients_email" UNIQUE ("email")`,
     );
-    await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "email" SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE "patients" ALTER COLUMN "email" SET NOT NULL`,
+    );
   }
 }

@@ -196,8 +196,14 @@ const standardActionLabels = (entity: string, plural: string) => ({
     label: `Listar y ver ${plural}`,
     description: `Permite listar y ver el detalle de los ${plural} del sistema`,
   },
-  create: { label: `Crear ${plural}`, description: `Permite crear nuevos ${plural}` },
-  update: { label: `Editar ${plural}`, description: `Permite modificar los datos de un ${entity}` },
+  create: {
+    label: `Crear ${plural}`,
+    description: `Permite crear nuevos ${plural}`,
+  },
+  update: {
+    label: `Editar ${plural}`,
+    description: `Permite modificar los datos de un ${entity}`,
+  },
   'toggle-active': {
     label: `Habilitar/Deshabilitar ${plural}`,
     description: `Permite habilitar o deshabilitar ${plural}`,
@@ -210,7 +216,10 @@ const standardActionLabels = (entity: string, plural: string) => ({
     label: `Eliminar ${plural} permanentemente`,
     description: `Permite eliminar ${plural} de forma definitiva`,
   },
-  restore: { label: `Restaurar ${plural}`, description: `Permite restaurar ${plural} desde la papelera` },
+  restore: {
+    label: `Restaurar ${plural}`,
+    description: `Permite restaurar ${plural} desde la papelera`,
+  },
 });
 
 const specialtiesPermissions = buildResourcePermissions(
@@ -236,7 +245,8 @@ const doctorsPermissions: PermissionDefinition[] = [
     resource: 'doctors',
     action: 'change-password',
     label: 'Cambiar contraseña de doctores',
-    description: 'Permite establecer o cambiar la contraseña de acceso de un doctor',
+    description:
+      'Permite establecer o cambiar la contraseña de acceso de un doctor',
     group: DOCTORS_GROUP,
   },
 ];
@@ -318,7 +328,8 @@ const banksPermissions = buildResourcePermissions('banks', BANKS_GROUP, {
   },
   update: {
     label: 'Editar bancos',
-    description: 'Permite modificar el código o nombre de un banco del catálogo',
+    description:
+      'Permite modificar el código o nombre de un banco del catálogo',
   },
   'toggle-active': {
     label: 'Habilitar/Deshabilitar bancos',
@@ -407,7 +418,8 @@ const ordersPermissions: PermissionDefinition[] = [
     resource: 'orders',
     action: 'stage-billing',
     label: 'Facturación y liquidación (Paso 4)',
-    description: 'Permite acceder al Paso 4 y finalizar la facturación de la orden',
+    description:
+      'Permite acceder al Paso 4 y finalizar la facturación de la orden',
     group: ORDERS_GROUP,
   },
   {
@@ -461,7 +473,8 @@ const accountsPayablePermissions: PermissionDefinition[] = [
     resource: 'accounts-payable',
     action: 'update',
     label: 'Registrar pagos a cuentas por pagar',
-    description: 'Permite registrar, editar y eliminar pagos al doctor o centro de atención',
+    description:
+      'Permite registrar, editar y eliminar pagos al doctor o centro de atención',
     group: ACCOUNTS_PAYABLE_GROUP,
   },
   {
@@ -496,7 +509,8 @@ const accountsReceivablePermissions: PermissionDefinition[] = [
     resource: 'accounts-receivable',
     action: 'update',
     label: 'Registrar cobros a cuentas por cobrar',
-    description: 'Permite registrar, editar y eliminar cobros del seguro o del titular (crédito)',
+    description:
+      'Permite registrar, editar y eliminar cobros del seguro o del titular (crédito)',
     group: ACCOUNTS_RECEIVABLE_GROUP,
   },
   {
@@ -531,7 +545,8 @@ const taxesPayablePermissions: PermissionDefinition[] = [
     resource: 'taxes-payable',
     action: 'update',
     label: 'Registrar pagos a retenciones por pagar',
-    description: 'Permite registrar, editar y eliminar pagos de la retención al SENIAT',
+    description:
+      'Permite registrar, editar y eliminar pagos de la retención al SENIAT',
     group: TAXES_PAYABLE_GROUP,
   },
   {
@@ -539,97 +554,106 @@ const taxesPayablePermissions: PermissionDefinition[] = [
     resource: 'taxes-payable',
     action: 'soft-delete',
     label: 'Anular lotes de retenciones por pagar',
-    description: 'Permite anular un lote SENIAT y liberar sus retenciones a Pendientes',
+    description:
+      'Permite anular un lote SENIAT y liberar sus retenciones a Pendientes',
     group: TAXES_PAYABLE_GROUP,
   },
 ];
 
-const reportsDefs: Array<{ key: string; label: string; description: string }> = [
-  {
-    key: 'receivables',
-    label: 'Ver reporte de cuentas por cobrar',
-    description: 'Permite acceder al reporte detallado de cuentas por cobrar',
-  },
-  {
-    key: 'payables',
-    label: 'Ver reporte de cuentas por pagar',
-    description: 'Permite acceder al reporte detallado de cuentas por pagar',
-  },
-  {
-    key: 'financial-summary',
-    label: 'Ver resumen financiero',
-    description: 'Permite acceder al reporte de ingresos vs egresos por mes',
-  },
-  {
-    key: 'doctor-production',
-    label: 'Ver producción por médico',
-    description: 'Permite acceder al reporte de producción agrupada por proveedor',
-  },
-  {
-    key: 'insurance-production',
-    label: 'Ver producción por aseguradora',
-    description: 'Permite acceder al reporte de producción agrupada por aseguradora',
-  },
-  {
-    key: 'aging',
-    label: 'Ver antigüedad de saldos',
-    description: 'Permite acceder al reporte de aging de cuentas por cobrar y por pagar',
-  },
-  {
-    key: 'collections',
-    label: 'Ver reporte de cobros recibidos',
-    description: 'Permite acceder al listado de cobros registrados de aseguradoras',
-  },
-  {
-    key: 'disbursements',
-    label: 'Ver reporte de pagos emitidos',
-    description: 'Permite acceder al listado de pagos a proveedores y al SENIAT',
-  },
-  {
-    key: 'orders-tracking',
-    label: 'Ver seguimiento de órdenes',
-    description: 'Permite acceder al reporte de órdenes por etapa del flujo',
-  },
-  {
-    key: 'services-billed',
-    label: 'Ver servicios facturados',
-    description: 'Permite acceder al reporte de demanda por tipo de servicio',
-  },
-  {
-    key: 'taxes-retained',
-    label: 'Ver reporte de impuestos retenidos',
-    description: 'Permite acceder al reporte detallado de retenciones aplicadas',
-  },
-  {
-    key: 'arc',
-    label: 'Ver comprobantes ARC',
-    description:
-      'Permite descargar los comprobantes ARC anuales de retención por médico o centro de salud',
-  },
-  {
-    key: 'executive-panel',
-    label: 'Ver panel ejecutivo',
-    description: 'Permite acceder al panel ejecutivo con gráficos de flujo de caja y órdenes',
-  },
-  {
-    key: 'orders-analytics',
-    label: 'Ver análisis de órdenes',
-    description:
-      'Permite ver la sección de análisis de órdenes (volumen y mezcla) dentro del panel ejecutivo',
-  },
-  {
-    key: 'insurer-collections',
-    label: 'Ver cobranzas por aseguradora',
-    description:
-      'Permite ver la sección de cobranzas por compañía de seguros dentro del panel ejecutivo',
-  },
-  {
-    key: 'payment-account-inflows',
-    label: 'Ver dinero recibido por cuenta bancaria',
-    description:
-      'Permite acceder al reporte de dinero recibido en las cuentas propias (órdenes y cuentas por cobrar)',
-  },
-];
+const reportsDefs: Array<{ key: string; label: string; description: string }> =
+  [
+    {
+      key: 'receivables',
+      label: 'Ver reporte de cuentas por cobrar',
+      description: 'Permite acceder al reporte detallado de cuentas por cobrar',
+    },
+    {
+      key: 'payables',
+      label: 'Ver reporte de cuentas por pagar',
+      description: 'Permite acceder al reporte detallado de cuentas por pagar',
+    },
+    {
+      key: 'financial-summary',
+      label: 'Ver resumen financiero',
+      description: 'Permite acceder al reporte de ingresos vs egresos por mes',
+    },
+    {
+      key: 'doctor-production',
+      label: 'Ver producción por médico',
+      description:
+        'Permite acceder al reporte de producción agrupada por proveedor',
+    },
+    {
+      key: 'insurance-production',
+      label: 'Ver producción por aseguradora',
+      description:
+        'Permite acceder al reporte de producción agrupada por aseguradora',
+    },
+    {
+      key: 'aging',
+      label: 'Ver antigüedad de saldos',
+      description:
+        'Permite acceder al reporte de aging de cuentas por cobrar y por pagar',
+    },
+    {
+      key: 'collections',
+      label: 'Ver reporte de cobros recibidos',
+      description:
+        'Permite acceder al listado de cobros registrados de aseguradoras',
+    },
+    {
+      key: 'disbursements',
+      label: 'Ver reporte de pagos emitidos',
+      description:
+        'Permite acceder al listado de pagos a proveedores y al SENIAT',
+    },
+    {
+      key: 'orders-tracking',
+      label: 'Ver seguimiento de órdenes',
+      description: 'Permite acceder al reporte de órdenes por etapa del flujo',
+    },
+    {
+      key: 'services-billed',
+      label: 'Ver servicios facturados',
+      description: 'Permite acceder al reporte de demanda por tipo de servicio',
+    },
+    {
+      key: 'taxes-retained',
+      label: 'Ver reporte de impuestos retenidos',
+      description:
+        'Permite acceder al reporte detallado de retenciones aplicadas',
+    },
+    {
+      key: 'arc',
+      label: 'Ver comprobantes ARC',
+      description:
+        'Permite descargar los comprobantes ARC anuales de retención por médico o centro de salud',
+    },
+    {
+      key: 'executive-panel',
+      label: 'Ver panel ejecutivo',
+      description:
+        'Permite acceder al panel ejecutivo con gráficos de flujo de caja y órdenes',
+    },
+    {
+      key: 'orders-analytics',
+      label: 'Ver análisis de órdenes',
+      description:
+        'Permite ver la sección de análisis de órdenes (volumen y mezcla) dentro del panel ejecutivo',
+    },
+    {
+      key: 'insurer-collections',
+      label: 'Ver cobranzas por aseguradora',
+      description:
+        'Permite ver la sección de cobranzas por compañía de seguros dentro del panel ejecutivo',
+    },
+    {
+      key: 'payment-account-inflows',
+      label: 'Ver dinero recibido por cuenta bancaria',
+      description:
+        'Permite acceder al reporte de dinero recibido en las cuentas propias (órdenes y cuentas por cobrar)',
+    },
+  ];
 
 const filesPermissions: PermissionDefinition[] = [
   {
@@ -637,7 +661,8 @@ const filesPermissions: PermissionDefinition[] = [
     resource: 'files',
     action: 'list',
     label: 'Listar y ver archivos',
-    description: 'Permite listar y ver archivos adjuntos asociados a entidades del sistema',
+    description:
+      'Permite listar y ver archivos adjuntos asociados a entidades del sistema',
     group: FILES_GROUP,
   },
   {
@@ -645,7 +670,8 @@ const filesPermissions: PermissionDefinition[] = [
     resource: 'files',
     action: 'create',
     label: 'Subir archivos',
-    description: 'Permite subir archivos al storage y asociarlos a entidades del sistema',
+    description:
+      'Permite subir archivos al storage y asociarlos a entidades del sistema',
     group: FILES_GROUP,
   },
   {
@@ -653,7 +679,8 @@ const filesPermissions: PermissionDefinition[] = [
     resource: 'files',
     action: 'soft-delete',
     label: 'Eliminar archivos',
-    description: 'Permite eliminar archivos adjuntos (borrado lógico + remoción del storage)',
+    description:
+      'Permite eliminar archivos adjuntos (borrado lógico + remoción del storage)',
     group: FILES_GROUP,
   },
 ];

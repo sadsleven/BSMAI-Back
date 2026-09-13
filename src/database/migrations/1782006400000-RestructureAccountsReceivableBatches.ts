@@ -14,9 +14,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * No hay datos reales → DROP/recrea limpio, sin backfill.
  */
-export class RestructureAccountsReceivableBatches1782006400000
-  implements MigrationInterface
-{
+export class RestructureAccountsReceivableBatches1782006400000 implements MigrationInterface {
   public async up(q: QueryRunner): Promise<void> {
     await q.query(`DROP TABLE IF EXISTS "accounts_receivable_payment_links"`);
     await q.query(`DROP TABLE IF EXISTS "accounts_receivable_payments"`);
@@ -44,9 +42,15 @@ export class RestructureAccountsReceivableBatches1782006400000
         )
       )
     `);
-    await q.query(`CREATE INDEX "idx_ar_status" ON "accounts_receivable"("status")`);
-    await q.query(`CREATE INDEX "idx_ar_insurance" ON "accounts_receivable"("insuranceId")`);
-    await q.query(`CREATE INDEX "idx_ar_holder" ON "accounts_receivable"("holderId")`);
+    await q.query(
+      `CREATE INDEX "idx_ar_status" ON "accounts_receivable"("status")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ar_insurance" ON "accounts_receivable"("insuranceId")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ar_holder" ON "accounts_receivable"("holderId")`,
+    );
 
     // Pivot lote ↔ orden (con snapshot de modo y target).
     await q.query(`
@@ -126,9 +130,15 @@ export class RestructureAccountsReceivableBatches1782006400000
         )
       )
     `);
-    await q.query(`CREATE INDEX "idx_ar_status" ON "accounts_receivable"("status")`);
-    await q.query(`CREATE INDEX "idx_ar_insurance" ON "accounts_receivable"("insuranceId")`);
-    await q.query(`CREATE INDEX "idx_ar_holder" ON "accounts_receivable"("holderId")`);
+    await q.query(
+      `CREATE INDEX "idx_ar_status" ON "accounts_receivable"("status")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ar_insurance" ON "accounts_receivable"("insuranceId")`,
+    );
+    await q.query(
+      `CREATE INDEX "idx_ar_holder" ON "accounts_receivable"("holderId")`,
+    );
 
     await q.query(`
       CREATE TABLE "accounts_receivable_payments" (

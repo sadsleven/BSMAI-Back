@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -25,6 +26,9 @@ export const PROVIDER_TYPES_FOR_BILLING = ['doctor', 'care_center'] as const;
 
 /** Tope del N° de factura (9 dígitos, igual que el N° de orden). */
 export const MAX_INVOICE_NUMBER = 999_999_999;
+
+/** Tope de órdenes ADICIONALES que una factura agrupada puede cubrir. */
+export const MAX_INVOICE_COVERED_ORDERS = 50;
 
 /**
  * Cancelación de una orden (no borra: conserva el número y el contenido).
@@ -171,6 +175,20 @@ export class BillingOrderDto {
   @IsOptional()
   @IsBoolean()
   showExchangeRate?: boolean;
+
+  /**
+   * Órdenes ADICIONALES que esta misma factura cubre (factura agrupada). La
+   * orden de la ruta siempre va incluida y no hace falta repetirla. Todas deben
+   * estar finalizadas, sin factura vigente y compartir contratante (mismo
+   * titular en contado/crédito/cashea; mismo seguro + vía en seguro).
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_INVOICE_COVERED_ORDERS, {
+    message: `Una factura no puede agrupar más de ${MAX_INVOICE_COVERED_ORDERS} órdenes adicionales`,
+  })
+  @IsUUID('4', { each: true })
+  coveredOrderIds?: string[];
 }
 
 /**
@@ -197,6 +215,20 @@ export class IssueOrderInvoiceDto {
   @IsOptional()
   @IsBoolean()
   showExchangeRate?: boolean;
+
+  /**
+   * Órdenes ADICIONALES que esta misma factura cubre (factura agrupada). La
+   * orden de la ruta siempre va incluida y no hace falta repetirla. Todas deben
+   * estar finalizadas, sin factura vigente y compartir contratante (mismo
+   * titular en contado/crédito/cashea; mismo seguro + vía en seguro).
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_INVOICE_COVERED_ORDERS, {
+    message: `Una factura no puede agrupar más de ${MAX_INVOICE_COVERED_ORDERS} órdenes adicionales`,
+  })
+  @IsUUID('4', { each: true })
+  coveredOrderIds?: string[];
 }
 
 /**

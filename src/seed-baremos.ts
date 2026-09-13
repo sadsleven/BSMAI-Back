@@ -35,13 +35,21 @@ const USAGE = `Seeder de baremos.
 Un solo seguro/doctor/centro (el nombre va entre comillas):
 
   npm run seed:baremos:insurances -- "SEGUROS VENEZUELA C.A"
-  npm run seed:baremos:insurances -- --name "C.N.A SEGUROS LA PREVISORA"
+  npm run seed:baremos:insurances -- nombre="C.N.A SEGUROS LA PREVISORA"
   npm run seed:baremos:care-centers -- "CIMA"
 
 Pisar los precios que cambiaron (por defecto sólo se insertan los que faltan,
 para no revertir ediciones hechas en la UI):
 
-  npm run seed:baremos:insurances -- "SEGUROS VENEZUELA C.A" --update-prices
+  npm run seed:baremos:care-centers -- "CIMA, C.A" actualizar-precios
+
+  npm run seed:baremos:care-centers -- "CIMA, C.A" --update-prices
+
+Nota: npm NO reenvia al script los argumentos que empiezan por "--" (avisa
+"Unknown cli config"), pero si los expone como npm_config_*, y el seeder lee
+npm_config_update_prices; por eso las dos formas de arriba funcionan. El token
+sin guiones es el camino seguro: tambien sirve "nombre=..." y "ayuda".
+Tambien vale la variable de entorno BAREMOS_UPDATE_PRICES=1.
 
 El nombre se compara sin acentos ni puntuación y por subcadena, así que
 "venezuela" alcanza a "SEGUROS VENEZUELA C.A".`;
@@ -55,12 +63,40 @@ const targetOf = (token: string): BaremoTarget | undefined =>
   ALIASES[token.trim().toLowerCase()];
 
 /**
+ * Quita los guiones iniciales y normaliza: `--update-prices`, `-update-prices`
+ * y `update-prices` son el mismo token. Necesario porque **npm se come los
+ * argumentos que empiezan por `--`** (los toma como config suya y avisa
+ * "Unknown cli config"), así que con `npm run` las opciones hay que escribirlas
+ * sin guiones y el parser debe aceptar ambas formas.
+ */
+const optionKey = (token: string): string =>
+  token.trim().replace(/^-+/, '').toLowerCase();
+
+/** Sinónimos de la opción "pisar precios" (con o sin guiones). */
+const UPDATE_PRICE_FLAGS = new Set([
+  'update-prices',
+  'updateprices',
+  'actualizar-precios',
+  'actualizarprecios',
+  'pisar-precios',
+  'pisar',
+]);
+
+/** Sinónimos de la ayuda (con o sin guiones). */
+const HELP_FLAGS = new Set(['help', 'h', 'ayuda', '?']);
+
+/**
  * Traduce los argumentos del CLI. Un token que coincide con un baremo
  * (`insurances`/`doctors`/`care-centers` y sus sinónimos) selecciona ese
  * baremo; cualquier otro token suelto se toma como nombre a filtrar. Sin
  * baremos indicados corren los tres.
+ *
+ * Las opciones se aceptan **con y sin guiones** (`--update-prices` o
+ * `actualizar-precios`, `--name X` o `nombre=X`): npm descarta los argumentos
+ * que empiezan por `--` antes de pasárselos al script, así que la forma sin
+ * guiones es la única que sobrevive a `npm run seed:baremos:* -- ...`.
  */
-function parseArgs(argv: string[]): ParsedArgs {
+export function parseArgs(argv: string[]): ParsedArgs {
   const targets: BaremoTarget[] = [];
   const names: string[] = [];
   let updatePrices = false;
@@ -82,32 +118,35 @@ function parseArgs(argv: string[]): ParsedArgs {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (!arg.trim()) continue;
-    if (arg === '--help' || arg === '-h') {
+    const bare = arg.trim().replace(/^-+/, '');
+    const key = optionKey(arg);
+    if (HELP_FLAGS.has(key)) {
       help = true;
       continue;
     }
-    if (arg === '--update-prices' || arg === '--actualizar-precios') {
+    if (UPDATE_PRICE_FLAGS.has(key)) {
       updatePrices = true;
       continue;
     }
-    if (arg === '--name' || arg === '--nombre') {
+    if (key === 'name' || key === 'nombre') {
       const value = argv[++i];
       if (!value) throw new Error(`Falta el nombre después de "${arg}".`);
       names.push(value);
       continue;
     }
-    const named = /^--(?:name|nombre)=(.+)$/.exec(arg);
+    // `bare` conserva mayúsculas/acentos: el valor del nombre va tal cual
+    const named = /^(?:name|nombre)=(.+)$/i.exec(bare);
     if (named) {
       names.push(named[1]);
       continue;
     }
-    const only = /^--only=(.+)$/.exec(arg);
+    const only = /^only=(.+)$/i.exec(bare);
     if (only) {
       addTargets(only[1]);
       continue;
     }
-    if (arg.startsWith('--')) {
-      const target = targetOf(arg.slice(2));
+    if (arg.startsWith('-')) {
+      const target = targetOf(key);
       if (!target) throw new Error(`Opción desconocida: "${arg}".`);
       if (!targets.includes(target)) targets.push(target);
       continue;
@@ -125,14 +164,39 @@ function parseArgs(argv: string[]): ParsedArgs {
   };
 }
 
+const TRUTHY = new Set(['1', 'true', 'yes', 'si', 'sí', '']);
+
+/**
+ * Pisado de precios pedido por entorno. Dos fuentes:
+ *  - `BAREMOS_UPDATE_PRICES=1` (explícita, sirve en Docker/CI).
+ *  - `npm_config_update_prices`: npm NO reenvía al script los argumentos que
+ *    empiezan por `--` (avisa "Unknown cli config"), pero sí los expone como
+ *    variables `npm_config_*`. Leerla hace que `npm run ... -- --update-prices`
+ *    funcione igual que el token sin guiones.
+ */
+function envUpdatePrices(): boolean {
+  const raw = (
+    process.env.BAREMOS_UPDATE_PRICES ??
+    process.env.npm_config_update_prices ??
+    process.env.npm_config_actualizar_precios ??
+    'no'
+  )
+    .trim()
+    .toLowerCase();
+  return TRUTHY.has(raw);
+}
+
 /**
  * Entrada CLI del seeder de baremos (separado del seed principal).
  * Uso: `npm run seed:baremos` (todos), `npm run seed:baremos:insurances`
  * (o `:doctors` / `:care-centers`), con `-- "<nombre>"` para uno solo y
- * `--update-prices` para pisar los precios que cambiaron. `--help` lo explica.
+ * `actualizar-precios` (sin guiones: npm se come los `--`) para pisar los
+ * precios que cambiaron. `ayuda` lo explica.
  */
 async function bootstrap() {
-  const { targets, names, updatePrices, help } = parseArgs(process.argv.slice(2));
+  const parsed = parseArgs(process.argv.slice(2));
+  const { targets, names, help } = parsed;
+  const updatePrices = parsed.updatePrices || envUpdatePrices();
   if (help) {
     console.log(USAGE);
     return;
@@ -155,6 +219,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'warn', 'error'],
   });
+  // qué base se está sembrando: con dos bloques DB_* en .env gana el último y
+  // es fácil creer que el seed no hizo nada cuando escribió en la otra
+  console.log(
+    `Base de datos: ${process.env.DB_HOST ?? '?'}:${process.env.DB_PORT ?? '?'}/${process.env.DB_NAME ?? '?'}`,
+  );
   try {
     await app.get(BaremosSeedService).run(targets, { names, updatePrices });
   } finally {

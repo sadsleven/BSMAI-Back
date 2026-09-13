@@ -31,7 +31,9 @@ export class InsurancesService {
     private readonly serviceTypesRepo: Repository<ServiceType>,
   ) {}
 
-  async findAll(query: QueryInsurancesDto): Promise<PaginatedResponse<Insurance>> {
+  async findAll(
+    query: QueryInsurancesDto,
+  ): Promise<PaginatedResponse<Insurance>> {
     const {
       page = 1,
       limit = 10,
@@ -190,7 +192,9 @@ export class InsurancesService {
   }
 
   /** Valida unicidad por serviceTypeId + existencia/activos. */
-  private async validateServicePrices(prices: ServicePriceDto[]): Promise<void> {
+  private async validateServicePrices(
+    prices: ServicePriceDto[],
+  ): Promise<void> {
     if (!prices.length) return;
     const ids = prices.map((p) => p.serviceTypeId);
     const unique = new Set(ids);
@@ -245,11 +249,9 @@ export class InsurancesService {
 
     const refs: string[] = [];
     const orderCount = await count('orders');
-    if (orderCount > 0)
-      refs.push(`${orderCount} orden(es)`);
+    if (orderCount > 0) refs.push(`${orderCount} orden(es)`);
     const arCount = await count('accounts_receivable');
-    if (arCount > 0)
-      refs.push(`${arCount} cuenta(s) por cobrar`);
+    if (arCount > 0) refs.push(`${arCount} cuenta(s) por cobrar`);
 
     if (refs.length) {
       throw new ConflictException(
@@ -261,7 +263,10 @@ export class InsurancesService {
   }
 
   async restore(id: string): Promise<Insurance> {
-    const insurance = await this.repo.findOne({ where: { id }, withDeleted: true });
+    const insurance = await this.repo.findOne({
+      where: { id },
+      withDeleted: true,
+    });
     if (!insurance) throw new NotFoundException('Seguro no encontrado');
     if (!insurance.deletedAt) return insurance;
     await this.repo.restore(id);
@@ -273,17 +278,29 @@ export class InsurancesService {
   }
 
   private async assertUniqueName(name: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { name }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un seguro con ese nombre');
+    const existing = await this.repo.findOne({
+      where: { name },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un seguro con ese nombre');
   }
 
   private async assertUniqueEmail(email: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { email }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un seguro con ese email');
+    const existing = await this.repo.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un seguro con ese email');
   }
 
   private async assertUniqueRif(rif: string): Promise<void> {
-    const existing = await this.repo.findOne({ where: { rif }, withDeleted: true });
-    if (existing) throw new ConflictException('Ya existe un seguro con ese RIF');
+    const existing = await this.repo.findOne({
+      where: { rif },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un seguro con ese RIF');
   }
 }

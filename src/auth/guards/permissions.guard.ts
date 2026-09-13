@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permissions.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -21,7 +26,9 @@ export class PermissionsGuard implements CanActivate {
     ]);
     if (!required || required.length === 0) return true;
 
-    const request = context.switchToHttp().getRequest<{ user?: AuthenticatedUser }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<{ user?: AuthenticatedUser }>();
     const user = request.user;
     if (!user) throw new ForbiddenException('Usuario no autenticado');
     if (user.isSuperAdmin) return true;
@@ -29,7 +36,9 @@ export class PermissionsGuard implements CanActivate {
     const granted = new Set(user.permissions ?? []);
     const missing = required.filter((p) => !granted.has(p));
     if (missing.length > 0) {
-      throw new ForbiddenException(`Permisos insuficientes: ${missing.join(', ')}`);
+      throw new ForbiddenException(
+        `Permisos insuficientes: ${missing.join(', ')}`,
+      );
     }
     return true;
   }

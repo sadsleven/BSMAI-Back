@@ -1,9 +1,4 @@
-import {
-  IsNumber,
-  IsPositive,
-  IsUUID,
-  Max,
-} from 'class-validator';
+import { IsNumber, IsPositive, IsUUID, Max } from 'class-validator';
 
 /**
  * Fila de precio de un Tipo de Servicio para un actor (Seguro, Doctor, Centro).

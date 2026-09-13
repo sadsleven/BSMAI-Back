@@ -85,7 +85,9 @@ export class AccountsPayable {
   @OneToMany(() => AccountsPayableOrder, (o) => o.payable, { cascade: false })
   orders: AccountsPayableOrder[];
 
-  @ManyToMany(() => AccountsPayablePayment, (p) => p.accounts, { cascade: false })
+  @ManyToMany(() => AccountsPayablePayment, (p) => p.accounts, {
+    cascade: false,
+  })
   @JoinTable({
     name: 'accounts_payable_payment_links',
     joinColumn: { name: 'payableId', referencedColumnName: 'id' },

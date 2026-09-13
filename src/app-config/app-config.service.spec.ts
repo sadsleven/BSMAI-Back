@@ -6,13 +6,18 @@ import { AppConfig } from './entities/app-config.entity';
 describe('AppConfigService', () => {
   let service: AppConfigService;
   let store: Map<string, string>;
-  let repo: jest.Mocked<Pick<Repository<AppConfig>, 'findOne' | 'create' | 'save'>>;
+  let repo: jest.Mocked<
+    Pick<Repository<AppConfig>, 'findOne' | 'create' | 'save'>
+  >;
 
   beforeEach(() => {
     store = new Map();
     repo = {
-      findOne: jest.fn(async ({ where: { key } }: { where: { key: string } }) =>
-        store.has(key) ? ({ key, value: store.get(key)! } as AppConfig) : null,
+      findOne: jest.fn(
+        async ({ where: { key } }: { where: { key: string } }) =>
+          store.has(key)
+            ? ({ key, value: store.get(key)! } as AppConfig)
+            : null,
       ),
       create: jest.fn((data: Partial<AppConfig>) => data as AppConfig),
       save: jest.fn(async (row: AppConfig) => {

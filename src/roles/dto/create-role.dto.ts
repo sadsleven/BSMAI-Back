@@ -11,7 +11,9 @@ import {
 
 export class CreateRoleDto {
   @IsString()
-  @MinLength(2, { message: 'El nombre del rol debe tener al menos 2 caracteres' })
+  @MinLength(2, {
+    message: 'El nombre del rol debe tener al menos 2 caracteres',
+  })
   @MaxLength(80)
   name: string;
 

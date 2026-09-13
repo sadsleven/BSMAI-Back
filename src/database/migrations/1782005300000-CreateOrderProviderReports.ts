@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * por proveedor van por `kind` en la tabla `files`. XOR doctor/centro + unique
  * parcial por (orden, proveedor).
  */
-export class CreateOrderProviderReports1782005300000
-  implements MigrationInterface
-{
+export class CreateOrderProviderReports1782005300000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE TABLE "order_provider_reports" (

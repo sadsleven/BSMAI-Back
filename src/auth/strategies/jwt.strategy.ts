@@ -41,7 +41,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user || !user.isActive || user.deletedAt) {
       throw new UnauthorizedException('Usuario no autorizado');
     }
-    const activeRoles = (user.roles ?? []).filter((r) => r.isActive && !r.deletedAt);
+    const activeRoles = (user.roles ?? []).filter(
+      (r) => r.isActive && !r.deletedAt,
+    );
     const permissions = new Set<string>();
     for (const role of activeRoles) {
       for (const perm of role.permissions ?? []) {

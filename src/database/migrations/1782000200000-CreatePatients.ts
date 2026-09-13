@@ -69,7 +69,10 @@ export class CreatePatients1782000200000 implements MigrationInterface {
 
     await queryRunner.createIndex(
       'patient_phones',
-      new TableIndex({ name: 'IDX_patient_phones_patientId', columnNames: ['patientId'] }),
+      new TableIndex({
+        name: 'IDX_patient_phones_patientId',
+        columnNames: ['patientId'],
+      }),
     );
   }
 

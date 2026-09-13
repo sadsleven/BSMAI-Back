@@ -49,7 +49,10 @@ export class TaxUnitsController {
 
   @RequirePermissions(PERMISSIONS.TAX_UNITS.UPDATE)
   @Patch(':id')
-  update(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateTaxUnitDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateTaxUnitDto,
+  ) {
     return this.service.update(id, dto);
   }
 
