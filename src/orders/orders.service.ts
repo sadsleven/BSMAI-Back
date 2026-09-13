@@ -3012,27 +3012,15 @@ export class OrdersService implements OnModuleInit {
   // ---- Facturas agrupadas (una factura, varias órdenes) ----
 
   /**
-   * Clave del CONTRATANTE de la factura. Sólo se pueden agrupar órdenes que la
-   * comparten, porque el encabezado del documento (razón social, RIF, dirección
-   * fiscal, contratante) sale de ahí.
-   *
-   *  - seguro → mismo seguro + misma vía (directo / vía contratista).
-   *  - contado / crédito / cashea → mismo titular.
-   */
-  private invoiceContratanteKey(order: Order): string {
-    if (order.type === 'insurance') {
-      return `insurance:${order.insuranceId ?? ''}:${order.insuranceSource ?? ''}:${order.contractorId ?? ''}`;
-    }
-    return `holder:${order.holderId}`;
-  }
-
-  /**
    * Valida y carga las órdenes ADICIONALES que una factura agrupada cubre.
    *
-   * Todas deben: existir y estar visibles, no estar canceladas, estar
-   * `finalized`, no tener factura vigente, y compartir sucursal, tipo y
-   * contratante con la orden emisora. La emisora NO se incluye acá (la agrega
-   * el llamador como primera orden cubierta).
+   * Regla única de agrupación: **mismo titular** y **sin factura vigente**.
+   * Pueden mezclarse tipos de orden (contado + crédito + seguro) y sucursales
+   * — el encabezado del documento sale de la orden EMISORA y las condiciones de
+   * pago se derivan del conjunto. Además deben estar `finalized`, no canceladas
+   * y ser visibles para el usuario (scope de sucursal, que es permiso, no
+   * criterio de agrupación). La emisora NO se incluye acá (la agrega el
+   * llamador como primera orden cubierta).
    */
   private async resolveCoveredOrders(
     issuer: Order,
@@ -3056,8 +3044,9 @@ export class OrdersService implements OnModuleInit {
       );
     }
 
-    const issuerKey = this.invoiceContratanteKey(issuer);
     for (const o of found) {
+      // Scope de sucursal: es permiso de lectura, no criterio de agrupación
+      // (se pueden agrupar órdenes de sucursales distintas si las ves todas).
       await this.assertBranchVisibility(o.branchId, user);
       if (o.status === 'cancelled') {
         throw new BadRequestException(
@@ -3069,19 +3058,9 @@ export class OrdersService implements OnModuleInit {
           `La orden N° ${o.orderNumber} todavía no pasó por facturación (Paso 4): finalízala antes de agruparla`,
         );
       }
-      if (o.branchId !== issuer.branchId) {
+      if (o.holderId !== issuer.holderId) {
         throw new BadRequestException(
-          `La orden N° ${o.orderNumber} es de otra sucursal: no se puede agrupar`,
-        );
-      }
-      if (o.type !== issuer.type) {
-        throw new BadRequestException(
-          `La orden N° ${o.orderNumber} es de otro tipo de orden: sólo se agrupan órdenes del mismo tipo (las condiciones de pago de la factura serían distintas)`,
-        );
-      }
-      if (this.invoiceContratanteKey(o) !== issuerKey) {
-        throw new BadRequestException(
-          `La orden N° ${o.orderNumber} tiene otro contratante: sólo se agrupan órdenes del mismo titular o del mismo seguro`,
+          `La orden N° ${o.orderNumber} es de otro titular: sólo se agrupan órdenes del mismo titular`,
         );
       }
     }
@@ -3181,9 +3160,10 @@ export class OrdersService implements OnModuleInit {
   }
 
   /**
-   * Órdenes que se pueden AGRUPAR en la misma factura que `id`: mismo
-   * contratante, mismo tipo, misma sucursal, ya finalizadas y todavía sin
-   * factura vigente. Alimenta el selector del Paso 4.
+   * Órdenes que se pueden AGRUPAR en la misma factura que `id`: **mismo
+   * titular**, ya finalizadas y todavía **sin factura vigente**. El tipo de
+   * orden y la sucursal no importan; sólo se limita a las sucursales que el
+   * usuario puede ver.
    */
   async invoiceableOrders(
     id: string,
@@ -3196,11 +3176,17 @@ export class OrdersService implements OnModuleInit {
       priceAmount: string;
       serviceKey: string | null;
       patientName: string;
+      orderType: string;
+      branchName: string | null;
       serviceTypesCount: number;
     }>
   > {
     const order = await this.findOne(id, user);
-    const isInsurance = order.type === 'insurance';
+    // Scope de sucursal (permiso). Super Admin ve todas.
+    const allowedBranchIds = user.isSuperAdmin
+      ? null
+      : await this.resolveUserBranchIds(user);
+    if (allowedBranchIds && allowedBranchIds.length === 0) return [];
     const rows = await this.repo.manager.query<
       Array<{
         id: string;
@@ -3209,6 +3195,8 @@ export class OrdersService implements OnModuleInit {
         priceAmount: string;
         serviceKey: string | null;
         patientName: string;
+        orderType: string;
+        branchName: string | null;
         serviceTypesCount: string;
       }>
     >(
@@ -3222,39 +3210,25 @@ export class OrdersService implements OnModuleInit {
                 pa."businessName",
                 ''
               ) AS "patientName",
+              o."type" AS "orderType",
+              br."name" AS "branchName",
               (SELECT COUNT(*) FROM "order_service_types" ost
                 WHERE ost."orderId" = o."id") AS "serviceTypesCount"
          FROM "orders" o
          LEFT JOIN "patients" pa ON pa."id" = o."patientId"
+         LEFT JOIN "branches" br ON br."id" = o."branchId"
         WHERE o."deletedAt" IS NULL
           AND o."id" <> $1
           AND o."status" = 'finalized'
-          AND o."branchId" = $2
-          AND o."type" = $3
-          AND (
-            CASE WHEN $4::boolean
-              THEN o."insuranceId" IS NOT DISTINCT FROM $5::uuid
-               AND o."insuranceSource" IS NOT DISTINCT FROM $6::varchar
-               AND o."contractorId" IS NOT DISTINCT FROM $7::uuid
-              ELSE o."holderId" = $8::uuid
-            END
-          )
+          AND o."holderId" = $2::uuid
+          AND ($3::uuid[] IS NULL OR o."branchId" = ANY($3::uuid[]))
           AND NOT EXISTS (
             SELECT 1 FROM "order_invoice_orders" pv
              WHERE pv."orderId" = o."id" AND NOT pv."cancelled"
           )
         ORDER BY o."orderDate" DESC, o."orderNumber" DESC
         LIMIT 100`,
-      [
-        order.id,
-        order.branchId,
-        order.type,
-        isInsurance,
-        order.insuranceId ?? null,
-        order.insuranceSource ?? null,
-        order.contractorId ?? null,
-        order.holderId,
-      ],
+      [order.id, order.holderId, allowedBranchIds],
     );
     return rows.map((r) => ({
       ...r,
