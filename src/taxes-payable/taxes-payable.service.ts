@@ -177,7 +177,8 @@ export class TaxesPayableService {
   /**
    * Popula `invoices` en cada obligación: facturas de las órdenes del lote AP
    * de origen (para las filas del comprobante ISLR). Bs = grossUsd × tasa de
-   * facturación de cada orden.
+   * pago del lote (o, en lotes previos sin ella, la de facturación de cada
+   * orden) — misma regla que `grossAmountBs` de la obligación.
    */
   private async attachInvoiceRows(taxes: TaxPayable[]): Promise<void> {
     const sourceIds = Array.from(
@@ -204,10 +205,12 @@ export class TaxesPayableService {
               o."orderNumber", o."invoiceNumber", o."controlNumber",
               o."updatedAt" AS "invoiceDate",
               apo."grossUsd"::float8 AS "grossUsd",
-              er."amountBs"::float8 AS "rateBs"
+              COALESCE(per."amountBs", er."amountBs")::float8 AS "rateBs"
        FROM "accounts_payable_orders" apo
        JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
        JOIN "orders" o ON o.id = iio."orderId"
+       JOIN "accounts_payable" ap ON ap.id = apo."payableId"
+       LEFT JOIN "exchange_rates" per ON per.id = ap."exchangeRateId"
        LEFT JOIN "exchange_rates" er ON er.id = o."billingExchangeRateId"
        WHERE apo."payableId" = ANY($1)
        ORDER BY iio."internalNumber"::int`,

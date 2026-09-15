@@ -15,6 +15,7 @@ import {
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import { TaxUnit } from '../../tax-units/entities/tax-unit.entity';
+import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 import { AccountsPayablePayment } from './accounts-payable-payment.entity';
 import { AccountsPayableOrder } from './accounts-payable-order.entity';
 
@@ -75,6 +76,18 @@ export class AccountsPayable {
   @Column({ type: 'boolean', default: true })
   applyRetention: boolean;
 
+  /**
+   * Tasa de pago USD/Bs del lote: convierte el bruto USD a Bs (bruto Bs,
+   * retención y neto a pagar). NULL = tasa de facturación de cada orden
+   * (lotes previos a la columna).
+   */
+  @Column({ type: 'uuid', nullable: true })
+  exchangeRateId?: string | null;
+
+  @ManyToOne(() => ExchangeRate, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'exchangeRateId' })
+  exchangeRate?: ExchangeRate | null;
+
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
   status: AccountsPayableStatus;
 
@@ -107,7 +120,10 @@ export class AccountsPayable {
   // --- Transient (NO columnas). Calculados por el servicio al listar/ver. ---
   /** Suma de `grossUsd` del pivot (bruto USD del lote). */
   grossUsd?: number;
-  /** Totaldel lote en Bs (Σ grossUsd × tasa de facturación por orden). */
+  /**
+   * Total del lote en Bs (Σ grossUsd × tasa). Tasa = `exchangeRate` del lote
+   * (tasa de pago) o, si es NULL, la de facturación de cada orden.
+   */
   grossBs?: number;
   /** Retención SENIAT en Bs sobre el bruto del lote. */
   retentionBs?: number;

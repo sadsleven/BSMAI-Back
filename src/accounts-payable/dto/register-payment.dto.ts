@@ -90,6 +90,14 @@ export class CreateAccountsPayableBatchDto {
   @IsBoolean()
   applyRetention?: boolean;
 
+  /**
+   * Tasa de pago USD/Bs del lote (define bruto Bs, retención y neto a pagar).
+   * Sin enviar = tasa USD vigente.
+   */
+  @IsOptional()
+  @IsUUID()
+  exchangeRateId?: string;
+
   @IsArray()
   @ArrayMinSize(1, { message: 'Agrega al menos una orden interna' })
   @ArrayMaxSize(200)
@@ -108,6 +116,12 @@ export class SetPayableTaxUnitDto {
 export class SetPayableRetentionDto {
   @IsBoolean()
   applyRetention: boolean;
+}
+
+/** Cambiar la tasa de pago USD/Bs de un lote existente (recalcula neto/estado). */
+export class SetPayableExchangeRateDto {
+  @IsUUID()
+  exchangeRateId: string;
 }
 
 /** Agregar/quitar órdenes internas de un lote existente (mismo proveedor). */

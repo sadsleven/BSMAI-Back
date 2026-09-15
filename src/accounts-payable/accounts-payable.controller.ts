@@ -18,6 +18,7 @@ import {
   QueryAccountsPayableDto,
   QueryPendingPayableDto,
   RegisterPaymentDto,
+  SetPayableExchangeRateDto,
   SetPayableRetentionDto,
   SetPayableTaxUnitDto,
 } from './dto/register-payment.dto';
@@ -104,6 +105,16 @@ export class AccountsPayableController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.setRetention(id, dto.applyRetention, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
+  @Patch(':id/exchange-rate')
+  setExchangeRate(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetPayableExchangeRateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setExchangeRate(id, dto.exchangeRateId, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)

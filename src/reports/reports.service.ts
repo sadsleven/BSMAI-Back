@@ -25,9 +25,11 @@ const num = (v: unknown): number => {
 /**
  * Servicio de reportes financieros. A diferencia del modelo viejo (que sólo leía
  * lotes), estos reportes son COMPLETOS (incluyen las obligaciones "Pendientes" sin
- * lote) y EXACTOS en Bs: cada obligación se convierte a Bs usando la tasa de
- * facturación de SU orden (`orders.billingExchangeRateId`), no una tasa de mercado
- * única.
+ * lote) y EXACTOS en Bs: cada obligación se convierte a Bs con la misma regla
+ * que el módulo AP — tasa de pago de su lote (`accounts_payable.exchangeRateId`)
+ * o, si el lote no la tiene / no hay lote, la tasa de facturación de SU orden
+ * (`orders.billingExchangeRateId`) — no una tasa de mercado única. La retención
+ * de un lote usa la UT del lote (`accounts_payable.taxUnitId`) o la vigente.
  *
  * Las cuentas pagado/pendiente se computan así (idénticas a la summary):
  *  - paidBs (AP)        = Σ pagos (amountInBs) de todos los lotes AP que matchean.
@@ -185,6 +187,10 @@ export class ReportsService {
         facturacionUsd: string | null;
         grossUsd: string;
         billingRateBs: string | null;
+        /** Tasa de pago del lote (accounts_payable.exchangeRateId); manda sobre la de facturación. */
+        payRateBs: string | null;
+        /** UT del lote (accounts_payable.taxUnitId); manda sobre la vigente. */
+        payableTaxUnitBs: string | null;
         payableId: string | null;
         payableNumber: string | null;
         payableStatus: string | null;
@@ -210,6 +216,8 @@ export class ReportsService {
                  WHERE ost."internalOrderId" = iio.id)::text AS "facturacionUsd",
               iio."providerAmountUsd"::text AS "grossUsd",
               fx."amountBs"::text AS "billingRateBs",
+              pfx."amountBs"::text AS "payRateBs",
+              ptu."amountBs"::text AS "payableTaxUnitBs",
               ap.id AS "payableId", ap."payableNumber", ap.status AS "payableStatus",
               ap."applyRetention" AS "payableApplyRetention"
        FROM "order_internal_orders" iio
@@ -222,6 +230,8 @@ export class ReportsService {
        LEFT JOIN "exchange_rates" fx ON fx.id = o."billingExchangeRateId"
        LEFT JOIN "accounts_payable_orders" apo ON apo."internalOrderId" = iio.id
        LEFT JOIN "accounts_payable" ap ON ap.id = apo."payableId"
+       LEFT JOIN "exchange_rates" pfx ON pfx.id = ap."exchangeRateId"
+       LEFT JOIN "tax_units" ptu ON ptu.id = ap."taxUnitId"
        WHERE ${where.join(' AND ')}
        ORDER BY iio."internalNumber"::int DESC`,
       params,
@@ -249,18 +259,33 @@ export class ReportsService {
     const paidByPayable = await this.paidBsByPayable(payableIds);
     const paymentMetaByPayable = await this.paymentMetaByPayable(payableIds);
 
-    // TotalBs por lote (Σ obligaciones × tasa de facturación de cada orden) y
-    // su persona fiscal (todas las órdenes de un lote son del mismo proveedor).
+    // Tasa USD/Bs efectiva de una obligación (misma regla que el módulo AP):
+    // tasa de pago del lote → tasa de facturación de la orden → última USD.
+    const effectiveRateBs = (r: {
+      payRateBs: string | null;
+      billingRateBs: string | null;
+    }): number =>
+      r.payRateBs != null
+        ? num(r.payRateBs)
+        : r.billingRateBs != null
+          ? num(r.billingRateBs)
+          : fallbackRateBs;
+
+    // TotalBs por lote (Σ obligaciones × tasa efectiva), su UT (la del lote o
+    // la vigente) y su persona fiscal (todas las órdenes de un lote son del
+    // mismo proveedor).
     const loteGrossBs = new Map<string, number>();
     const loteGrossUsd = new Map<string, number>();
     const lotePersonType = new Map<string, SeniatPersonType>();
+    const loteTaxUnitBs = new Map<string, number>();
     // Lotes que NO descuentan retención (`accounts_payable.applyRetention=false`).
     const loteNoRetention = new Set<string>();
     for (const r of obligations) {
       if (!r.payableId) continue;
-      const rateBs =
-        r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
+      const rateBs = effectiveRateBs(r);
       const grossBs = num(r.grossUsd) * rateBs;
+      const utBs = num(r.payableTaxUnitBs);
+      loteTaxUnitBs.set(r.payableId, utBs > 0 ? utBs : taxUnitBs);
       loteGrossBs.set(
         r.payableId,
         (loteGrossBs.get(r.payableId) ?? 0) + grossBs,
@@ -284,24 +309,26 @@ export class ReportsService {
         : calcRetention({
             grossBs: round2(grossBs),
             personType: lotePersonType.get(pid) ?? 'natural',
-            taxUnitBs,
+            taxUnitBs: loteTaxUnitBs.get(pid) ?? taxUnitBs,
           }).taxAmountBs;
       loteNetBs.set(pid, round2(round2(grossBs) - retentionBs));
     }
 
     // ---- Filas por obligación (estimado de retención por fila) ----
     const perObligationRows = obligations.map((r) => {
-      const rateBs =
-        r.billingRateBs != null ? num(r.billingRateBs) : fallbackRateBs;
+      const rateBs = effectiveRateBs(r);
       const grossBs = round2(num(r.grossUsd) * rateBs);
       const personType = this.personTypeFor(r.providerType, r.doctorIsLegal);
       // Estimado: retención sobre el bruto de esta sola obligación. En un lote
       // sin retención es 0 (sin lote se estima con retención: es el default).
+      const rowTaxUnitBs =
+        (r.payableId ? loteTaxUnitBs.get(r.payableId) : undefined) ?? taxUnitBs;
       const retentionBs =
         r.payableApplyRetention === false
           ? 0
           : round2(
-              calcRetention({ grossBs, personType, taxUnitBs }).taxAmountBs,
+              calcRetention({ grossBs, personType, taxUnitBs: rowTaxUnitBs })
+                .taxAmountBs,
             );
       const netBs = round2(grossBs - retentionBs);
       const state: string = r.payableId
