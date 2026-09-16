@@ -1,0 +1,28 @@
+name: Deploy AFMI API
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ejecutar despliegue vía SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            export PATH="$HOME/.bun/bin:$PATH"
+            
+            # Ajusta esta ruta si es diferente
+            cd /opt/afmi/afmi-backend 
+            git pull origin main
+            bun install
+            bun run build
+            bun run migrate
+            pm2 restart afmi-api

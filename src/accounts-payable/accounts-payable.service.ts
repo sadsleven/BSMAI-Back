@@ -216,6 +216,7 @@ export class AccountsPayableService {
       .leftJoinAndSelect('ap.doctor', 'doctor')
       .leftJoinAndSelect('ap.careCenter', 'careCenter')
       .leftJoinAndSelect('ap.taxUnit', 'taxUnit')
+      .leftJoinAndSelect('ap.exchangeRate', 'payableRate')
       .leftJoinAndSelect('ap.orders', 'apo')
       .leftJoinAndSelect('apo.internalOrder', 'iio')
       .leftJoinAndSelect('iio.order', 'order')
@@ -298,6 +299,7 @@ export class AccountsPayableService {
         doctor: true,
         careCenter: true,
         taxUnit: true,
+        exchangeRate: true,
         orders: {
           internalOrder: { order: { branch: true, billingExchangeRate: true } },
         },
@@ -337,6 +339,51 @@ export class AccountsPayableService {
     return ut;
   }
 
+  /**
+   * Tasa de pago USD/Bs elegida por el usuario (validada) o la USD vigente
+   * (activa más reciente) si no se envió.
+   */
+  private async resolvePaymentRate(
+    exchangeRateId?: string | null,
+  ): Promise<ExchangeRate> {
+    if (exchangeRateId) {
+      const rate = await this.ratesRepo.findOne({
+        where: { id: exchangeRateId },
+      });
+      if (!rate) throw new BadRequestException('Tasa de pago no encontrada');
+      if (rate.currency !== 'USD') {
+        throw new BadRequestException('La tasa de pago debe ser USD/Bs');
+      }
+      const bs = Number(rate.amountBs);
+      if (!Number.isFinite(bs) || bs <= 0) {
+        throw new BadRequestException('Tasa de pago inválida (amountBs ≤ 0)');
+      }
+      return rate;
+    }
+    const current = await this.ratesRepo.findOne({
+      where: { currency: 'USD', isActive: true },
+      order: { effectiveDate: 'DESC', createdAt: 'DESC' },
+    });
+    if (!current) {
+      throw new BadRequestException(
+        'No hay tasa de cambio USD activa. Cargá una en /exchange-rates antes de continuar.',
+      );
+    }
+    return current;
+  }
+
+  /**
+   * Tasa USD/Bs de contexto para convertir pagos sin tasa propia (USD): la de
+   * pago del lote o, en lotes previos sin ella, la de facturación de la 1ª orden.
+   */
+  private batchUsdRateId(batch: AccountsPayable): string | null {
+    return (
+      batch.exchangeRateId ??
+      batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ??
+      null
+    );
+  }
+
   private personTypeOf(batch: AccountsPayable): SeniatPersonType {
     if (batch.recipientType === 'care_center') return 'legal_entity';
     return batch.doctor?.isLegalEntity ? 'legal_entity' : 'natural';
@@ -347,6 +394,15 @@ export class AccountsPayableService {
     return batch.applyRetention !== false;
   }
 
+  /**
+   * Tasa de pago USD/Bs del lote (si la tiene y es válida). NULL ⇒ cada orden
+   * se convierte con su tasa de facturación (lotes previos a la columna).
+   */
+  private batchRateBs(batch: AccountsPayable): number | null {
+    const bs = Number(batch.exchangeRate?.amountBs);
+    return Number.isFinite(bs) && bs > 0 ? bs : null;
+  }
+
   /** Calcula y adjunta los campos transient (gross/retención/neto/pagado/pendiente). */
   private computeFigures(
     batch: AccountsPayable,
@@ -354,12 +410,13 @@ export class AccountsPayableService {
   ): void {
     let grossUsd = 0;
     let grossBs = 0;
+    const batchRate = this.batchRateBs(batch);
     for (const apo of batch.orders ?? []) {
       const g = Number(apo.grossUsd) || 0;
       grossUsd += g;
-      const rateBs = Number(
-        apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0,
-      );
+      const rateBs =
+        batchRate ??
+        Number(apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0);
       grossBs += g * rateBs;
     }
     grossUsd = round2(grossUsd);
@@ -394,23 +451,32 @@ export class AccountsPayableService {
     }
     let grossUsd = 0;
     let grossBs = 0;
+    // Tasa de pago del lote (si la tiene); sino, la de facturación por orden.
+    let batchRate = this.batchRateBs(batch);
+    if (!batchRate && batch.exchangeRateId) {
+      batchRate = Number(
+        (await resolveUsdRate(this.ratesRepo, batch.exchangeRateId)).amountBs,
+      );
+    }
     for (const apo of batch.orders) {
       const g = Number(apo.grossUsd) || 0;
       grossUsd += g;
       const order = apo.internalOrder?.order;
-      const rateBs = order?.billingExchangeRate
-        ? Number(order.billingExchangeRate.amountBs)
-        : Number(
-            (
-              await resolveUsdRate(
-                this.ratesRepo,
-                order?.billingExchangeRateId ?? null,
-              )
-            ).amountBs,
-          );
+      const rateBs =
+        batchRate ??
+        (order?.billingExchangeRate
+          ? Number(order.billingExchangeRate.amountBs)
+          : Number(
+              (
+                await resolveUsdRate(
+                  this.ratesRepo,
+                  order?.billingExchangeRateId ?? null,
+                )
+              ).amountBs,
+            ));
       if (!Number.isFinite(rateBs) || rateBs <= 0) {
         throw new BadRequestException(
-          'Tasa de facturación inválida en una orden del lote',
+          'Tasa de cambio inválida para convertir el lote a Bs',
         );
       }
       grossBs += g * rateBs;
@@ -462,6 +528,7 @@ export class AccountsPayableService {
       }
     }
     const taxUnit = await this.resolveTaxUnit(dto.taxUnitId);
+    const paymentRate = await this.resolvePaymentRate(dto.exchangeRateId);
 
     const id = await this.dataSource.transaction(async (mgr) => {
       const seq = await mgr.query<{ nextval: string }[]>(
@@ -469,8 +536,8 @@ export class AccountsPayableService {
       );
       const payableNumber = String(seq[0].nextval);
       const inserted = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "status")
-         VALUES ($1, $2, $3, $4, $5, $6, 'unpaid') RETURNING id`,
+        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "exchangeRateId", "status")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'unpaid') RETURNING id`,
         [
           payableNumber,
           dto.recipientType,
@@ -478,6 +545,7 @@ export class AccountsPayableService {
           dto.recipientType === 'care_center' ? providerId : null,
           taxUnit.id,
           dto.applyRetention ?? true,
+          paymentRate.id,
         ],
       );
       const batchId = inserted[0].id;
@@ -615,6 +683,33 @@ export class AccountsPayableService {
     return this.findOneBatch(id, user);
   }
 
+  /**
+   * Cambia la tasa de pago USD/Bs del lote y recalcula bruto Bs, retención,
+   * neto y estado. Bloqueado si ya está pagado (el neto define el cuadre de
+   * los pagos y la obligación SENIAT ya nació): edita o quita un pago primero.
+   */
+  async setExchangeRate(
+    id: string,
+    exchangeRateId: string,
+    user: AuthenticatedUser,
+  ): Promise<AccountsPayable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'El lote ya está pagado. Para cambiar la tasa de pago, edita o elimina un pago primero.',
+      );
+    }
+    const rate = await this.resolvePaymentRate(exchangeRateId);
+    if (batch.exchangeRateId === rate.id) return this.findOneBatch(id, user);
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(AccountsPayable, id, { exchangeRateId: rate.id });
+      await this.recomputeBatchStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
   /** Valida que las órdenes internas existan, estén facturadas, visibles y sin lote. */
   private async validatePendingRows(
     internalOrderIds: string[],
@@ -707,8 +802,7 @@ export class AccountsPayableService {
     }
 
     const net = await this.computeNet(batch);
-    const usdRateId =
-      batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ?? null;
+    const usdRateId = this.batchUsdRateId(batch);
     const priorPaidBs = round2(
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
     );
@@ -760,8 +854,7 @@ export class AccountsPayableService {
     if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
       throw new NotFoundException('Pago no encontrado en este lote');
     }
-    const usdRateId =
-      batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ?? null;
+    const usdRateId = this.batchUsdRateId(batch);
     await this.dataSource.transaction(async (mgr) => {
       const payload = await this.resolvePaymentForSave(dto, usdRateId);
       await mgr.update(AccountsPayablePayment, paymentId, payload);
@@ -949,8 +1042,8 @@ export class AccountsPayableService {
 
   // ---------------------------------------------------------------------------
   // Conversión de pagos. La tasa USD/Bs del propio pago (si viene) manda sobre
-  // la tasa de facturación del lote: permite registrar pagos hechos otro día
-  // a la tasa de ese día. Sin tasa propia, cae a la de facturación.
+  // la tasa de pago del lote: permite registrar pagos hechos otro día a la
+  // tasa de ese día. Sin tasa propia, cae a la del lote (`batchUsdRateId`).
   // ---------------------------------------------------------------------------
   private async resolvePaymentForSave(
     p: AccountsPayablePaymentDto,
