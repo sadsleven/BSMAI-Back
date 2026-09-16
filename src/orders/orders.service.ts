@@ -1616,8 +1616,9 @@ export class OrdersService implements OnModuleInit {
   /**
    * Normaliza un pago para guardar. Valida método→moneda y deriva
    * `amountInUsd` con el helper compartido. Si `usdExchangeRateId` viene
-   * (ej. la orden ya tiene `billingExchangeRateId`), se usa como ref USD/Bs;
-   * sino, se toma la última USD activa.
+   * (ej. la orden ya tiene `billingExchangeRateId`), se usa como ref USD/Bs
+   * para pagos en Bs; sino, se toma la última USD activa. Los pagos en EUR
+   * cruzan a USD con la tasa USD/Bs del mismo día que su tasa EUR/Bs.
    */
   private async resolvePaymentForSave(
     p: CreateOrderPaymentDto,
