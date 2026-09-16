@@ -1,8 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
 
 export type PaymentCurrency = 'USD' | 'EUR' | 'BS';
+
+/** Zona horaria de negocio: las tasas BCV son "del día" en Venezuela. */
+const BUSINESS_TZ = 'America/Caracas';
 
 export interface PaymentToConvert {
   amountValue: number;
@@ -16,8 +19,11 @@ export interface PaymentToConvert {
 
 export interface UsdConversionContext {
   /**
-   * Tasa USD/Bs de referencia. Preferí pasar `order.billingExchangeRateId` si
-   * la orden ya está facturada; sino, la última activa de USD.
+   * Tasa USD/Bs de referencia para pagos en BS. Preferí pasar
+   * `order.billingExchangeRateId` si la orden ya está facturada; sino, la
+   * última activa de USD. Para pagos en EUR es sólo el fallback: el cruce
+   * EUR→Bs→USD usa la tasa USD/Bs del mismo día que la tasa EUR del pago
+   * (ver `resolveUsdRateForEur`).
    */
   usdExchangeRateId?: string | null;
 }
@@ -26,7 +32,9 @@ export interface UsdConversionContext {
  * Convierte un pago a USD usando las tasas referenciadas.
  * - USD: devuelve `amountValue`.
  * - BS: necesita `usdRate` → `amountValue / usdRate.amountBs`.
- * - EUR: necesita `eurRate` (snapshot del pago) y `usdRate` → cross via Bs.
+ * - EUR: necesita `eurRate` (snapshot del pago) → Bs con ella, y de Bs a USD
+ *   con la tasa USD/Bs del MISMO DÍA que la tasa EUR (o la más cercana; si
+ *   no hay ninguna, `ctx.usdExchangeRateId` / última activa).
  *
  * Throws BadRequestException si faltan tasas requeridas.
  */
@@ -41,36 +49,124 @@ export async function computeAmountInUsd(
   }
   if (payment.amountCurrency === 'USD') return v;
 
-  const usdRate = await resolveUsdRate(ratesRepo, ctx.usdExchangeRateId);
-  const usdRateBs = Number(usdRate.amountBs);
-  if (!Number.isFinite(usdRateBs) || usdRateBs <= 0) {
-    throw new BadRequestException('Tasa USD inválida (amountBs ≤ 0)');
-  }
-
   if (payment.amountCurrency === 'BS') {
-    return roundUsd(v / usdRateBs);
+    const usdRate = await resolveUsdRate(ratesRepo, ctx.usdExchangeRateId);
+    return roundUsd(v / positiveBs(usdRate, 'USD'));
   }
 
-  // EUR: necesita rate EUR/Bs del pago + rate USD/Bs de referencia.
-  if (!payment.exchangeRateId) {
+  // EUR: rate EUR/Bs del pago + rate USD/Bs del mismo día de esa tasa EUR.
+  const eurRate = await loadEurRate(ratesRepo, payment.exchangeRateId);
+  const usdRate = await resolveUsdRateForEur(
+    ratesRepo,
+    eurRate,
+    ctx.usdExchangeRateId,
+  );
+  return roundUsd((v * positiveBs(eurRate, 'EUR')) / positiveBs(usdRate, 'USD'));
+}
+
+/** Carga y valida la tasa EUR/Bs snapshot de un pago en EUR. */
+async function loadEurRate(
+  ratesRepo: Repository<ExchangeRate>,
+  exchangeRateId?: string | null,
+): Promise<ExchangeRate> {
+  if (!exchangeRateId) {
     throw new BadRequestException(
       'Pago en EUR requiere exchangeRateId con tasa EUR/Bs',
     );
   }
-  const eurRate = await ratesRepo.findOne({
-    where: { id: payment.exchangeRateId },
-  });
+  const eurRate = await ratesRepo.findOne({ where: { id: exchangeRateId } });
   if (!eurRate) throw new BadRequestException('Tasa EUR no encontrada');
   if (eurRate.currency !== 'EUR') {
     throw new BadRequestException(
       'exchangeRateId del pago EUR debe ser de tipo EUR',
     );
   }
-  const eurRateBs = Number(eurRate.amountBs);
-  if (!Number.isFinite(eurRateBs) || eurRateBs <= 0) {
-    throw new BadRequestException('Tasa EUR inválida (amountBs ≤ 0)');
+  return eurRate;
+}
+
+function positiveBs(rate: ExchangeRate, label: 'USD' | 'EUR'): number {
+  const bs = Number(rate.amountBs);
+  if (!Number.isFinite(bs) || bs <= 0) {
+    throw new BadRequestException(`Tasa ${label} inválida (amountBs ≤ 0)`);
   }
-  return roundUsd((v * eurRateBs) / usdRateBs);
+  return bs;
+}
+
+/** `YYYY-MM-DD` de un instante en la zona de negocio (America/Caracas). */
+export function businessDayKey(d: Date): string {
+  // en-CA formatea como YYYY-MM-DD.
+  return d.toLocaleDateString('en-CA', { timeZone: BUSINESS_TZ });
+}
+
+/**
+ * Elige la tasa USD/Bs con la que cruzar una tasa EUR/Bs: la del MISMO DÍA
+ * (Caracas) que `eurEffectiveDate`; si hay varias, la más cercana en hora.
+ * Si ninguna es del mismo día, la más cercana en el tiempo (antes o después).
+ * `null` si no hay candidatas válidas. Regla pura, espejo de la del FE.
+ */
+export function pickUsdRateForEur(
+  eurEffectiveDate: string | Date,
+  candidates: Array<ExchangeRate | null | undefined>,
+): ExchangeRate | null {
+  const target = new Date(eurEffectiveDate);
+  if (Number.isNaN(target.getTime())) return null;
+  const dayKey = businessDayKey(target);
+  const scored = candidates
+    .filter((r): r is ExchangeRate => !!r && r.currency === 'USD')
+    .map((r) => {
+      const t = new Date(r.effectiveDate).getTime();
+      return {
+        rate: r,
+        delta: Number.isNaN(t) ? Infinity : Math.abs(t - target.getTime()),
+        sameDay: !Number.isNaN(t) && businessDayKey(new Date(t)) === dayKey,
+      };
+    })
+    .filter((s) => s.delta !== Infinity);
+  if (scored.length === 0) return null;
+  const sameDay = scored.filter((s) => s.sameDay);
+  const pool = sameDay.length ? sameDay : scored;
+  pool.sort((a, b) => a.delta - b.delta);
+  return pool[0].rate;
+}
+
+/**
+ * Tasa USD/Bs para cruzar un pago en EUR: la activa del mismo día (Caracas)
+ * que la tasa EUR; si no hay, la activa más cercana (anterior o posterior);
+ * si no hay ninguna USD activa, cae a `resolveUsdRate(fallbackUsdRateId)`.
+ *
+ * Basta con la vecina anterior-o-igual y la vecina posterior: cualquier tasa
+ * del mismo día queda necesariamente entre una de ellas y la tasa EUR.
+ */
+export async function resolveUsdRateForEur(
+  ratesRepo: Repository<ExchangeRate>,
+  eurRate: Pick<ExchangeRate, 'effectiveDate'>,
+  fallbackUsdRateId?: string | null,
+): Promise<ExchangeRate> {
+  const at = new Date(eurRate.effectiveDate);
+  if (!Number.isNaN(at.getTime())) {
+    const iso = at.toISOString();
+    const [before, after] = await Promise.all([
+      ratesRepo.findOne({
+        where: {
+          currency: 'USD',
+          isActive: true,
+          effectiveDate: LessThanOrEqual(iso),
+        },
+        order: { effectiveDate: 'DESC', createdAt: 'DESC' },
+      }),
+      ratesRepo.findOne({
+        where: {
+          currency: 'USD',
+          isActive: true,
+          effectiveDate: MoreThan(iso),
+        },
+        order: { effectiveDate: 'ASC', createdAt: 'DESC' },
+      }),
+    ]);
+    const picked = pickUsdRateForEur(at, [before, after]);
+    if (picked) return picked;
+  }
+  return resolveUsdRate(ratesRepo, fallbackUsdRateId);
 }
 
 /**
