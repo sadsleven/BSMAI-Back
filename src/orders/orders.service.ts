@@ -39,6 +39,7 @@ import {
   IssueOrderInvoiceDto,
   MAX_INVOICE_NUMBER,
   ReportOrderDto,
+  UpdateProviderAmountsDto,
 } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
@@ -69,6 +70,12 @@ import {
   computeAmountInUsd,
   resolveUsdRate,
 } from '../shared/utils/payment-conversion';
+import {
+  splitOrderPortionsUsd,
+  targetBsForOrder,
+  targetBsForPortion,
+  targetUsdForOrder,
+} from '../accounts-receivable/ar-targets';
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   draft: ['in_progress', 'cancelled'],
@@ -1241,6 +1248,12 @@ export class OrdersService implements OnModuleInit {
     if (!order) throw new NotFoundException('Orden no encontrada');
     await this.assertOrderVisibility(order, user);
     order.invoices = await this.loadInvoices(order.id);
+    // Candado de edición (Paso 1 y Paso 4) según los lotes de CxP/CxC. Un
+    // borrador nunca está en un lote: se resuelve sin consultar.
+    order.editLocks =
+      order.status === 'draft'
+        ? { locked: false, payableBatches: [], receivableBatches: [] }
+        : await this.orderBatchLocks(order.id);
     return order;
   }
 
@@ -2833,6 +2846,190 @@ export class OrdersService implements OnModuleInit {
     return this.findOne(id, user);
   }
 
+  /**
+   * Corrige la liquidación de una orden YA finalizada (Paso 4) sin
+   * re-facturarla: reescribe el monto a pagar de cada proveedor
+   * (`order_internal_orders.providerAmountUsd`), el total `doctorAmount` de la
+   * orden y el snapshot `grossUsd` del lote de CxP donde ya esté encolada. NO
+   * toca la factura, la tasa, los agrupamientos ni el estado.
+   *
+   * Sólo procede mientras ningún lote de la orden tenga pagos registrados: una
+   * orden pendiente (o en un lote sin pagos) sí se puede corregir.
+   */
+  async updateProviderAmounts(
+    id: string,
+    dto: UpdateProviderAmountsDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    this.assertNotCancelled(order);
+    if (order.status !== 'finalized') {
+      throw new BadRequestException(
+        'Sólo se pueden corregir los montos a proveedor de una orden finalizada',
+      );
+    }
+    await this.assertBatchLocksClear(
+      order.id,
+      'corregir los montos a proveedor de',
+    );
+
+    // Mismo set de proveedores que la orden (misma validación que al facturar).
+    const expected = this.distinctProvidersFromRows(
+      (order.orderServiceTypes ?? []).map((ost) => ({
+        serviceTypeId: ost.serviceTypeId,
+        providerType: ost.providerType,
+        specialtyId: ost.specialtyId,
+        doctorId: ost.doctorId ?? undefined,
+        careCenterId: ost.careCenterId ?? undefined,
+        customName: ost.customName ?? '',
+      })),
+    );
+    const expectedSet = new Set(expected.map((p) => p.key));
+    const seenKeys = new Set<string>();
+    for (const p of dto.providers) {
+      const pid = p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
+      const key = `${p.providerType}:${pid}` as ProviderKey;
+      if (seenKeys.has(key)) {
+        throw new BadRequestException('Proveedor duplicado en la liquidación');
+      }
+      seenKeys.add(key);
+      if (!expectedSet.has(key)) {
+        throw new BadRequestException(
+          `Proveedor que no participa en la orden (${key})`,
+        );
+      }
+    }
+    for (const key of expectedSet) {
+      if (!seenKeys.has(key)) {
+        throw new BadRequestException(
+          `Falta el monto de un proveedor de la orden (${key})`,
+        );
+      }
+    }
+
+    const priceAmount = Number(order.priceAmount);
+    const totalUsd = dto.providers.reduce((sum, p) => sum + p.amount, 0);
+    if (totalUsd > priceAmount + 0.005) {
+      throw new BadRequestException(
+        'La suma de pagos a proveedores supera el monto declarado de la orden',
+      );
+    }
+
+    // Diff por orden interna (el N° interno es como se nombra al proveedor en
+    // Cuentas por pagar y en el historial).
+    const internalByKey = new Map(
+      (order.internalOrders ?? []).map((io) => [
+        `${io.providerType}:${io.doctorId ?? io.careCenterId}`,
+        io,
+      ]),
+    );
+    const changes: Record<string, { from?: unknown; to?: unknown }> = {
+      doctorAmount: {
+        from: order.doctorAmount != null ? Number(order.doctorAmount) : null,
+        to: +totalUsd.toFixed(2),
+      },
+    };
+    for (const p of dto.providers) {
+      const pid = p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
+      const io = internalByKey.get(`${p.providerType}:${pid}`);
+      const before =
+        io?.providerAmountUsd != null ? Number(io.providerAmountUsd) : null;
+      if (before !== null && Math.round(before * 100) === Math.round(p.amount * 100))
+        continue;
+      changes[`providerAmount:${io?.internalNumber ?? pid}`] = {
+        from: before,
+        to: +p.amount.toFixed(2),
+      };
+    }
+
+    await this.dataSource.transaction(async (mgr) => {
+      for (const p of dto.providers) {
+        const providerId =
+          p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
+        await mgr.query(
+          `UPDATE "order_internal_orders"
+              SET "providerAmountUsd" = $1
+            WHERE "orderId" = $2
+              AND "providerType" = $3
+              AND COALESCE("doctorId", "careCenterId") = $4`,
+          [p.amount.toFixed(2), order.id, p.providerType, providerId],
+        );
+      }
+      await mgr.update(
+        Order,
+        { id: order.id },
+        { doctorAmount: totalUsd.toFixed(2) },
+      );
+      // El lote donde ya esté encolada (sin pagos) toma el monto nuevo.
+      await this.syncPayableSnapshots(mgr, order.id);
+      await this.logChange(
+        mgr,
+        order.id,
+        user.id,
+        'provider_amounts',
+        changes,
+      );
+    });
+
+    return this.findOne(id, user);
+  }
+
+  /**
+   * Recalcula los snapshots de precio del lado PAGO (`order_service_pricing`,
+   * kind doctor/care_center) y el sugerido total de la orden tras cambiarle los
+   * servicios/proveedores estando ya facturada. No toca `doctorAmount` — el
+   * monto real a pagar se corrige en el Paso 4.
+   */
+  private async resnapshotProviderPricing(
+    mgr: EntityManager,
+    orderId: string,
+    rows: OrderServiceTypeRowDto[],
+  ): Promise<void> {
+    const qtyByST = new Map(
+      rows.map((r) => [r.serviceTypeId, r.quantity ?? 1]),
+    );
+    let suggestedSum = 0;
+    const snapshotRows: Array<{
+      orderId: string;
+      serviceTypeId: string;
+      kind: 'doctor' | 'care_center';
+      priceUsd: string;
+    }> = [];
+    for (const prov of this.distinctProvidersFromRows(rows)) {
+      const stIds = rows
+        .filter((r) => {
+          const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
+          return (
+            r.providerType === prov.providerType && pid === prov.providerId
+          );
+        })
+        .map((r) => r.serviceTypeId);
+      const { suggested, snapshotRows: got } = await this.computeProviderPricing(
+        prov.providerType,
+        prov.providerId,
+        stIds,
+        qtyByST,
+      );
+      suggestedSum += suggested;
+      snapshotRows.push(...got);
+    }
+    await mgr.delete(OrderServicePricing, {
+      orderId,
+      kind: In(['doctor', 'care_center']),
+    });
+    if (snapshotRows.length) {
+      await mgr.insert(
+        OrderServicePricing,
+        snapshotRows.map((r) => ({ ...r, orderId })),
+      );
+    }
+    await mgr.update(
+      Order,
+      { id: orderId },
+      { doctorAmountSuggested: suggestedSum.toFixed(2) },
+    );
+  }
+
   // ---- Facturas del Paso 4 (numeración, emisión y anulación) ----
 
   /** Rango válido del N° de factura, sin tocar la BD. */
@@ -3668,14 +3865,17 @@ export class OrdersService implements OnModuleInit {
   ): Promise<Order> {
     const existing = await this.findOne(id, user);
     this.assertNotCancelled(existing);
-    if (existing.status !== 'draft')
-      throw new BadRequestException(
-        'Solo se puede editar el Paso 1 de una orden creada (antes de atenderla)',
-      );
     this.assertStep1Editable(existing, user);
+    // El Paso 1 se corrige en CUALQUIER estado del flujo (clave de servicio,
+    // datos del paciente, servicios, monto), también con la orden ya
+    // finalizada. El único freno es la plata ya movida: si algún lote de CxP /
+    // CxC de la orden tiene pagos o cobros registrados, queda congelada.
+    if (existing.status !== 'draft') {
+      await this.assertBatchLocksClear(existing.id, 'editar el Paso 1 de');
+    }
 
-    // Número de orden. `undefined` = no tocar la numeración; sólo se puede
-    // cambiar mientras la orden siga en borrador y con el permiso dedicado.
+    // Número de orden. `undefined` = no tocar la numeración; cambiarlo exige el
+    // permiso dedicado (se puede corregir en cualquier estado del flujo).
     const customNumber = dto.customOrderNumber ?? null;
     if (
       customNumber != null &&
@@ -3868,6 +4068,17 @@ export class OrdersService implements OnModuleInit {
       };
     }
 
+    // Quitar un proveedor borra su orden interna y, por CASCADE, su fila en el
+    // lote de CxP: no puede dejar el lote vacío.
+    if (existing.status !== 'draft') {
+      await this.assertProviderRemovalKeepsBatches(
+        existing.id,
+        new Set(
+          this.distinctProvidersFromRows(merged.serviceTypes).map((r) => r.key),
+        ),
+      );
+    }
+
     const mergedServiceKey =
       merged.type === 'insurance' && merged.serviceKey?.trim()
         ? merged.serviceKey.trim()
@@ -3999,10 +4210,22 @@ export class OrdersService implements OnModuleInit {
         merged.serviceTypes.map((r) => r.serviceTypeId),
       );
 
-      // Modelo Pendientes + Lotes: no hay cuentas por pagar/cobrar ligadas a la
-      // orden que reconciliar. La edición sólo ocurre en borrador y los montos a
-      // proveedor (pendientes) se escriben al facturar; un borrador nunca tiene
-      // órdenes internas dentro de un lote.
+      // Orden ya facturada: con servicios/proveedores nuevos los snapshots del
+      // lado PAGO quedaron viejos. Se recalculan los sugeridos; el monto real a
+      // pagar (`doctorAmount`) se corrige en el Paso 4.
+      if (existing.status === 'finalized') {
+        await this.resnapshotProviderPricing(
+          mgr,
+          existing.id,
+          merged.serviceTypes,
+        );
+      }
+      // Lotes PENDIENTES (sin pagos) de CxP/CxC: se les resincronizan los
+      // snapshots. Los que ya tienen pagos cortaron arriba.
+      if (existing.status !== 'draft') {
+        await this.syncPayableSnapshots(mgr, existing.id);
+        await this.syncReceivableSnapshots(mgr, existing.id);
+      }
 
       if (Object.keys(changes).length) {
         await this.logChange(mgr, existing.id, user.id, 'update', changes);
@@ -4051,6 +4274,232 @@ export class OrdersService implements OnModuleInit {
     ) {
       throw new BadRequestException(
         `La orden está incluida en un lote de cuentas por pagar/cobrar. Anula el lote antes de ${action} la orden.`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Candados de edición por lotes (CxP / CxC).
+  //
+  // Una orden ya facturada se puede seguir corrigiendo — claves de servicio y
+  // datos del Paso 1, montos a proveedor del Paso 4 — MIENTRAS la plata no se
+  // haya movido. La frontera es el pago: un lote de cuentas por pagar/cobrar
+  // con pagos o cobros registrados congela servicios y montos; un lote todavía
+  // sin pagos (pendiente) deja editar y se le resincronizan los snapshots.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Lotes de CxP/CxC de la orden que YA tienen pagos/cobros registrados (los
+   * que bloquean la edición). Devuelve sus números para nombrarlos en el error
+   * y en la UI. Una orden en borrador nunca está en un lote.
+   */
+  private async orderBatchLocks(orderId: string): Promise<{
+    locked: boolean;
+    payableBatches: string[];
+    receivableBatches: string[];
+  }> {
+    const payable = await this.dataSource.query<{ n: string }[]>(
+      `SELECT DISTINCT ap."payableNumber" AS n
+         FROM "accounts_payable_orders" apo
+         JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+         JOIN "accounts_payable" ap
+           ON ap.id = apo."payableId" AND ap."deletedAt" IS NULL
+         JOIN "accounts_payable_payment_links" apl ON apl."payableId" = ap.id
+         JOIN "accounts_payable_payments" app
+           ON app.id = apl."paymentId" AND app."deletedAt" IS NULL
+        WHERE iio."orderId" = $1
+        ORDER BY 1`,
+      [orderId],
+    );
+    const receivable = await this.dataSource.query<{ n: string }[]>(
+      `SELECT DISTINCT ar."receivableNumber" AS n
+         FROM "accounts_receivable_orders" aro
+         JOIN "accounts_receivable" ar
+           ON ar.id = aro."receivableId" AND ar."deletedAt" IS NULL
+         JOIN "accounts_receivable_payment_links" arl
+           ON arl."receivableId" = ar.id
+         JOIN "accounts_receivable_payments" arp
+           ON arp.id = arl."paymentId" AND arp."deletedAt" IS NULL
+        WHERE aro."orderId" = $1
+        ORDER BY 1`,
+      [orderId],
+    );
+    const payableBatches = payable.map((r) => r.n);
+    const receivableBatches = receivable.map((r) => r.n);
+    return {
+      locked: payableBatches.length > 0 || receivableBatches.length > 0,
+      payableBatches,
+      receivableBatches,
+    };
+  }
+
+  /**
+   * Lanza si algún lote de la orden ya tiene pagos/cobros registrados.
+   * `action` es el verbo que se muestra ("editar el Paso 1 de", …).
+   */
+  private async assertBatchLocksClear(
+    orderId: string,
+    action: string,
+  ): Promise<void> {
+    const locks = await this.orderBatchLocks(orderId);
+    if (!locks.locked) return;
+    const parts: string[] = [];
+    if (locks.payableBatches.length) {
+      parts.push(`cuentas por pagar ${locks.payableBatches.join(', ')}`);
+    }
+    if (locks.receivableBatches.length) {
+      parts.push(`cuentas por cobrar ${locks.receivableBatches.join(', ')}`);
+    }
+    throw new BadRequestException(
+      `No se puede ${action} la orden: ya tiene pagos registrados en el lote de ${parts.join(' y en el de ')}. Quita o anula esos pagos primero.`,
+    );
+  }
+
+  /**
+   * Quitar un proveedor de la orden borra su orden interna y, por CASCADE, su
+   * fila en el lote de CxP. Si eso dejaría el lote SIN órdenes, se corta: un
+   * lote vacío no tiene sentido (mismo criterio que Cuentas por cobrar, que
+   * obliga a eliminar el lote en vez de vaciarlo).
+   */
+  private async assertProviderRemovalKeepsBatches(
+    orderId: string,
+    keepKeys: Set<string>,
+  ): Promise<void> {
+    const rows = await this.dataSource.query<
+      Array<{
+        providerType: 'doctor' | 'care_center';
+        pid: string;
+        payableId: string;
+        payableNumber: string;
+        total: number;
+      }>
+    >(
+      `SELECT iio."providerType",
+              COALESCE(iio."doctorId", iio."careCenterId")::text AS pid,
+              ap.id AS "payableId", ap."payableNumber",
+              (SELECT count(*)::int FROM "accounts_payable_orders" x
+                WHERE x."payableId" = ap.id) AS total
+         FROM "order_internal_orders" iio
+         JOIN "accounts_payable_orders" apo ON apo."internalOrderId" = iio.id
+         JOIN "accounts_payable" ap
+           ON ap.id = apo."payableId" AND ap."deletedAt" IS NULL
+        WHERE iio."orderId" = $1`,
+      [orderId],
+    );
+    if (!rows.length) return;
+    const removedByBatch = new Map<
+      string,
+      { number: string; total: number; removed: number }
+    >();
+    for (const r of rows) {
+      if (keepKeys.has(`${r.providerType}:${r.pid}`)) continue;
+      const acc = removedByBatch.get(r.payableId) ?? {
+        number: r.payableNumber,
+        total: Number(r.total),
+        removed: 0,
+      };
+      acc.removed += 1;
+      removedByBatch.set(r.payableId, acc);
+    }
+    for (const acc of removedByBatch.values()) {
+      if (acc.removed >= acc.total) {
+        throw new BadRequestException(
+          `Quitar ese proveedor dejaría vacío el lote de cuentas por pagar ${acc.number}. Elimina el lote primero.`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Resincroniza el snapshot `grossUsd` del pivot de CxP con el
+   * `providerAmountUsd` vigente de cada orden interna. Sólo se llama sobre
+   * lotes sin pagos (los demás están bloqueados), así que el lote sigue
+   * `unpaid` y no hay retención que recalcular.
+   */
+  private async syncPayableSnapshots(
+    mgr: EntityManager,
+    orderId: string,
+  ): Promise<void> {
+    await mgr.query(
+      `UPDATE "accounts_payable_orders" apo
+          SET "grossUsd" = iio."providerAmountUsd"
+         FROM "order_internal_orders" iio
+        WHERE iio.id = apo."internalOrderId"
+          AND iio."orderId" = $1
+          AND iio."providerAmountUsd" IS NOT NULL`,
+      [orderId],
+    );
+  }
+
+  /**
+   * Resincroniza el target snapshot del pivot de CxC (`targetUsd` / `targetBs`)
+   * con el monto y los STs vigentes de la orden. Si la edición cambiaría el
+   * MODO de cobro de una porción ya encolada (Bs tasa fija ↔ USD) se corta: el
+   * lote es uniforme por modo y habría que rearmarlo.
+   */
+  private async syncReceivableSnapshots(
+    mgr: EntityManager,
+    orderId: string,
+  ): Promise<void> {
+    const pivots = await mgr.query<
+      Array<{
+        receivableId: string;
+        portion: 'full' | 'fixed' | 'indexed';
+        useFixedRate: boolean;
+      }>
+    >(
+      `SELECT "receivableId", "portion", "useFixedRate"
+         FROM "accounts_receivable_orders" WHERE "orderId" = $1`,
+      [orderId],
+    );
+    if (!pivots.length) return;
+    const order = await mgr.getRepository(Order).findOne({
+      where: { id: orderId },
+      relations: {
+        fixedExchangeRate: true,
+        orderServiceTypes: true,
+        servicePricing: true,
+      },
+      loadEagerRelations: false,
+    });
+    if (!order) return;
+    const { fixedUsd, indexedUsd } = splitOrderPortionsUsd(order);
+    for (const p of pivots) {
+      let rowFixed: boolean;
+      let targetUsd: number | null;
+      let targetBs: number | null;
+      if (p.portion === 'indexed') {
+        rowFixed = false;
+        targetUsd =
+          indexedUsd > 0 ? indexedUsd : Number(order.priceAmount) || 0;
+        targetBs = null;
+      } else if (p.portion === 'fixed') {
+        rowFixed = true;
+        targetUsd = fixedUsd;
+        targetBs = targetBsForPortion(order, fixedUsd);
+      } else {
+        rowFixed = order.useFixedRate;
+        targetUsd = order.useFixedRate
+          ? Number(order.priceAmount) || 0
+          : targetUsdForOrder(order);
+        targetBs = order.useFixedRate ? targetBsForOrder(order) : null;
+      }
+      if (rowFixed !== p.useFixedRate || (rowFixed && targetBs == null)) {
+        throw new BadRequestException(
+          'El cambio altera el modo de cobro (Bs a tasa fija ↔ USD) de una orden ya incluida en un lote de cuentas por cobrar. Quítala del lote antes de editarla.',
+        );
+      }
+      await mgr.query(
+        `UPDATE "accounts_receivable_orders"
+            SET "targetUsd" = $1, "targetBs" = $2
+          WHERE "receivableId" = $3 AND "orderId" = $4 AND "portion" = $5`,
+        [
+          targetUsd != null ? targetUsd.toFixed(2) : null,
+          targetBs != null ? targetBs.toFixed(2) : null,
+          p.receivableId,
+          orderId,
+          p.portion,
+        ],
       );
     }
   }

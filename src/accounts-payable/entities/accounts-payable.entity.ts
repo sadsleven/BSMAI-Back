@@ -118,6 +118,11 @@ export class AccountsPayable {
   deletedAt?: Date | null;
 
   // --- Transient (NO columnas). Calculados por el servicio al listar/ver. ---
+  /**
+   * Nº de órdenes internas del lote. En el listado llega agregado por SQL (el
+   * pivot no se hidrata); en el detalle es `orders.length`.
+   */
+  orderCount?: number;
   /** Suma de `grossUsd` del pivot (bruto USD del lote). */
   grossUsd?: number;
   /**

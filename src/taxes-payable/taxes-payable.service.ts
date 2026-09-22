@@ -256,16 +256,10 @@ export class TaxesPayableService {
       sortDir = 'DESC',
     } = query;
 
-    const qb = this.batchRepo
-      .createQueryBuilder('tpb')
-      .leftJoinAndSelect('tpb.adjustmentTaxUnit', 'adjustmentTaxUnit')
-      .leftJoinAndSelect('tpb.obligations', 'obl')
-      .leftJoinAndSelect('obl.doctor', 'oblDoctor')
-      .leftJoinAndSelect('obl.careCenter', 'oblCareCenter')
-      .leftJoinAndSelect('tpb.payments', 'payments')
-      .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
-
-    qb.orderBy(`tpb.${sortBy}`, sortDir);
+    // Paginado en dos pasos. Paso 1: filtrar/ordenar sobre `tax_payment_batches`
+    // sola — sin joins a colecciones — para que LIMIT/OFFSET y COUNT trabajen
+    // sobre índices y no sobre el cartesiano lote×obligaciones×pagos.
+    const qb = this.batchRepo.createQueryBuilder('tpb');
 
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
@@ -311,21 +305,40 @@ export class TaxesPayableService {
       );
     }
 
-    const offset = (page - 1) * limit;
-    qb.skip(offset).take(limit);
-    const [data, total] = await qb.getManyAndCount();
-    for (const b of data) {
-      this.computeFigures(b);
-      await this.attachInternalNumbers(b.obligations ?? []);
-    }
-    return {
-      data,
-      metadata: {
-        total,
-        page,
-        lastPage: Math.max(1, Math.ceil(total / limit)),
+    const total = await qb.getCount();
+    const lastPage = Math.max(1, Math.ceil(total / limit));
+    const ids = (
+      await qb
+        .select('tpb.id', 'id')
+        // `id` como desempate (en la misma dirección que el sort, para que el
+        // índice compuesto sirva en ASC y en DESC): el orden es estable entre
+        // páginas aunque dos lotes compartan `createdAt`.
+        .orderBy(`tpb.${sortBy}`, sortDir)
+        .addOrderBy('tpb.id', sortDir)
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .getRawMany<{ id: string }>()
+    ).map((r) => r.id);
+    if (ids.length === 0)
+      return { data: [], metadata: { total, page, lastPage } };
+
+    // Paso 2: hidratar sólo la página. Las órdenes internas de cada obligación
+    // (`attachInternalNumbers`) NO se resuelven acá: el listado de lotes no las
+    // muestra — sólo el detalle y la pestaña de pendientes.
+    const rows = await this.batchRepo.find({
+      where: { id: In(ids) },
+      relations: {
+        adjustmentTaxUnit: true,
+        obligations: { doctor: true, careCenter: true },
+        payments: { exchangeRate: true },
       },
-    };
+    });
+    const byId = new Map(rows.map((b) => [b.id, b]));
+    const data = ids
+      .map((id) => byId.get(id))
+      .filter((b): b is TaxPaymentBatch => !!b);
+    for (const b of data) this.computeFigures(b);
+    return { data, metadata: { total, page, lastPage } };
   }
 
   async findOneBatch(

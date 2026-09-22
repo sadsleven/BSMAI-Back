@@ -18,6 +18,7 @@ export type OrderChangeAction =
   | 'attend'
   | 'report'
   | 'billing'
+  | 'provider_amounts'
   | 'payment_add'
   | 'payment_update'
   | 'payment_remove'

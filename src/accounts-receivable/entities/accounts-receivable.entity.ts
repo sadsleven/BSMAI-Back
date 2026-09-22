@@ -121,6 +121,12 @@ export class AccountsReceivable {
   // --- Transient (NO columnas). Calculados por el servicio al listar/ver. ---
   /** Modo de cobro del lote: 'fixed' (Bs tasa fija) o 'usd'. Uniforme por lote. */
   mode?: 'usd' | 'fixed';
+
+  /**
+   * Nº de órdenes del lote. En el listado llega agregado por SQL (el pivot no
+   * se hidrata); en el detalle es `orders.length`.
+   */
+  orderCount?: number;
   /** Target USD del lote (modo usd), YA con el ajuste aplicado. */
   targetUsd?: number;
   /** Target Bs del lote (modo fixed), YA con el ajuste aplicado. */
