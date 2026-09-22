@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { AccountsPayable } from './entities/accounts-payable.entity';
 import { AccountsPayablePayment } from './entities/accounts-payable-payment.entity';
 import { AccountsPayableOrder } from './entities/accounts-payable-order.entity';
@@ -51,6 +51,15 @@ export interface PendingPayable {
   branchId: string;
   branchName: string | null;
   createdAt: string;
+}
+
+/** Agregados del pivot de un lote, resueltos en SQL (1 query por página). */
+interface PayableOrderTotals {
+  orderCount: number;
+  /** Σ `grossUsd` del pivot. */
+  grossUsd: number;
+  /** Σ `grossUsd` × tasa de facturación de cada orden (fallback sin tasa de lote). */
+  grossBsBilling: number;
 }
 
 interface BatchNet {
@@ -211,20 +220,11 @@ export class AccountsPayableService {
       sortDir = 'DESC',
     } = query;
 
-    const qb = this.repo
-      .createQueryBuilder('ap')
-      .leftJoinAndSelect('ap.doctor', 'doctor')
-      .leftJoinAndSelect('ap.careCenter', 'careCenter')
-      .leftJoinAndSelect('ap.taxUnit', 'taxUnit')
-      .leftJoinAndSelect('ap.exchangeRate', 'payableRate')
-      .leftJoinAndSelect('ap.orders', 'apo')
-      .leftJoinAndSelect('apo.internalOrder', 'iio')
-      .leftJoinAndSelect('iio.order', 'order')
-      .leftJoinAndSelect('order.billingExchangeRate', 'billingRate')
-      .leftJoinAndSelect('ap.payments', 'payments')
-      .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
-
-    qb.orderBy(`ap.${sortBy}`, sortDir);
+    // Paginado en dos pasos. Paso 1: filtrar/ordenar sobre `accounts_payable`
+    // SOLA — sin joins a colecciones — para que el LIMIT/OFFSET y el COUNT
+    // trabajen sobre índices y no sobre el producto cartesiano lote×órdenes×
+    // pagos que generaba `leftJoinAndSelect` + `skip/take`.
+    const qb = this.repo.createQueryBuilder('ap');
 
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
@@ -262,19 +262,85 @@ export class AccountsPayableService {
       );
     }
 
-    const offset = (page - 1) * limit;
-    qb.skip(offset).take(limit);
-    const [data, total] = await qb.getManyAndCount();
-    const taxUnitBs = await this.currentTaxUnitBs();
-    for (const b of data) this.computeFigures(b, taxUnitBs);
-    return {
-      data,
-      metadata: {
-        total,
-        page,
-        lastPage: Math.max(1, Math.ceil(total / limit)),
-      },
-    };
+    const total = await qb.getCount();
+    const lastPage = Math.max(1, Math.ceil(total / limit));
+    const ids = (
+      await qb
+        .select('ap.id', 'id')
+        // `id` como desempate (en la misma dirección que el sort, para que el
+        // índice compuesto sirva en ASC y en DESC): el orden es estable entre
+        // páginas aunque dos lotes compartan `createdAt`.
+        .orderBy(`ap.${sortBy}`, sortDir)
+        .addOrderBy('ap.id', sortDir)
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .getRawMany<{ id: string }>()
+    ).map((r) => r.id);
+    if (ids.length === 0)
+      return { data: [], metadata: { total, page, lastPage } };
+
+    // Paso 2: hidratar sólo la página. El pivot NO se trae: sus agregados
+    // (nº de órdenes y brutos) salen de una única query agrupada.
+    const [rows, totals, taxUnitBs] = await Promise.all([
+      this.repo.find({
+        where: { id: In(ids) },
+        relations: {
+          doctor: true,
+          careCenter: true,
+          taxUnit: true,
+          exchangeRate: true,
+          payments: { exchangeRate: true },
+        },
+      }),
+      this.orderTotals(ids),
+      this.currentTaxUnitBs(),
+    ]);
+    const byId = new Map(rows.map((b) => [b.id, b]));
+    const data = ids
+      .map((id) => byId.get(id))
+      .filter((b): b is AccountsPayable => !!b);
+    for (const b of data) this.computeFigures(b, taxUnitBs, totals.get(b.id));
+    return { data, metadata: { total, page, lastPage } };
+  }
+
+  /**
+   * Agregados del pivot de varios lotes en una sola query: nº de órdenes,
+   * bruto USD y bruto Bs a la tasa de facturación de cada orden (el fallback
+   * de {@link computeFigures} cuando el lote no tiene tasa de pago propia).
+   */
+  private async orderTotals(
+    ids: string[],
+  ): Promise<Map<string, PayableOrderTotals>> {
+    const rows = await this.dataSource.query<
+      Array<{
+        payableId: string;
+        orderCount: string;
+        grossUsd: string;
+        grossBsBilling: string;
+      }>
+    >(
+      `SELECT apo."payableId",
+              COUNT(*) AS "orderCount",
+              COALESCE(SUM(apo."grossUsd"), 0) AS "grossUsd",
+              COALESCE(SUM(apo."grossUsd" * COALESCE(er."amountBs", 0)), 0) AS "grossBsBilling"
+       FROM "accounts_payable_orders" apo
+       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+       JOIN "orders" o ON o.id = iio."orderId"
+       LEFT JOIN "exchange_rates" er ON er.id = o."billingExchangeRateId"
+       WHERE apo."payableId" = ANY($1)
+       GROUP BY apo."payableId"`,
+      [ids],
+    );
+    return new Map(
+      rows.map((r) => [
+        r.payableId,
+        {
+          orderCount: Number(r.orderCount) || 0,
+          grossUsd: Number(r.grossUsd) || 0,
+          grossBsBilling: Number(r.grossBsBilling) || 0,
+        },
+      ]),
+    );
   }
 
   async findOneBatch(
@@ -407,17 +473,29 @@ export class AccountsPayableService {
   private computeFigures(
     batch: AccountsPayable,
     fallbackTaxUnitBs: number,
+    totals?: PayableOrderTotals,
   ): void {
     let grossUsd = 0;
     let grossBs = 0;
     const batchRate = this.batchRateBs(batch);
-    for (const apo of batch.orders ?? []) {
-      const g = Number(apo.grossUsd) || 0;
-      grossUsd += g;
-      const rateBs =
-        batchRate ??
-        Number(apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0);
-      grossBs += g * rateBs;
+    if (totals) {
+      // Listado: el pivot no viene hidratado, los brutos ya vienen sumados.
+      grossUsd = totals.grossUsd;
+      grossBs =
+        batchRate !== null
+          ? totals.grossUsd * batchRate
+          : totals.grossBsBilling;
+      batch.orderCount = totals.orderCount;
+    } else {
+      for (const apo of batch.orders ?? []) {
+        const g = Number(apo.grossUsd) || 0;
+        grossUsd += g;
+        const rateBs =
+          batchRate ??
+          Number(apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0);
+        grossBs += g * rateBs;
+      }
+      batch.orderCount = (batch.orders ?? []).length;
     }
     grossUsd = round2(grossUsd);
     grossBs = round2(grossBs);

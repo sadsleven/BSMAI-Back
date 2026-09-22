@@ -394,4 +394,20 @@ export class Order {
 
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;
+
+  // --- Transient (NO columna). Lo llena `OrdersService.findOne`. ---
+  /**
+   * Candado de edición derivado de los lotes de cuentas por pagar/cobrar de la
+   * orden. `locked` cuando ALGÚN lote suyo ya tiene pagos o cobros registrados:
+   * ahí los servicios del Paso 1 y la liquidación del Paso 4 quedan congelados
+   * (reescribirlos movería plata ya entregada). Un lote todavía sin pagos NO
+   * bloquea: sus snapshots se resincronizan con la edición.
+   */
+  editLocks?: {
+    locked: boolean;
+    /** N° de los lotes de CxP con pagos registrados. */
+    payableBatches: string[];
+    /** N° de los lotes de CxC con cobros registrados. */
+    receivableBatches: string[];
+  };
 }

@@ -118,6 +118,19 @@ export class BillingProviderDto {
 }
 
 /**
+ * Corrección de la liquidación de una orden YA finalizada (Paso 4). Reescribe
+ * el monto a pagar de CADA proveedor de la orden — la lista debe traerlos a
+ * todos, igual que al facturar — sin tocar la factura, la tasa ni el estado.
+ */
+export class UpdateProviderAmountsDto {
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Indica el monto de al menos un proveedor' })
+  @ValidateNested({ each: true })
+  @Type(() => BillingProviderDto)
+  providers: BillingProviderDto[];
+}
+
+/**
  * Paso 4 — Facturación y liquidación.
  *
  * Acepta una lista `providers[]` con un pago USD por proveedor distinto que

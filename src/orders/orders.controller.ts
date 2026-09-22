@@ -31,6 +31,7 @@ import {
   ChangeOrderNumberDto,
   IssueOrderInvoiceDto,
   ReportOrderDto,
+  UpdateProviderAmountsDto,
 } from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -250,6 +251,21 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.billing(id, dto, user);
+  }
+
+  /**
+   * Corrige la liquidación a proveedores de una orden YA finalizada (Paso 4)
+   * sin re-facturarla: no toca factura, tasa ni estado. Se bloquea si algún
+   * lote de CxP/CxC de la orden ya tiene pagos o cobros registrados.
+   */
+  @RequirePermissions(PERMISSIONS.ORDERS.SET_PROVIDER_AMOUNT)
+  @Patch(':id/provider-amounts')
+  updateProviderAmounts(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateProviderAmountsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateProviderAmounts(id, dto, user);
   }
 
   /**

@@ -361,7 +361,7 @@ const ordersPermissions: PermissionDefinition[] = [
     action: 'update',
     label: 'Editar órdenes',
     description:
-      'Permite modificar el Paso 1 de órdenes creadas y sin atender (incluye gestión de pagos)',
+      'Permite modificar el Paso 1 de una orden en cualquier estado del flujo, la finalizada incluida (incluye gestión de pagos). Se bloquea cuando la orden ya tiene pagos registrados en un lote de cuentas por pagar/cobrar',
     group: ORDERS_GROUP,
   },
   {
@@ -446,7 +446,7 @@ const ordersPermissions: PermissionDefinition[] = [
     action: 'set-provider-amount',
     label: 'Asignar liquidación a proveedores (Paso 4)',
     description:
-      'Permite ver y editar el monto de liquidación a doctores/centros en el Paso 4',
+      'Permite ver y editar el monto de liquidación a doctores/centros en el Paso 4, y corregirlo en órdenes ya finalizadas mientras sus cuentas por pagar sigan sin pagos registrados',
     group: ORDERS_GROUP,
   },
 ];

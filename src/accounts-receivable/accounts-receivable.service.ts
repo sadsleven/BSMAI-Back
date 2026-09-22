@@ -45,6 +45,17 @@ const TOLERANCE_USD = 0.01;
 const TOLERANCE_BS = 0.01;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
+/** Agregados del pivot de un lote, resueltos en SQL (1 query por página). */
+interface ReceivableOrderTotals {
+  orderCount: number;
+  /** ¿Alguna orden del lote cobra a tasa fija? ⇒ el lote va en modo `fixed`. */
+  anyFixed: boolean;
+  /** Σ `targetBs` del pivot. */
+  targetBs: number;
+  /** Σ `targetUsd` del pivot. */
+  targetUsd: number;
+}
+
 /**
  * Orden finalizada con deudor, disponible para armar un lote (Pendiente).
  * Una orden mixta (seguro no indexado + STs indexados) genera 2 pendientes:
@@ -345,16 +356,14 @@ export class AccountsReceivableService {
       sortDir = 'DESC',
     } = query;
 
-    const qb = this.repo
-      .createQueryBuilder('ar')
-      .leftJoinAndSelect('ar.insurance', 'insurance')
-      .leftJoinAndSelect('ar.holder', 'holder')
-      .leftJoinAndSelect('ar.orders', 'aro')
-      .leftJoinAndSelect('aro.order', 'order')
-      .leftJoinAndSelect('ar.payments', 'payments')
-      .leftJoinAndSelect('payments.exchangeRate', 'paymentRate');
-
-    qb.orderBy(`ar.${sortBy}`, sortDir);
+    // Paginado en dos pasos. Paso 1: filtrar/ordenar sobre `accounts_receivable`
+    // sola — los únicos joins son ManyToOne (no multiplican filas) y sólo para
+    // buscar por nombre de deudor — para que LIMIT/OFFSET y COUNT trabajen
+    // sobre índices y no sobre el cartesiano lote×órdenes×pagos.
+    const qb = this.repo.createQueryBuilder('ar');
+    if (search && search.trim()) {
+      qb.leftJoin('ar.insurance', 'insurance').leftJoin('ar.holder', 'holder');
+    }
 
     if (!user.isSuperAdmin) {
       const allowed = await this.resolveUserBranchIds(user);
@@ -398,18 +407,81 @@ export class AccountsReceivableService {
       );
     }
 
-    const offset = (page - 1) * limit;
-    qb.skip(offset).take(limit);
-    const [data, total] = await qb.getManyAndCount();
-    for (const b of data) this.computeFigures(b);
-    return {
-      data,
-      metadata: {
-        total,
-        page,
-        lastPage: Math.max(1, Math.ceil(total / limit)),
-      },
-    };
+    const total = await qb.getCount();
+    const lastPage = Math.max(1, Math.ceil(total / limit));
+    const ids = (
+      await qb
+        .select('ar.id', 'id')
+        // `id` como desempate (en la misma dirección que el sort, para que el
+        // índice compuesto sirva en ASC y en DESC): el orden es estable entre
+        // páginas aunque dos lotes compartan `createdAt`.
+        .orderBy(`ar.${sortBy}`, sortDir)
+        .addOrderBy('ar.id', sortDir)
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .getRawMany<{ id: string }>()
+    ).map((r) => r.id);
+    if (ids.length === 0)
+      return { data: [], metadata: { total, page, lastPage } };
+
+    // Paso 2: hidratar sólo la página. El pivot no se trae: modo, nº de órdenes
+    // y objetivos salen de una única query agrupada.
+    const [rows, totals] = await Promise.all([
+      this.repo.find({
+        where: { id: In(ids) },
+        relations: {
+          insurance: true,
+          holder: true,
+          payments: { exchangeRate: true },
+        },
+      }),
+      this.orderTotals(ids),
+    ]);
+    const byId = new Map(rows.map((b) => [b.id, b]));
+    const data = ids
+      .map((id) => byId.get(id))
+      .filter((b): b is AccountsReceivable => !!b);
+    for (const b of data) this.computeFigures(b, totals.get(b.id));
+    return { data, metadata: { total, page, lastPage } };
+  }
+
+  /**
+   * Agregados del pivot de varios lotes en una sola query: nº de órdenes, modo
+   * de cobro y objetivos en Bs/USD.
+   */
+  private async orderTotals(
+    ids: string[],
+  ): Promise<Map<string, ReceivableOrderTotals>> {
+    const rows = await this.dataSource.query<
+      Array<{
+        receivableId: string;
+        orderCount: string;
+        anyFixed: boolean;
+        targetBs: string;
+        targetUsd: string;
+      }>
+    >(
+      `SELECT aro."receivableId",
+              COUNT(*) AS "orderCount",
+              COALESCE(BOOL_OR(aro."useFixedRate"), false) AS "anyFixed",
+              COALESCE(SUM(aro."targetBs"), 0) AS "targetBs",
+              COALESCE(SUM(aro."targetUsd"), 0) AS "targetUsd"
+       FROM "accounts_receivable_orders" aro
+       WHERE aro."receivableId" = ANY($1)
+       GROUP BY aro."receivableId"`,
+      [ids],
+    );
+    return new Map(
+      rows.map((r) => [
+        r.receivableId,
+        {
+          orderCount: Number(r.orderCount) || 0,
+          anyFixed: !!r.anyFixed,
+          targetBs: Number(r.targetBs) || 0,
+          targetUsd: Number(r.targetUsd) || 0,
+        },
+      ]),
+    );
   }
 
   async findOneBatch(
@@ -464,18 +536,27 @@ export class AccountsReceivableService {
     }
   }
 
-  private computeFigures(batch: AccountsReceivable): void {
+  private computeFigures(
+    batch: AccountsReceivable,
+    totals?: ReceivableOrderTotals,
+  ): void {
+    // Listado: el pivot no viene hidratado, los agregados llegan de SQL.
     const pivots = batch.orders ?? [];
-    const mode: 'usd' | 'fixed' = pivots.some((o) => o.useFixedRate)
+    const mode: 'usd' | 'fixed' = (
+      totals ? totals.anyFixed : pivots.some((o) => o.useFixedRate)
+    )
       ? 'fixed'
       : 'usd';
     batch.mode = mode;
+    batch.orderCount = totals ? totals.orderCount : pivots.length;
     // Ajuste firmado en la moneda del lote (negativo resta, positivo suma).
     // El target efectivo nunca baja de 0.
     const adjustment = round2(Number(batch.adjustmentAmount ?? 0) || 0);
     if (mode === 'fixed') {
       const baseBs = round2(
-        pivots.reduce((s, o) => s + Number(o.targetBs || 0), 0),
+        totals
+          ? totals.targetBs
+          : pivots.reduce((s, o) => s + Number(o.targetBs || 0), 0),
       );
       const targetBs = Math.max(0, round2(baseBs + adjustment));
       const collectedBs = round2(
@@ -490,7 +571,9 @@ export class AccountsReceivableService {
       batch.pendingBs = Math.max(0, round2(targetBs - collectedBs));
     } else {
       const baseUsd = round2(
-        pivots.reduce((s, o) => s + Number(o.targetUsd || 0), 0),
+        totals
+          ? totals.targetUsd
+          : pivots.reduce((s, o) => s + Number(o.targetUsd || 0), 0),
       );
       const targetUsd = Math.max(0, round2(baseUsd + adjustment));
       const collectedUsd = round2(
