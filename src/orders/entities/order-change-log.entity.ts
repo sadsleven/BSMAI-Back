@@ -27,6 +27,7 @@ export type OrderChangeAction =
   | 'cancel'
   | 'uncancel'
   | 'invoice_issue'
+  | 'invoice_update'
   | 'invoice_cancel';
 
 /**

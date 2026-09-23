@@ -39,6 +39,7 @@ import {
   IssueOrderInvoiceDto,
   MAX_INVOICE_NUMBER,
   ReportOrderDto,
+  UpdateOrderInvoiceDto,
   UpdateProviderAmountsDto,
 } from './dto/order-stages.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
@@ -3524,6 +3525,85 @@ export class OrdersService implements OnModuleInit {
               : {}
             : { groupedWithOrderNumber: { to: order.orderNumber } }),
         });
+      }
+    });
+    return this.findOne(id, user);
+  }
+
+  /**
+   * Corrige una factura VIGENTE **sin anularla**: sólo la fecha impresa y la
+   * tasa USD/Bs del documento. El N° de factura y el de control siguen siendo
+   * los mismos (no se quema ninguna numeración) y las órdenes agrupadas no
+   * cambian. Tampoco toca `billingExchangeRateId` / `fixedExchangeRateId`: la
+   * conversión de CxP / retenciones / CxC quedó cerrada en el Paso 4 — es el
+   * mismo alcance que reemitir la factura, pero sin anular la anterior.
+   */
+  async updateInvoice(
+    id: string,
+    invoiceId: string,
+    dto: UpdateOrderInvoiceDto,
+    user: AuthenticatedUser,
+  ): Promise<Order> {
+    const order = await this.findOne(id, user);
+    this.assertNotCancelled(order);
+    const invoice = (order.invoices ?? []).find((i) => i.id === invoiceId);
+    if (!invoice) {
+      throw new NotFoundException('Factura no encontrada en esta orden');
+    }
+    if (invoice.status === 'cancelled') {
+      throw new BadRequestException(
+        'La factura está anulada: emite una nueva en lugar de corregirla',
+      );
+    }
+
+    const invoiceDate = dto.invoiceDate
+      ? dto.invoiceDate.slice(0, 10)
+      : invoice.invoiceDate;
+    const rateId = dto.exchangeRateId ?? invoice.exchangeRateId ?? null;
+    if (dto.exchangeRateId && dto.exchangeRateId !== invoice.exchangeRateId) {
+      await resolveUsdRate(this.ratesRepo, dto.exchangeRateId);
+    }
+
+    const dateChanged = invoiceDate !== invoice.invoiceDate;
+    const rateChanged = rateId !== (invoice.exchangeRateId ?? null);
+    if (!dateChanged && !rateChanged) return order;
+
+    // En una factura agrupada el cambio vale para TODAS las órdenes que cubre
+    // (el documento es uno solo). La emisora puede no ser la de la ruta.
+    const coveredIds = (invoice.coveredOrders ?? []).map((o) => o.id);
+    if (!coveredIds.includes(invoice.orderId)) coveredIds.push(invoice.orderId);
+    if (!coveredIds.includes(order.id)) coveredIds.push(order.id);
+
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(
+        OrderInvoice,
+        { id: invoice.id },
+        { invoiceDate, exchangeRateId: rateId },
+      );
+      // Espejo fiscal de cada orden cubierta: mismo número, fecha y tasa nuevas.
+      await this.writeInvoiceMirror(mgr, coveredIds, {
+        invoiceNumber: invoice.invoiceNumber,
+        controlNumber: invoice.controlNumber,
+        invoiceDate,
+        invoiceShowExchangeRate: invoice.showExchangeRate ?? null,
+        invoiceExchangeRateId: rateId,
+      });
+      const changes: Record<string, { from?: unknown; to?: unknown }> = {
+        invoiceNumber: { to: invoice.invoiceNumber },
+        ...(dateChanged
+          ? { invoiceDate: { from: invoice.invoiceDate, to: invoiceDate } }
+          : {}),
+        ...(rateChanged
+          ? {
+              invoiceExchangeRateId: {
+                from: invoice.exchangeRateId ?? null,
+                to: rateId,
+              },
+            }
+          : {}),
+      };
+      for (const oid of coveredIds) {
+        await this.logChange(mgr, oid, user.id, 'invoice_update', changes);
       }
     });
     return this.findOne(id, user);

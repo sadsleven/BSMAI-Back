@@ -92,6 +92,13 @@ export class TaxPayable {
   @Column({ type: 'numeric', precision: 18, scale: 2 })
   taxAmountBs: string;
 
+  /**
+   * ¿`taxAmountBs` fue fijado a mano en el lote AP (`customRetentionBs`)? Si
+   * es `true`, el ajuste de UT del lote SENIAT NO recalcula esta obligación.
+   */
+  @Column({ type: 'boolean', default: false })
+  isCustomAmount: boolean;
+
   @Column({ type: 'varchar', length: 16, default: 'unpaid' })
   status: TaxPayableStatus;
 

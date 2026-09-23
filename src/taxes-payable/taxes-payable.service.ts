@@ -384,6 +384,13 @@ export class TaxesPayableService {
     if (adjustedUtBs > 0) {
       targetBs = 0;
       for (const o of batch.obligations ?? []) {
+        // Monto fijado a mano en el lote AP: la UT no lo recalcula.
+        if (o.isCustomAmount) {
+          o.adjustedTaxAmountBs = Number(o.taxAmountBs || 0);
+          o.adjustedSubtrahendBs = Number(o.subtrahendBs || 0);
+          targetBs += o.adjustedTaxAmountBs;
+          continue;
+        }
         const r = calcRetention({
           grossBs: Number(o.grossAmountBs || 0),
           personType: o.personType,

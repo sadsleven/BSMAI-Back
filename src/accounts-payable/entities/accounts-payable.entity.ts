@@ -77,6 +77,15 @@ export class AccountsPayable {
   applyRetention: boolean;
 
   /**
+   * Monto MANUAL de la retención en Bs. Si no es NULL (y `applyRetention`),
+   * reemplaza al cálculo automático (Decreto 1.808): retención = este valor y
+   * neto = bruto − este valor. NULL = automático. Se limpia al desactivar la
+   * retención. Casos especiales donde el monto a retener difiere del legal.
+   */
+  @Column({ type: 'numeric', precision: 18, scale: 2, nullable: true })
+  customRetentionBs?: string | null;
+
+  /**
    * Tasa de pago USD/Bs del lote: convierte el bruto USD a Bs (bruto Bs,
    * retención y neto a pagar). NULL = tasa de facturación de cada orden
    * (lotes previos a la columna).

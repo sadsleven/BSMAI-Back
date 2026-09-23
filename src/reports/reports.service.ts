@@ -195,6 +195,7 @@ export class ReportsService {
         payableNumber: string | null;
         payableStatus: string | null;
         payableApplyRetention: boolean | null;
+        payableCustomRetentionBs: string | null;
       }>
     >(
       `SELECT iio.id AS "internalOrderId", iio."orderId", o."orderNumber",
@@ -219,7 +220,8 @@ export class ReportsService {
               pfx."amountBs"::text AS "payRateBs",
               ptu."amountBs"::text AS "payableTaxUnitBs",
               ap.id AS "payableId", ap."payableNumber", ap.status AS "payableStatus",
-              ap."applyRetention" AS "payableApplyRetention"
+              ap."applyRetention" AS "payableApplyRetention",
+              ap."customRetentionBs"::text AS "payableCustomRetentionBs"
        FROM "order_internal_orders" iio
        JOIN "orders" o ON o.id = iio."orderId"
        LEFT JOIN "branches" b ON b.id = o."branchId"
@@ -280,8 +282,12 @@ export class ReportsService {
     const loteTaxUnitBs = new Map<string, number>();
     // Lotes que NO descuentan retención (`accounts_payable.applyRetention=false`).
     const loteNoRetention = new Set<string>();
+    // Lotes con monto MANUAL de retención (`accounts_payable.customRetentionBs`).
+    const loteCustomRetentionBs = new Map<string, number>();
     for (const r of obligations) {
       if (!r.payableId) continue;
+      if (r.payableCustomRetentionBs != null)
+        loteCustomRetentionBs.set(r.payableId, num(r.payableCustomRetentionBs));
       const rateBs = effectiveRateBs(r);
       const grossBs = num(r.grossUsd) * rateBs;
       const utBs = num(r.payableTaxUnitBs);
@@ -301,16 +307,17 @@ export class ReportsService {
       if (r.payableApplyRetention === false) loteNoRetention.add(r.payableId);
     }
     // Neto Bs por lote = bruto − retención REAL (calculada sobre el bruto agregado).
-    // Lote sin retención ⇒ neto = bruto.
+    // Lote sin retención ⇒ neto = bruto. Lote con monto manual ⇒ ese monto.
     const loteNetBs = new Map<string, number>();
     for (const [pid, grossBs] of loteGrossBs) {
       const retentionBs = loteNoRetention.has(pid)
         ? 0
-        : calcRetention({
+        : (loteCustomRetentionBs.get(pid) ??
+          calcRetention({
             grossBs: round2(grossBs),
             personType: lotePersonType.get(pid) ?? 'natural',
             taxUnitBs: loteTaxUnitBs.get(pid) ?? taxUnitBs,
-          }).taxAmountBs;
+          }).taxAmountBs);
       loteNetBs.set(pid, round2(round2(grossBs) - retentionBs));
     }
 
@@ -321,15 +328,22 @@ export class ReportsService {
       const personType = this.personTypeFor(r.providerType, r.doctorIsLegal);
       // Estimado: retención sobre el bruto de esta sola obligación. En un lote
       // sin retención es 0 (sin lote se estima con retención: es el default).
+      // En un lote con monto manual se prorratea ese monto por el bruto de la fila.
       const rowTaxUnitBs =
         (r.payableId ? loteTaxUnitBs.get(r.payableId) : undefined) ?? taxUnitBs;
+      const loteCustom = r.payableId
+        ? loteCustomRetentionBs.get(r.payableId)
+        : undefined;
+      const loteGross = r.payableId ? (loteGrossBs.get(r.payableId) ?? 0) : 0;
       const retentionBs =
         r.payableApplyRetention === false
           ? 0
-          : round2(
-              calcRetention({ grossBs, personType, taxUnitBs: rowTaxUnitBs })
-                .taxAmountBs,
-            );
+          : loteCustom !== undefined
+            ? round2(loteGross > 0 ? (loteCustom * grossBs) / loteGross : 0)
+            : round2(
+                calcRetention({ grossBs, personType, taxUnitBs: rowTaxUnitBs })
+                  .taxAmountBs,
+              );
       const netBs = round2(grossBs - retentionBs);
       const state: string = r.payableId
         ? (r.payableStatus ?? 'unpaid')
