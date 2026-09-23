@@ -31,6 +31,7 @@ import {
   ChangeOrderNumberDto,
   IssueOrderInvoiceDto,
   ReportOrderDto,
+  UpdateOrderInvoiceDto,
   UpdateProviderAmountsDto,
 } from './dto/order-stages.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -294,6 +295,21 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.issueInvoice(id, dto, user);
+  }
+
+  /**
+   * Corrige una factura VIGENTE sin anularla: sólo la fecha impresa y la tasa
+   * USD/Bs del documento (el número y el N° de control no cambian).
+   */
+  @RequirePermissions(PERMISSIONS.ORDERS.STAGE_BILLING)
+  @Patch(':id/invoices/:invoiceId')
+  updateInvoice(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @Body() dto: UpdateOrderInvoiceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateInvoice(id, invoiceId, dto, user);
   }
 
   /** Anula una factura de la orden (NO la orden). Su número queda quemado. */

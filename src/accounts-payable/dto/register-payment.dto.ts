@@ -14,6 +14,8 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -91,6 +93,15 @@ export class CreateAccountsPayableBatchDto {
   applyRetention?: boolean;
 
   /**
+   * Monto manual de la retención en Bs (reemplaza al cálculo automático).
+   * Sin enviar = automático. Se ignora si `applyRetention` es `false`.
+   */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  customRetentionBs?: number;
+
+  /**
    * Tasa de pago USD/Bs del lote (define bruto Bs, retención y neto a pagar).
    * Sin enviar = tasa USD vigente.
    */
@@ -116,6 +127,17 @@ export class SetPayableTaxUnitDto {
 export class SetPayableRetentionDto {
   @IsBoolean()
   applyRetention: boolean;
+}
+
+/**
+ * Fijar (número) o quitar (`null` ⇒ automático) el monto manual de la retención
+ * de un lote existente. Requiere que el lote aplique retención.
+ */
+export class SetPayableCustomRetentionDto {
+  @ValidateIf((o: SetPayableCustomRetentionDto) => o.customRetentionBs !== null)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  customRetentionBs: number | null;
 }
 
 /** Cambiar la tasa de pago USD/Bs de un lote existente (recalcula neto/estado). */

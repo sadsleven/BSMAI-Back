@@ -245,6 +245,25 @@ export class IssueOrderInvoiceDto {
 }
 
 /**
+ * Corrección de una factura VIGENTE sin anularla (Paso 4). Sólo admite los dos
+ * datos que no queman el número: la **fecha** impresa y la **tasa USD/Bs** con
+ * la que sale el documento. El N° de factura, el de control y las órdenes
+ * agrupadas no se tocan; tampoco la liquidación de CxP/CxC de la orden
+ * (`billingExchangeRateId`), que quedó cerrada en su propio Paso 4.
+ */
+export class UpdateOrderInvoiceDto {
+  /** Fecha impresa en la factura (date-only `YYYY-MM-DD`). */
+  @IsOptional()
+  @IsISO8601()
+  invoiceDate?: string;
+
+  /** Tasa USD/Bs con la que se imprime la factura. */
+  @IsOptional()
+  @IsUUID()
+  exchangeRateId?: string;
+}
+
+/**
  * Anulación de una factura (NO de la orden): la orden sigue viva y puede emitir
  * otra factura. El número de la anulada queda quemado para siempre.
  */

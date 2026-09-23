@@ -72,6 +72,8 @@ interface BatchNet {
   subtrahendBs: number;
   retentionBs: number;
   netBs: number;
+  /** ¿`retentionBs` es el monto manual del lote (no el cálculo automático)? */
+  isCustomRetention: boolean;
 }
 
 @Injectable()
@@ -460,6 +462,46 @@ export class AccountsPayableService {
     return batch.applyRetention !== false;
   }
 
+  /** Monto manual de la retención del lote (Bs) o `null` = cálculo automático. */
+  private customRetentionBs(batch: AccountsPayable): number | null {
+    if (batch.customRetentionBs === null || batch.customRetentionBs === undefined)
+      return null;
+    const n = Number(batch.customRetentionBs);
+    return Number.isFinite(n) ? round2(n) : null;
+  }
+
+  /**
+   * Retención del lote sobre `grossBs`: 0 si no aplica; el monto manual si lo
+   * tiene (tasa/sustraendo nominales del régimen, sólo informativos); si no,
+   * el cálculo automático (Decreto 1.808).
+   */
+  private retentionOf(
+    batch: AccountsPayable,
+    grossBs: number,
+    taxUnitBs: number,
+  ): {
+    taxRate: number;
+    subtrahendBs: number;
+    taxAmountBs: number;
+    isCustom: boolean;
+  } {
+    if (!this.appliesRetention(batch)) {
+      return { taxRate: 0, subtrahendBs: 0, taxAmountBs: 0, isCustom: false };
+    }
+    const auto = calcRetention({
+      grossBs,
+      personType: this.personTypeOf(batch),
+      taxUnitBs,
+    });
+    const custom = this.customRetentionBs(batch);
+    return {
+      taxRate: auto.taxRate,
+      subtrahendBs: auto.subtrahendBs,
+      taxAmountBs: custom ?? auto.taxAmountBs,
+      isCustom: custom !== null,
+    };
+  }
+
   /**
    * Tasa de pago USD/Bs del lote (si la tiene y es válida). NULL ⇒ cada orden
    * se convierte con su tasa de facturación (lotes previos a la columna).
@@ -502,14 +544,8 @@ export class AccountsPayableService {
     const taxUnitBs = batch.taxUnit
       ? Number(batch.taxUnit.amountBs)
       : fallbackTaxUnitBs;
-    // Retención opcional por lote: desactivada ⇒ 0 y neto = bruto.
-    const retention = this.appliesRetention(batch)
-      ? calcRetention({
-          grossBs,
-          personType: this.personTypeOf(batch),
-          taxUnitBs,
-        })
-      : { taxAmountBs: 0 };
+    // Retención del lote: desactivada ⇒ 0; manual ⇒ monto fijo; sino automática.
+    const retention = this.retentionOf(batch, grossBs, taxUnitBs);
     const netBs = round2(grossBs - retention.taxAmountBs);
     const paidBs = round2(
       (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
@@ -564,10 +600,15 @@ export class AccountsPayableService {
     const personType = this.personTypeOf(batch);
     const taxUnit = batch.taxUnit ?? (await this.taxUnits.getCurrentOrThrow());
     const taxUnitAmountBs = Number(taxUnit.amountBs);
-    // Retención opcional por lote: desactivada ⇒ tasa/sustraendo/retención en 0.
-    const retention = this.appliesRetention(batch)
-      ? calcRetention({ grossBs, personType, taxUnitBs: taxUnitAmountBs })
-      : { taxRate: 0, subtrahendBs: 0, taxAmountBs: 0 };
+    // Retención del lote: desactivada ⇒ 0; manual ⇒ monto fijo; sino automática.
+    const retention = this.retentionOf(batch, grossBs, taxUnitAmountBs);
+    // El monto manual no puede superar el bruto (neto negativo). Se valida acá
+    // para cubrir también quitar órdenes / cambiar la tasa con monto ya fijado.
+    if (retention.isCustom && retention.taxAmountBs > grossBs + TOLERANCE_BS) {
+      throw new BadRequestException(
+        `La retención manual (${retention.taxAmountBs.toFixed(2)} Bs) supera el bruto del lote (${grossBs.toFixed(2)} Bs). Ajusta el monto de la retención primero.`,
+      );
+    }
     return {
       grossUsd,
       grossBs,
@@ -578,6 +619,7 @@ export class AccountsPayableService {
       subtrahendBs: retention.subtrahendBs,
       retentionBs: round2(retention.taxAmountBs),
       netBs: round2(grossBs - retention.taxAmountBs),
+      isCustomRetention: retention.isCustom,
     };
   }
 
@@ -607,6 +649,12 @@ export class AccountsPayableService {
     }
     const taxUnit = await this.resolveTaxUnit(dto.taxUnitId);
     const paymentRate = await this.resolvePaymentRate(dto.exchangeRateId);
+    // Monto manual de retención: sólo tiene sentido si el lote aplica retención.
+    const applyRetention = dto.applyRetention ?? true;
+    const customRetentionBs =
+      applyRetention && dto.customRetentionBs !== undefined
+        ? round2(dto.customRetentionBs)
+        : null;
 
     const id = await this.dataSource.transaction(async (mgr) => {
       const seq = await mgr.query<{ nextval: string }[]>(
@@ -614,15 +662,16 @@ export class AccountsPayableService {
       );
       const payableNumber = String(seq[0].nextval);
       const inserted = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "exchangeRateId", "status")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'unpaid') RETURNING id`,
+        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "customRetentionBs", "exchangeRateId", "status")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'unpaid') RETURNING id`,
         [
           payableNumber,
           dto.recipientType,
           dto.recipientType === 'doctor' ? providerId : null,
           dto.recipientType === 'care_center' ? providerId : null,
           taxUnit.id,
-          dto.applyRetention ?? true,
+          applyRetention,
+          customRetentionBs === null ? null : customRetentionBs.toFixed(2),
           paymentRate.id,
         ],
       );
@@ -633,6 +682,10 @@ export class AccountsPayableService {
            VALUES ($1, $2, $3)`,
           [batchId, r.internalOrderId, Number(r.grossUsd).toFixed(2)],
         );
+      }
+      // Con monto manual, validar que no supere el bruto (lanza ⇒ rollback).
+      if (customRetentionBs !== null) {
+        await this.recomputeBatchStatus(mgr, batchId);
       }
       return batchId;
     });
@@ -755,7 +808,48 @@ export class AccountsPayableService {
     if (this.appliesRetention(batch) === applyRetention)
       return this.findOneBatch(id, user);
     await this.dataSource.transaction(async (mgr) => {
-      await mgr.update(AccountsPayable, id, { applyRetention });
+      // Al desactivar la retención se descarta el monto manual: al reactivarla
+      // vuelve el cálculo automático.
+      await mgr.update(AccountsPayable, id, {
+        applyRetention,
+        ...(applyRetention ? {} : { customRetentionBs: null }),
+      });
+      await this.recomputeBatchStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  /**
+   * Fija (número) o quita (`null` ⇒ cálculo automático) el monto manual de la
+   * retención del lote y recalcula neto/estado. Requiere que el lote aplique
+   * retención. Bloqueado si ya está pagado (el neto define el cuadre de los
+   * pagos y la obligación SENIAT ya nació): edita o quita un pago primero.
+   */
+  async setCustomRetention(
+    id: string,
+    customRetentionBs: number | null,
+    user: AuthenticatedUser,
+  ): Promise<AccountsPayable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+    if (batch.status === 'paid') {
+      throw new BadRequestException(
+        'El lote ya está pagado. Para cambiar la retención, edita o elimina un pago primero.',
+      );
+    }
+    if (customRetentionBs !== null && !this.appliesRetention(batch)) {
+      throw new BadRequestException(
+        'El lote no aplica retención. Activa la retención de ISLR antes de fijar un monto manual.',
+      );
+    }
+    const next = customRetentionBs === null ? null : round2(customRetentionBs);
+    if (this.customRetentionBs(batch) === next)
+      return this.findOneBatch(id, user);
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(AccountsPayable, id, {
+        customRetentionBs: next === null ? null : next.toFixed(2),
+      });
       await this.recomputeBatchStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -1046,7 +1140,8 @@ export class AccountsPayableService {
         await mgr.query(
           `UPDATE "taxes_payable"
            SET "personType" = $2, "taxUnitId" = $3, "taxUnitAmountBs" = $4,
-               "grossAmountBs" = $5, "taxRate" = $6, "subtrahendBs" = $7, "taxAmountBs" = $8
+               "grossAmountBs" = $5, "taxRate" = $6, "subtrahendBs" = $7, "taxAmountBs" = $8,
+               "isCustomAmount" = $9
            WHERE id = $1`,
           [
             existing[0].id,
@@ -1057,6 +1152,7 @@ export class AccountsPayableService {
             net.taxRate.toFixed(4),
             net.subtrahendBs.toFixed(2),
             net.retentionBs.toFixed(2),
+            net.isCustomRetention,
           ],
         );
       }
@@ -1069,9 +1165,9 @@ export class AccountsPayableService {
       `INSERT INTO "taxes_payable" (
          "taxPayableNumber", "recipientType", "doctorId", "careCenterId",
          "personType", "taxUnitId", "taxUnitAmountBs",
-         "grossAmountBs", "taxRate", "subtrahendBs", "taxAmountBs",
+         "grossAmountBs", "taxRate", "subtrahendBs", "taxAmountBs", "isCustomAmount",
          "status", "sourcePayableId"
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'unpaid',$12)`,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'unpaid',$13)`,
       [
         String(seq[0].nextval),
         batch.recipientType,
@@ -1084,6 +1180,7 @@ export class AccountsPayableService {
         net.taxRate.toFixed(4),
         net.subtrahendBs.toFixed(2),
         net.retentionBs.toFixed(2),
+        net.isCustomRetention,
         batch.id,
       ],
     );

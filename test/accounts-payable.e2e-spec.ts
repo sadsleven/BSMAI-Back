@@ -155,4 +155,130 @@ describe('AccountsPayableController (e2e)', () => {
         .expect(204);
     }
   });
+
+  /**
+   * Monto manual de retención: reemplaza al cálculo automático (neto = bruto −
+   * monto), no puede superar el bruto, `null` vuelve al automático y queda
+   * bloqueado con el lote pagado. Necesita ≥1 orden pendiente y ≥1 tasa USD
+   * activa; si la BD no las tiene, el test se salta. Limpia anulando el lote.
+   */
+  it('monto manual de retención define el neto y se puede revertir', async () => {
+    const http = () => request(app.getHttpServer());
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const ratesRes = await http()
+      .get('/exchange-rates')
+      .query({ currency: 'USD', isActive: true, limit: 10 })
+      .set(authHeader(token))
+      .expect(200);
+    const rate = (ratesRes.body.data as Array<{ id: string; amountBs: string }>)
+      .map((r) => ({ id: r.id, bs: Number(r.amountBs) }))
+      .find((r) => r.bs > 0);
+    const pendingRes = await http()
+      .get('/accounts-payable/pending')
+      .query({ limit: 1 })
+      .set(authHeader(token))
+      .expect(200);
+    const pending = pendingRes.body.data[0] as
+      | {
+          internalOrderId: string;
+          providerType: 'doctor' | 'care_center';
+          doctorId: string | null;
+          careCenterId: string | null;
+          grossUsd: number;
+        }
+      | undefined;
+    if (!rate || !pending) {
+      console.warn('skip: faltan tasa USD u órdenes pendientes');
+      return;
+    }
+    const grossBs = round2(Number(pending.grossUsd) * rate.bs);
+    const custom = round2(grossBs * 0.01);
+    const body = {
+      recipientType: pending.providerType,
+      doctorId: pending.providerType === 'doctor' ? pending.doctorId : undefined,
+      careCenterId:
+        pending.providerType === 'care_center' ? pending.careCenterId : undefined,
+      applyRetention: true,
+      exchangeRateId: rate.id,
+      internalOrderIds: [pending.internalOrderId],
+    };
+
+    // Monto manual mayor al bruto ⇒ 400 y no se crea el lote.
+    await http()
+      .post('/accounts-payable')
+      .set(authHeader(token))
+      .send({ ...body, customRetentionBs: round2(grossBs + 1000) })
+      .expect(400);
+
+    const created = await http()
+      .post('/accounts-payable')
+      .set(authHeader(token))
+      .send({ ...body, customRetentionBs: custom })
+      .expect(201);
+    const batchId = created.body.id as string;
+    try {
+      expect(Number(created.body.customRetentionBs)).toBeCloseTo(custom, 2);
+      expect(Number(created.body.retentionBs)).toBeCloseTo(custom, 2);
+      expect(Number(created.body.netBs)).toBeCloseTo(round2(grossBs - custom), 2);
+
+      // Supera el bruto ⇒ 400.
+      await http()
+        .patch(`/accounts-payable/${batchId}/custom-retention`)
+        .set(authHeader(token))
+        .send({ customRetentionBs: round2(grossBs + 1000) })
+        .expect(400);
+
+      // null ⇒ vuelve al cálculo automático.
+      const auto = await http()
+        .patch(`/accounts-payable/${batchId}/custom-retention`)
+        .set(authHeader(token))
+        .send({ customRetentionBs: null })
+        .expect(200);
+      expect(auto.body.customRetentionBs).toBeNull();
+      expect(Number(auto.body.netBs)).toBeCloseTo(
+        round2(grossBs - Number(auto.body.retentionBs)),
+        2,
+      );
+
+      // Fijar otro monto manual ⇒ neto = bruto − monto.
+      const custom2 = round2(custom * 2);
+      const fixed = await http()
+        .patch(`/accounts-payable/${batchId}/custom-retention`)
+        .set(authHeader(token))
+        .send({ customRetentionBs: custom2 })
+        .expect(200);
+      expect(Number(fixed.body.retentionBs)).toBeCloseTo(custom2, 2);
+      const expectedNet = round2(grossBs - custom2);
+      expect(Number(fixed.body.netBs)).toBeCloseTo(expectedNet, 2);
+
+      // Pagar el neto ⇒ pagado; ya no se puede cambiar el monto manual.
+      const paid = await http()
+        .post(`/accounts-payable/${batchId}/payments`)
+        .set(authHeader(token))
+        .send({
+          payments: [
+            {
+              type: 'cash_bs',
+              paymentDate: '2026-01-15',
+              exchangeRateId: rate.id,
+              amountCurrency: 'BS',
+              amountValue: expectedNet,
+            },
+          ],
+        })
+        .expect(201);
+      expect(paid.body.status).toBe('paid');
+      await http()
+        .patch(`/accounts-payable/${batchId}/custom-retention`)
+        .set(authHeader(token))
+        .send({ customRetentionBs: null })
+        .expect(400);
+    } finally {
+      await http()
+        .delete(`/accounts-payable/${batchId}`)
+        .set(authHeader(token))
+        .expect(204);
+    }
+  });
 });
