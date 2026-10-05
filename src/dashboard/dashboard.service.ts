@@ -199,10 +199,9 @@ export class DashboardService {
       `SELECT
          (SELECT COALESCE(SUM(apo."grossUsd"), 0)
             FROM "accounts_payable_orders" apo WHERE apo."payableId" = ap.id) AS gross,
-         (SELECT COALESCE(SUM(p."amountInUsd"), 0)
-            FROM "accounts_payable_payment_links" l
-            JOIN "accounts_payable_payments" p ON p.id = l."paymentId" AND p."deletedAt" IS NULL
-           WHERE l."payableId" = ap.id) AS paid
+         (SELECT COALESCE(SUM(s."coveredUsd"), 0)
+            FROM "accounts_payable_settlements" s
+           WHERE s."payableId" = ap.id AND s."deletedAt" IS NULL) AS paid
        FROM "accounts_payable" ap
        WHERE ap."deletedAt" IS NULL
          AND ap.status IN ('unpaid','partially_paid')

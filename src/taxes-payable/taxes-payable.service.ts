@@ -142,35 +142,61 @@ export class TaxesPayableService {
               WHERE apo_b."payableId" = ${alias}."sourcePayableId" AND o_b."branchId" = :branchId)`;
   }
 
-  /** Popula `internalNumbers` en cada obligación desde su lote AP de origen. */
+  /**
+   * Popula `internalNumbers` (órdenes del lote AP de origen) y `settlementDate`
+   * (fecha del abono que practicó la retención) en cada obligación.
+   */
   private async attachInternalNumbers(taxes: TaxPayable[]): Promise<void> {
     const sourceIds = Array.from(
       new Set(taxes.map((t) => t.sourcePayableId).filter(Boolean) as string[]),
     );
-    if (!sourceIds.length) {
-      for (const t of taxes) t.internalNumbers = [];
+    const settlementIds = Array.from(
+      new Set(
+        taxes.map((t) => t.sourceSettlementId).filter(Boolean) as string[],
+      ),
+    );
+    if (!sourceIds.length && !settlementIds.length) {
+      for (const t of taxes) {
+        t.internalNumbers = [];
+        t.settlementDate = null;
+      }
       return;
     }
-    const rows = await this.dataSource.query<
-      Array<{ payableId: string; internalNumber: string }>
-    >(
-      `SELECT apo."payableId", iio."internalNumber"
-       FROM "accounts_payable_orders" apo
-       JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
-       WHERE apo."payableId" = ANY($1)
-       ORDER BY iio."internalNumber"::int`,
-      [sourceIds],
-    );
+    const [rows, dates] = await Promise.all([
+      sourceIds.length
+        ? this.dataSource.query<
+            Array<{ payableId: string; internalNumber: string }>
+          >(
+            `SELECT apo."payableId", iio."internalNumber"
+             FROM "accounts_payable_orders" apo
+             JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+             WHERE apo."payableId" = ANY($1)
+             ORDER BY iio."internalNumber"::int`,
+            [sourceIds],
+          )
+        : Promise.resolve([]),
+      settlementIds.length
+        ? this.dataSource.query<Array<{ id: string; settlementDate: string }>>(
+            `SELECT id, "settlementDate" FROM "accounts_payable_settlements"
+             WHERE id = ANY($1)`,
+            [settlementIds],
+          )
+        : Promise.resolve([]),
+    ]);
     const byPayable = new Map<string, string[]>();
     for (const r of rows) {
       const arr = byPayable.get(r.payableId) ?? [];
       arr.push(r.internalNumber);
       byPayable.set(r.payableId, arr);
     }
+    const dateById = new Map(dates.map((d) => [d.id, d.settlementDate]));
     for (const t of taxes) {
       t.internalNumbers = t.sourcePayableId
         ? (byPayable.get(t.sourcePayableId) ?? [])
         : [];
+      t.settlementDate = t.sourceSettlementId
+        ? (dateById.get(t.sourceSettlementId) ?? null)
+        : null;
     }
   }
 
@@ -349,23 +375,44 @@ export class TaxesPayableService {
     if (!batch) throw new NotFoundException('Lote SENIAT no encontrado');
     await this.assertBatchVisibility(batch, user);
     this.computeFigures(batch);
-    await this.attachInternalNumbers(batch.obligations ?? []);
-    await this.attachInvoiceRows(batch.obligations ?? []);
+    await Promise.all([
+      this.attachInternalNumbers(batch.obligations ?? []),
+      this.attachInvoiceRows(batch.obligations ?? []),
+    ]);
     return batch;
   }
 
-  private loadBatch(
+  /**
+   * Lote con sus obligaciones y sus pagos. Las dos colecciones van en queries
+   * paralelas a propósito: en un solo `findOne` TypeORM las une por LEFT JOIN y
+   * devuelve el producto cartesiano obligaciones × pagos.
+   */
+  private async loadBatch(
     mgr: EntityManager,
     id: string,
   ): Promise<TaxPaymentBatch | null> {
-    return mgr.findOne(TaxPaymentBatch, {
-      where: { id },
-      relations: {
-        adjustmentTaxUnit: true,
-        obligations: { taxUnit: true, doctor: true, careCenter: true },
-        payments: { exchangeRate: true },
-      },
-    });
+    const [batch, payments] = await Promise.all([
+      mgr.findOne(TaxPaymentBatch, {
+        where: { id },
+        relations: {
+          adjustmentTaxUnit: true,
+          obligations: { taxUnit: true, doctor: true, careCenter: true },
+        },
+      }),
+      mgr
+        .createQueryBuilder(TaxPayablePayment, 'p')
+        .leftJoinAndSelect('p.exchangeRate', 'exchangeRate')
+        .innerJoin(
+          'tax_payment_batch_payment_links',
+          'l',
+          'l."paymentId" = p.id',
+        )
+        .where('l."batchId" = :id', { id })
+        .getMany(),
+    ]);
+    if (!batch) return null;
+    batch.payments = payments;
+    return batch;
   }
 
   private computeFigures(batch: TaxPaymentBatch): void {

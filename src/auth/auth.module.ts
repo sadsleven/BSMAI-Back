@@ -12,10 +12,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
 import { TokenBlacklistService } from './services/token-blacklist.service';
+import { AuthContextCacheModule } from './services/auth-context-cache.service';
 import { ProviderAccountsModule } from '../provider-accounts/provider-accounts.module';
 
 @Module({
   imports: [
+    AuthContextCacheModule,
     TypeOrmModule.forFeature([User, Branch]),
     ProviderAccountsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),

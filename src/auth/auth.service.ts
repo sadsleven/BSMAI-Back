@@ -14,6 +14,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { TokenBlacklistService } from './services/token-blacklist.service';
+import { AuthContextCache } from './services/auth-context-cache.service';
 import type { AuthenticatedUser } from './types/authenticated-user';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangeOwnPasswordDto } from './dto/change-own-password.dto';
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly blacklist: TokenBlacklistService,
     private readonly providerAccounts: ProviderAccountsService,
+    private readonly authContext: AuthContextCache,
   ) {}
 
   async login(
@@ -113,6 +115,7 @@ export class AuthService {
 
   async logout(authUser: AuthenticatedUser, exp?: number): Promise<void> {
     if (authUser.jti && exp) this.blacklist.add(authUser.jti, exp);
+    this.authContext.invalidateToken(authUser.jti);
   }
 
   async me(userId: string): Promise<PublicUser> {

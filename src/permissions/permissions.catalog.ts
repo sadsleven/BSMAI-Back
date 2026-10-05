@@ -22,6 +22,7 @@ const EXCHANGE_RATES_GROUP = 'Tasa de cambio';
 const BRANCHES_GROUP = 'Sucursales';
 const TAX_UNITS_GROUP = 'Unidades tributarias';
 const ORDERS_GROUP = 'Órdenes';
+const BUDGETS_GROUP = 'Presupuestos';
 const ACCOUNTS_PAYABLE_GROUP = 'Cuentas por pagar';
 const ACCOUNTS_RECEIVABLE_GROUP = 'Cuentas por cobrar';
 const TAXES_PAYABLE_GROUP = 'Retenciones por pagar';
@@ -451,6 +452,86 @@ const ordersPermissions: PermissionDefinition[] = [
   },
 ];
 
+const budgetsPermissions: PermissionDefinition[] = [
+  {
+    name: 'budgets.list',
+    resource: 'budgets',
+    action: 'list',
+    label: 'Listar y ver presupuestos',
+    description:
+      'Permite listar y ver el detalle de los presupuestos, y descargarlos en Excel o PDF',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.create',
+    resource: 'budgets',
+    action: 'create',
+    label: 'Crear presupuestos',
+    description: 'Permite crear nuevos presupuestos de servicios',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.update',
+    resource: 'budgets',
+    action: 'update',
+    label: 'Editar presupuestos',
+    description:
+      'Permite modificar un presupuesto mientras no haya generado su orden',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.change-status',
+    resource: 'budgets',
+    action: 'change-status',
+    label: 'Cambiar el estado de un presupuesto',
+    description:
+      'Permite marcar un presupuesto como enviado, aprobado o rechazado, y reabrirlo',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.convert',
+    resource: 'budgets',
+    action: 'convert',
+    label: 'Crear la orden desde un presupuesto',
+    description:
+      'Permite generar la orden a partir de un presupuesto aprobado (abre el Paso 1 precargado) y enlazarla',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.edit-amount',
+    resource: 'budgets',
+    action: 'edit-amount',
+    label: 'Editar el monto de un presupuesto',
+    description:
+      'Permite presupuestar un monto distinto a la suma de los precios de catálogo (descuento o recargo, con motivo)',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.soft-delete',
+    resource: 'budgets',
+    action: 'soft-delete',
+    label: 'Mover presupuestos a la papelera',
+    description: 'Permite enviar presupuestos a la papelera (borrado lógico)',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.hard-delete',
+    resource: 'budgets',
+    action: 'hard-delete',
+    label: 'Eliminar presupuestos permanentemente',
+    description: 'Permite eliminar presupuestos de forma definitiva',
+    group: BUDGETS_GROUP,
+  },
+  {
+    name: 'budgets.restore',
+    resource: 'budgets',
+    action: 'restore',
+    label: 'Restaurar presupuestos',
+    description: 'Permite restaurar presupuestos desde la papelera',
+    group: BUDGETS_GROUP,
+  },
+];
+
 const accountsPayablePermissions: PermissionDefinition[] = [
   {
     name: 'accounts-payable.list',
@@ -732,6 +813,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...paymentAccountsPermissions,
   ...banksPermissions,
   ...ordersPermissions,
+  ...budgetsPermissions,
   ...accountsPayablePermissions,
   ...accountsReceivablePermissions,
   ...taxesPayablePermissions,
@@ -813,6 +895,17 @@ export const PERMISSIONS = {
     EDIT_AMOUNT: 'orders.edit-amount',
     CUSTOM_NUMBER: 'orders.custom-number',
     SET_PROVIDER_AMOUNT: 'orders.set-provider-amount',
+  },
+  BUDGETS: {
+    LIST: 'budgets.list',
+    CREATE: 'budgets.create',
+    UPDATE: 'budgets.update',
+    CHANGE_STATUS: 'budgets.change-status',
+    CONVERT: 'budgets.convert',
+    EDIT_AMOUNT: 'budgets.edit-amount',
+    SOFT_DELETE: 'budgets.soft-delete',
+    HARD_DELETE: 'budgets.hard-delete',
+    RESTORE: 'budgets.restore',
   },
   ACCOUNTS_PAYABLE: {
     LIST: 'accounts-payable.list',

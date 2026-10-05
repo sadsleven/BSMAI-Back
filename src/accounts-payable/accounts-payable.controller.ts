@@ -12,15 +12,13 @@ import {
 } from '@nestjs/common';
 import { AccountsPayableService } from './accounts-payable.service';
 import {
-  AccountsPayablePaymentDto,
+  AccountsPayableSettlementDto,
   CreateAccountsPayableBatchDto,
   MutateAccountsPayableOrdersDto,
   QueryAccountsPayableDto,
   QueryPendingPayableDto,
-  RegisterPaymentDto,
   SetPayableExchangeRateDto,
   SetPayableRetentionDto,
-  SetPayableCustomRetentionDto,
   SetPayableTaxUnitDto,
 } from './dto/register-payment.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -109,16 +107,6 @@ export class AccountsPayableController {
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
-  @Patch(':id/custom-retention')
-  setCustomRetention(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: SetPayableCustomRetentionDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.service.setCustomRetention(id, dto.customRetentionBs, user);
-  }
-
-  @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
   @Patch(':id/exchange-rate')
   setExchangeRate(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -129,34 +117,34 @@ export class AccountsPayableController {
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
-  @Post(':id/payments')
-  registerPayment(
+  @Post(':id/settlements')
+  registerSettlement(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: RegisterPaymentDto,
+    @Body() dto: AccountsPayableSettlementDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.registerPayment(id, dto.payments, user);
+    return this.service.registerSettlement(id, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
-  @Patch(':id/payments/:paymentId')
-  editPayment(
+  @Patch(':id/settlements/:settlementId')
+  editSettlement(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Param('paymentId', new ParseUUIDPipe()) paymentId: string,
-    @Body() dto: AccountsPayablePaymentDto,
+    @Param('settlementId', new ParseUUIDPipe()) settlementId: string,
+    @Body() dto: AccountsPayableSettlementDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.editPayment(id, paymentId, dto, user);
+    return this.service.editSettlement(id, settlementId, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.UPDATE)
-  @Delete(':id/payments/:paymentId')
-  deletePayment(
+  @Delete(':id/settlements/:settlementId')
+  deleteSettlement(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Param('paymentId', new ParseUUIDPipe()) paymentId: string,
+    @Param('settlementId', new ParseUUIDPipe()) settlementId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.deletePayment(id, paymentId, user);
+    return this.service.deleteSettlement(id, settlementId, user);
   }
 
   @RequirePermissions(PERMISSIONS.ACCOUNTS_PAYABLE.SOFT_DELETE)

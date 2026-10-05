@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountsPayable } from './entities/accounts-payable.entity';
 import { AccountsPayablePayment } from './entities/accounts-payable-payment.entity';
+import { AccountsPayableSettlement } from './entities/accounts-payable-settlement.entity';
 import { AccountsPayableOrder } from './entities/accounts-payable-order.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderInternalOrder } from '../orders/entities/order-internal-order.entity';
@@ -22,6 +23,7 @@ import { AccountsPayableController } from './accounts-payable.controller';
     TypeOrmModule.forFeature([
       AccountsPayable,
       AccountsPayablePayment,
+      AccountsPayableSettlement,
       AccountsPayableOrder,
       Order,
       OrderInternalOrder,

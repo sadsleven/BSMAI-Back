@@ -101,3 +101,70 @@ export function calcRetention(input: RetentionInput): RetentionResult {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// -----------------------------------------------------------------------------
+// Retención de un ABONO (pago parcial de una obligación mayor).
+// -----------------------------------------------------------------------------
+
+export interface SliceRetentionInput {
+  /** Porción del bruto, en USD, que cubre el abono. */
+  sliceUsd: number;
+  /** Bruto total en USD de la obligación (el lote completo). */
+  totalUsd: number;
+  /** Tasa USD/Bs del abono. */
+  rateBs: number;
+  personType: SeniatPersonType;
+  /** Valor de 1 UT en bolívares al momento del abono. */
+  taxUnitBs: number;
+}
+
+export interface SliceRetentionResult extends RetentionResult {
+  /** Proporción del bruto total que cubre el abono (0..1). */
+  share: number;
+  /** Bruto en Bs del abono (= `sliceUsd` × `rateBs`). */
+  sliceGrossBs: number;
+  /** Bruto en Bs del total a la tasa del abono (base del prorrateo). */
+  totalGrossBs: number;
+  /** Retención del total a la tasa del abono (antes de prorratear). */
+  totalTaxAmountBs: number;
+}
+
+/**
+ * Retención de ISLR de un abono: se calcula la retención del bruto TOTAL a la
+ * tasa de este abono y se toma la proporción que el abono cubre. Equivale a
+ * `tasa × brutoAbono − sustraendo × proporción`, de modo que la suma de las
+ * retenciones de todos los abonos de un lote (a una misma tasa) da exactamente
+ * la retención del lote completo: el sustraendo y el mínimo no sujeto son del
+ * total, no de cada abono.
+ *
+ * Ejemplo (UT 43, PNR, lote 172,50 USD, abono 22,50 USD a 852,42):
+ *   bruto total   147.042,45 Bs → retención total 4.303,77 Bs
+ *   proporción    22,50 / 172,50 = 0,130435
+ *   bruto abono    19.179,45 Bs
+ *   sustraendo         14,02 Bs (107,50 × proporción)
+ *   RETENCIÓN         561,36 Bs → neto 18.618,09 Bs
+ */
+export function calcSliceRetention(
+  input: SliceRetentionInput,
+): SliceRetentionResult {
+  const sliceUsd = Math.max(0, Number(input.sliceUsd) || 0);
+  const rawTotal = Number(input.totalUsd) || 0;
+  const totalUsd = rawTotal > 0 ? rawTotal : sliceUsd;
+  const rateBs = Number(input.rateBs) || 0;
+  const share = totalUsd > 0 ? Math.min(1, sliceUsd / totalUsd) : 0;
+  const totalGrossBs = round2(totalUsd * rateBs);
+  const full = calcRetention({
+    grossBs: totalGrossBs,
+    personType: input.personType,
+    taxUnitBs: input.taxUnitBs,
+  });
+  return {
+    ...full,
+    subtrahendBs: round2(full.subtrahendBs * share),
+    taxAmountBs: round2(full.taxAmountBs * share),
+    share,
+    sliceGrossBs: round2(sliceUsd * rateBs),
+    totalGrossBs,
+    totalTaxAmountBs: full.taxAmountBs,
+  };
+}

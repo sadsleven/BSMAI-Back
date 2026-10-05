@@ -496,30 +496,50 @@ export class AccountsReceivableService {
     return batch;
   }
 
-  private loadBatch(
+  /**
+   * Lote con sus órdenes y sus cobros. Las dos colecciones van en queries
+   * paralelas a propósito: en un solo `findOne` TypeORM las une por LEFT JOIN y
+   * devuelve el producto cartesiano órdenes × cobros (N×M filas, cada una con
+   * todas las columnas de la orden, su titular y su paciente).
+   */
+  private async loadBatch(
     mgr: EntityManager,
     id: string,
   ): Promise<AccountsReceivable | null> {
-    return mgr.findOne(AccountsReceivable, {
-      where: { id },
-      relations: {
-        insurance: true,
-        holder: { phones: true },
-        // Autor del ajuste del total (card "Ajuste" del detalle).
-        adjustedBy: true,
-        // holder/patient/fixedExchangeRate de cada orden: los usa el estado de
-        // cuenta Excel del lote de seguro en el FE.
-        orders: {
-          order: {
-            branch: true,
-            holder: true,
-            patient: true,
-            fixedExchangeRate: true,
+    const [batch, payments] = await Promise.all([
+      mgr.findOne(AccountsReceivable, {
+        where: { id },
+        relations: {
+          insurance: true,
+          holder: { phones: true },
+          // Autor del ajuste del total (card "Ajuste" del detalle).
+          adjustedBy: true,
+          // holder/patient/fixedExchangeRate de cada orden: los usa el estado
+          // de cuenta Excel del lote de seguro en el FE.
+          orders: {
+            order: {
+              branch: true,
+              holder: true,
+              patient: true,
+              fixedExchangeRate: true,
+            },
           },
         },
-        payments: { exchangeRate: true },
-      },
-    });
+      }),
+      mgr
+        .createQueryBuilder(AccountsReceivablePayment, 'p')
+        .leftJoinAndSelect('p.exchangeRate', 'exchangeRate')
+        .innerJoin(
+          'accounts_receivable_payment_links',
+          'l',
+          'l."paymentId" = p.id',
+        )
+        .where('l."receivableId" = :id', { id })
+        .getMany(),
+    ]);
+    if (!batch) return null;
+    batch.payments = payments;
+    return batch;
   }
 
   private async assertVisibility(

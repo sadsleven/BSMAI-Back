@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
 import { Permission } from '../permissions/entities/permission.entity';
+import { AuthContextCache } from '../auth/services/auth-context-cache.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
@@ -28,6 +29,7 @@ export class RolesService {
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
     @InjectRepository(Permission)
     private readonly permissionsRepo: Repository<Permission>,
+    private readonly authContext: AuthContextCache,
   ) {}
 
   async findAll(query: QueryRolesDto): Promise<PaginatedResponse<Role>> {
@@ -83,7 +85,9 @@ export class RolesService {
     const role = await this.findOne(id);
     ensureNotSystem(role, 'deshabilitar');
     role.isActive = !role.isActive;
-    return this.rolesRepo.save(role);
+    const saved = await this.rolesRepo.save(role);
+    this.authContext.invalidateAll();
+    return saved;
   }
 
   async findOne(id: string, withDeleted = false): Promise<Role> {
@@ -129,7 +133,9 @@ export class RolesService {
     if (dto.permissionIds) {
       role.permissions = await this.resolvePermissions(dto.permissionIds);
     }
-    return this.rolesRepo.save(role);
+    const saved = await this.rolesRepo.save(role);
+    this.authContext.invalidateAll();
+    return saved;
   }
 
   async assignPermissions(
@@ -139,19 +145,23 @@ export class RolesService {
     const role = await this.findOne(id);
     ensureNotSystem(role, 'modificar permisos de');
     role.permissions = await this.resolvePermissions(dto.permissionIds);
-    return this.rolesRepo.save(role);
+    const saved = await this.rolesRepo.save(role);
+    this.authContext.invalidateAll();
+    return saved;
   }
 
   async softDelete(id: string): Promise<void> {
     const role = await this.findOne(id);
     ensureNotSystem(role, 'eliminar');
     await this.rolesRepo.softDelete(id);
+    this.authContext.invalidateAll();
   }
 
   async hardDelete(id: string): Promise<void> {
     const role = await this.findOne(id, true);
     ensureNotSystem(role, 'eliminar');
     await this.rolesRepo.delete(id);
+    this.authContext.invalidateAll();
   }
 
   async restore(id: string): Promise<Role> {
@@ -162,6 +172,7 @@ export class RolesService {
     if (!role) throw new NotFoundException('Rol no encontrado');
     if (!role.deletedAt) return role;
     await this.rolesRepo.restore(id);
+    this.authContext.invalidateAll();
     return this.findOne(id);
   }
 
