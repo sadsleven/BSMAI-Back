@@ -25,13 +25,6 @@ import { Order } from '../../orders/entities/order.entity';
 import { BudgetServiceType } from './budget-service-type.entity';
 
 /**
- * Estado del presupuesto. `expired` NO se almacena: se deriva de
- * `validUntilDate` al leer (ver {@link Budget.expired}), así no hace falta un
- * job que vaya caducando filas.
- */
-export type BudgetStatus = 'draft' | 'sent' | 'approved' | 'rejected';
-
-/**
  * Tipo de cobro del presupuesto — define de dónde sale el precio de catálogo
  * de cada servicio, igual que en el Paso 1 de la orden:
  *  - `particular`: `service_types.particularPriceUsd`.
@@ -53,15 +46,15 @@ export type BudgetInsuranceSource = 'direct' | 'via_contractor';
  *               (`paymentAccount`).
  *  - APS      — solicitud de servicio del seguro (formato Altamira).
  *
- * Aceptado el presupuesto, `convertedOrder` enlaza la orden que nació de él
- * (botón "Crear orden" del detalle): el enlace es informativo y sobrevive a la
- * edición posterior de cualquiera de los dos.
+ * No tiene ciclo de aprobación: el sistema no puede comprobar que el paciente
+ * o el seguro dijo que sí. El único hito real es que el presupuesto se haya
+ * usado para crear la orden, y eso lo registra `convertedOrder` (botón "Crear
+ * orden" del detalle).
  */
 @Entity({ name: 'budgets' })
 @Index('idx_budgets_branch', ['branchId'])
 @Index('idx_budgets_patient', ['patientId'])
 @Index('idx_budgets_holder', ['holderId'])
-@Index('idx_budgets_status', ['status'])
 @Index('idx_budgets_date', ['budgetDate'])
 export class Budget {
   @PrimaryGeneratedColumn('uuid')
@@ -92,9 +85,6 @@ export class Budget {
 
   @Column({ type: 'varchar', length: 16 })
   type: BudgetType;
-
-  @Column({ type: 'varchar', length: 16, default: 'draft' })
-  status: BudgetStatus;
 
   @Column({ type: 'uuid' })
   holderId: string;
@@ -179,9 +169,9 @@ export class Budget {
   budgetDate: string;
 
   /**
-   * Vigencia del presupuesto. Pasada esa fecha, uno todavía en `draft`/`sent`
-   * se reporta como vencido (transient {@link Budget.expired}); los ya
-   * aprobados o rechazados no caducan.
+   * Vigencia del presupuesto. Pasada esa fecha se reporta como vencido
+   * (transient {@link Budget.expired}), salvo que ya haya generado su orden:
+   * ahí el precio quedó congelado en la orden y la vigencia deja de importar.
    */
   @Column({ type: 'date', nullable: true })
   validUntilDate?: string | null;
@@ -224,17 +214,6 @@ export class Budget {
   @JoinColumn({ name: 'paymentAccountId' })
   paymentAccount?: PaymentAccount | null;
 
-  /** Cuándo se marcó como enviado al paciente/seguro. */
-  @Column({ type: 'timestamptz', nullable: true })
-  sentAt?: Date | null;
-
-  /** Cuándo se aprobó o rechazó (el estado dice cuál de las dos). */
-  @Column({ type: 'timestamptz', nullable: true })
-  decidedAt?: Date | null;
-
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  rejectReason?: string | null;
-
   /**
    * Orden creada desde este presupuesto. `ON DELETE SET NULL`: borrar la orden
    * no borra el presupuesto, sólo deshace el enlace.
@@ -267,8 +246,9 @@ export class Budget {
 
   // --- Transient (NO columna). Lo llena `BudgetsService`. ---
   /**
-   * Vencido: `validUntilDate` ya pasó y el presupuesto sigue sin decidirse
-   * (`draft` o `sent`). Derivado al leer — no hay estado `expired` guardado.
+   * Vencido: `validUntilDate` ya pasó y el presupuesto todavía no generó su
+   * orden. Derivado al leer — no se almacena, así no hace falta un job que
+   * vaya caducando filas.
    */
   expired?: boolean;
 }

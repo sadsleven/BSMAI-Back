@@ -30,10 +30,6 @@ export class QueryBudgetsDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['draft', 'sent', 'approved', 'rejected'])
-  status?: string;
-
-  @IsOptional()
   @IsIn(['particular', 'insurance'])
   type?: string;
 
@@ -73,7 +69,6 @@ export class QueryBudgetsDto {
     'budgetDate',
     'validUntilDate',
     'priceAmount',
-    'status',
     'createdAt',
     'updatedAt',
   ])

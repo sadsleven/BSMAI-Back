@@ -669,7 +669,7 @@ export class AccountsPayableService {
     const remainingUsd = round2(grossUsd - covered);
     if (coveredUsd - remainingUsd > TOLERANCE_USD) {
       throw new BadRequestException(
-        `El abono cubre ${coveredUsd.toFixed(2)} USD pero al lote sólo le faltan ${remainingUsd.toFixed(2)} USD (bruto ${grossUsd.toFixed(2)} USD, ya cubiertos ${covered.toFixed(2)} USD).`,
+        `El pago cubre ${coveredUsd.toFixed(2)} USD pero al lote sólo le faltan ${remainingUsd.toFixed(2)} USD (bruto ${grossUsd.toFixed(2)} USD, ya cubiertos ${covered.toFixed(2)} USD).`,
       );
     }
 
@@ -701,7 +701,7 @@ export class AccountsPayableService {
         : null;
     if (custom !== null && custom - grossBs > TOLERANCE_BS) {
       throw new BadRequestException(
-        `La retención del abono (${custom.toFixed(2)} Bs) supera su bruto (${grossBs.toFixed(2)} Bs).`,
+        `La retención del pago (${custom.toFixed(2)} Bs) supera su bruto (${grossBs.toFixed(2)} Bs).`,
       );
     }
     const retentionBs = applies ? (custom ?? auto?.taxAmountBs ?? 0) : 0;
@@ -859,7 +859,7 @@ export class AccountsPayableService {
     const coveredUsd = this.settlementFigures(batch.settlements ?? []).coveredUsd;
     if (coveredUsd - remainingUsd > TOLERANCE_USD) {
       throw new BadRequestException(
-        `El lote quedaría en ${remainingUsd.toFixed(2)} USD y ya tiene ${coveredUsd.toFixed(2)} USD abonados. Elimina un abono primero.`,
+        `El lote quedaría en ${remainingUsd.toFixed(2)} USD y ya tiene ${coveredUsd.toFixed(2)} USD pagados. Elimina un pago primero.`,
       );
     }
     await this.dataSource.transaction(async (mgr) => {
@@ -908,7 +908,7 @@ export class AccountsPayableService {
       return this.findOneBatch(id, user);
     if ((batch.settlements ?? []).length > 0) {
       throw new BadRequestException(
-        'El lote ya tiene abonos registrados. Para cambiar la retención, elimina sus abonos primero.',
+        'El lote ya tiene pagos registrados. Para cambiar la retención, elimina sus pagos primero.',
       );
     }
     await this.repo.update(id, { applyRetention });
@@ -1068,7 +1068,7 @@ export class AccountsPayableService {
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
     const current = (batch.settlements ?? []).find((x) => x.id === settlementId);
-    if (!current) throw new NotFoundException('Abono no encontrado en este lote');
+    if (!current) throw new NotFoundException('Pago no encontrado en este lote');
 
     const calc = await this.buildSettlementCalc(batch, dto, settlementId);
     const payloads = await this.resolveSettlementPayments(dto.payments, calc);
@@ -1108,7 +1108,7 @@ export class AccountsPayableService {
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
     if (!(batch.settlements ?? []).some((x) => x.id === settlementId)) {
-      throw new NotFoundException('Abono no encontrado en este lote');
+      throw new NotFoundException('Pago no encontrado en este lote');
     }
     await this.dataSource.transaction(async (mgr) => {
       await this.assertRetentionNotEntered(mgr, settlementId);
@@ -1144,9 +1144,18 @@ export class AccountsPayableService {
     const totalBs = round2(
       payloads.reduce((acc, pl) => acc + Number(pl.amountInBs ?? 0), 0),
     );
-    if (Math.abs(totalBs - calc.netBs) > TOLERANCE_BS) {
+    // Un monto en USD/EUR se captura con 2 decimales en SU moneda: al pasarlo a
+    // Bs el redondeo puede desviarse hasta medio centavo × tasa. Se tolera eso
+    // (por fila), además del centavo de Bs.
+    const tolerance = payloads.reduce((acc, pl) => {
+      if (pl.amountCurrency === 'BS') return acc;
+      const value = Number(pl.amountValue) || 0;
+      const rate = value > 0 ? Number(pl.amountInBs) / value : 0;
+      return acc + 0.005 * rate;
+    }, TOLERANCE_BS);
+    if (Math.abs(totalBs - calc.netBs) > tolerance) {
       throw new BadRequestException(
-        `Las filas de pago suman ${totalBs.toFixed(2)} Bs y el neto del abono es ${calc.netBs.toFixed(2)} Bs (bruto ${calc.grossBs.toFixed(2)} − retención ${calc.retentionBs.toFixed(2)}).`,
+        `El monto del pago equivale a ${totalBs.toFixed(2)} Bs y el neto a entregar es ${calc.netBs.toFixed(2)} Bs (bruto ${calc.grossBs.toFixed(2)} − retención ${calc.retentionBs.toFixed(2)}).`,
       );
     }
     return payloads;
@@ -1224,7 +1233,7 @@ export class AccountsPayableService {
     );
     if (Number(rows[0]?.c ?? 0) > 0) {
       throw new BadRequestException(
-        'La retención de este abono ya fue pagada al SENIAT; no se puede modificar ni eliminar.',
+        'La retención de este pago ya fue pagada al SENIAT; no se puede modificar ni eliminar.',
       );
     }
   }

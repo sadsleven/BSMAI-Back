@@ -480,21 +480,12 @@ const budgetsPermissions: PermissionDefinition[] = [
     group: BUDGETS_GROUP,
   },
   {
-    name: 'budgets.change-status',
-    resource: 'budgets',
-    action: 'change-status',
-    label: 'Cambiar el estado de un presupuesto',
-    description:
-      'Permite marcar un presupuesto como enviado, aprobado o rechazado, y reabrirlo',
-    group: BUDGETS_GROUP,
-  },
-  {
     name: 'budgets.convert',
     resource: 'budgets',
     action: 'convert',
     label: 'Crear la orden desde un presupuesto',
     description:
-      'Permite generar la orden a partir de un presupuesto aprobado (abre el Paso 1 precargado) y enlazarla',
+      'Permite generar la orden a partir de un presupuesto (abre el Paso 1 precargado con sus datos) y enlazarla',
     group: BUDGETS_GROUP,
   },
   {
@@ -900,7 +891,6 @@ export const PERMISSIONS = {
     LIST: 'budgets.list',
     CREATE: 'budgets.create',
     UPDATE: 'budgets.update',
-    CHANGE_STATUS: 'budgets.change-status',
     CONVERT: 'budgets.convert',
     EDIT_AMOUNT: 'budgets.edit-amount',
     SOFT_DELETE: 'budgets.soft-delete',

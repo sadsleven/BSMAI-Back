@@ -24,7 +24,6 @@ import { InsuranceServicePrice } from '../insurances/entities/insurance-service-
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { QueryBudgetsDto } from './dto/query-budgets.dto';
-import { ChangeBudgetStatusDto } from './dto/change-budget-status.dto';
 import { BudgetServiceTypeRowDto } from './dto/budget-service-type.dto';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
 import { paginateBuilder } from '../shared/utils/paginate';
@@ -132,11 +131,10 @@ export class BudgetsService {
    * servicios como se capturaron.
    */
   private decorate(budget: Budget): Budget {
-    const today = todayIso();
     budget.expired =
-      (budget.status === 'draft' || budget.status === 'sent') &&
+      !budget.convertedOrderId &&
       !!budget.validUntilDate &&
-      budget.validUntilDate < today;
+      budget.validUntilDate < todayIso();
     if (budget.budgetServiceTypes) {
       budget.budgetServiceTypes.sort((a, b) => a.position - b.position);
     }
@@ -498,7 +496,6 @@ export class BudgetsService {
         budgetNumber: this.formatBudgetNumber(number),
         branchId: dto.branchId,
         type: dto.type,
-        status: 'draft',
         holderId: dto.holderId,
         patientId: dto.patientId,
         insuranceId: dto.type === 'insurance' ? (dto.insuranceId ?? null) : null,
@@ -541,7 +538,6 @@ export class BudgetsService {
       page = 1,
       limit = 10,
       search,
-      status,
       type,
       branchId,
       insuranceId,
@@ -587,7 +583,6 @@ export class BudgetsService {
     }
 
     if (branchId) qb.andWhere('b.branchId = :branchId', { branchId });
-    if (status) qb.andWhere('b.status = :status', { status });
     if (type) qb.andWhere('b.type = :type', { type });
     if (insuranceId) qb.andWhere('b.insuranceId = :insuranceId', { insuranceId });
     if (patientId) qb.andWhere('b.patientId = :patientId', { patientId });
@@ -595,18 +590,18 @@ export class BudgetsService {
       qb.andWhere('b.budgetDate >= :bdf', { bdf: budgetDateFrom });
     if (budgetDateTo) qb.andWhere('b.budgetDate <= :bdt', { bdt: budgetDateTo });
 
-    // Vencido = con fecha de vigencia pasada y todavía sin decidir. Se filtra en
-    // SQL (no sobre el transient) para que la paginación cuente bien.
+    // Vencido = vigencia pasada y todavía sin su orden. Se filtra en SQL (no
+    // sobre el transient) para que la paginación cuente bien.
     if (expired === 'true') {
       qb.andWhere(
         `(b."validUntilDate" IS NOT NULL AND b."validUntilDate" < :today
-          AND b.status IN ('draft','sent'))`,
+          AND b."convertedOrderId" IS NULL)`,
         { today: todayIso() },
       );
     } else if (expired === 'false') {
       qb.andWhere(
         `(b."validUntilDate" IS NULL OR b."validUntilDate" >= :today
-          OR b.status NOT IN ('draft','sent'))`,
+          OR b."convertedOrderId" IS NOT NULL)`,
         { today: todayIso() },
       );
     }
@@ -780,47 +775,9 @@ export class BudgetsService {
   }
 
   /**
-   * Cambio de estado. Transiciones permitidas:
-   *   draft → sent | approved | rejected
-   *   sent  → approved | rejected | draft (corrección antes de decidir)
-   *   approved / rejected → sent | draft (reabrir)
-   * `rejected` exige motivo. Un presupuesto ya convertido en orden queda fijo
-   * en `approved`: su decisión ya se materializó.
-   */
-  async changeStatus(
-    id: string,
-    dto: ChangeBudgetStatusDto,
-    user: AuthenticatedUser,
-  ): Promise<Budget> {
-    const budget = await this.findOne(id, user);
-    if (budget.convertedOrderId && dto.status !== 'approved') {
-      throw new ConflictException(
-        'El presupuesto ya generó una orden: su estado no se puede cambiar',
-      );
-    }
-    if (dto.status === budget.status) return budget;
-    if (dto.status === 'rejected' && !(dto.rejectReason ?? '').trim()) {
-      throw new BadRequestException('Indica el motivo del rechazo');
-    }
-
-    const now = new Date();
-    await this.repo.update(id, {
-      status: dto.status,
-      // `sentAt` se estampa la primera vez que sale; reabrir no lo borra.
-      sentAt:
-        dto.status === 'sent' && !budget.sentAt ? now : (budget.sentAt ?? null),
-      decidedAt:
-        dto.status === 'approved' || dto.status === 'rejected' ? now : null,
-      rejectReason:
-        dto.status === 'rejected' ? (dto.rejectReason ?? '').trim() : null,
-    });
-    return this.findOne(id, user);
-  }
-
-  /**
    * Enlaza la orden que nació del presupuesto. La orden la crea el módulo de
-   * órdenes (Paso 1 precargado); aquí sólo se guarda el vínculo y se da el
-   * presupuesto por aprobado.
+   * órdenes (Paso 1 precargado); aquí sólo se guarda el vínculo, que es lo que
+   * deja el presupuesto cerrado y de sólo lectura.
    */
   async linkOrder(
     id: string,
@@ -842,9 +799,6 @@ export class BudgetsService {
     await this.repo.update(id, {
       convertedOrderId: orderId,
       convertedAt: new Date(),
-      status: 'approved',
-      decidedAt: budget.decidedAt ?? new Date(),
-      rejectReason: null,
     });
     return this.findOne(id, user);
   }

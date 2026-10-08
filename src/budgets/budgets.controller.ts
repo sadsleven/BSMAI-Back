@@ -15,7 +15,6 @@ import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { QueryBudgetsDto } from './dto/query-budgets.dto';
-import { ChangeBudgetStatusDto } from './dto/change-budget-status.dto';
 import { LinkBudgetOrderDto } from './dto/link-budget-order.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -24,7 +23,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 
 /**
  * Presupuestos de servicios. Mismo Paso 1 de la orden, sin el resto del flujo:
- * se arma, se exporta (Excel/PDF) y, si lo aceptan, se convierte en orden.
+ * se arma, se exporta (Excel/PDF) y, si lo aceptan, se usa para crear la orden.
  */
 @Controller('budgets')
 export class BudgetsController {
@@ -59,16 +58,6 @@ export class BudgetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.update(id, dto, user);
-  }
-
-  @RequirePermissions(PERMISSIONS.BUDGETS.CHANGE_STATUS)
-  @Patch(':id/status')
-  changeStatus(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: ChangeBudgetStatusDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.service.changeStatus(id, dto, user);
   }
 
   /**
