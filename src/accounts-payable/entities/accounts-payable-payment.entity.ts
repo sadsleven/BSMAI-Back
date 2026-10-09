@@ -3,14 +3,14 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  Index,
   JoinColumn,
-  ManyToMany,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
-import { AccountsPayable } from './accounts-payable.entity';
+import { AccountsPayableSettlement } from './accounts-payable-settlement.entity';
 
 export type AccountsPayablePaymentType =
   | 'mobile_payment'
@@ -22,7 +22,14 @@ export type AccountsPayablePaymentType =
 
 export type PaymentCurrency = 'USD' | 'EUR' | 'BS';
 
+/**
+ * Fila de pago de un ABONO ({@link AccountsPayableSettlement}): el movimiento
+ * concreto con el que se entregó el neto al proveedor (transferencia, pago
+ * móvil, efectivo…). Las filas de un abono suman su `netBs`; la retención y la
+ * tasa viven en el abono, no en la fila.
+ */
 @Entity({ name: 'accounts_payable_payments' })
+@Index('idx_app_settlement', ['settlementId'])
 export class AccountsPayablePayment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -63,8 +70,14 @@ export class AccountsPayablePayment {
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   amountInBs: string;
 
-  @ManyToMany(() => AccountsPayable, (a) => a.payments)
-  accounts: AccountsPayable[];
+  @Column({ type: 'uuid' })
+  settlementId: string;
+
+  @ManyToOne(() => AccountsPayableSettlement, (s) => s.payments, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'settlementId' })
+  settlement: AccountsPayableSettlement;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

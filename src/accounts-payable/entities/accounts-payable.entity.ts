@@ -5,8 +5,6 @@ import {
   Entity,
   Index,
   JoinColumn,
-  JoinTable,
-  ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -16,7 +14,7 @@ import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import { TaxUnit } from '../../tax-units/entities/tax-unit.entity';
 import { ExchangeRate } from '../../exchange-rates/entities/exchange-rate.entity';
-import { AccountsPayablePayment } from './accounts-payable-payment.entity';
+import { AccountsPayableSettlement } from './accounts-payable-settlement.entity';
 import { AccountsPayableOrder } from './accounts-payable-order.entity';
 
 export type AccountsPayableStatus = 'paid' | 'unpaid' | 'partially_paid';
@@ -25,9 +23,13 @@ export type AccountsPayableRecipientType = 'doctor' | 'care_center';
 /**
  * LOTE de Cuentas por pagar. Creado por el usuario para UN proveedor (doctor o
  * centro), agrupa N órdenes internas (`orders` → {@link AccountsPayableOrder}) y
- * acumula M pagos. Estado parcial/pagado según el neto a pagar (bruto −
- * retención SENIAT). Al quedar pagado nace 1 obligación de retención
- * (`taxes_payable.sourcePayableId`). El monto por proveedor vive en la orden
+ * se liquida con M ABONOS (`settlements` → {@link AccountsPayableSettlement}).
+ *
+ * El saldo del lote se lleva en USD: cada abono cubre una porción del bruto USD
+ * a SU tasa y con SU retención, de modo que pagar en dos partes a tasas
+ * distintas no recalcula lo ya pagado. Estado parcial/pagado según los USD
+ * cubiertos. Cada abono genera su propia obligación con el SENIAT
+ * (`taxes_payable.sourceSettlementId`). El monto por proveedor vive en la orden
  * interna (`order_internal_orders.providerAmountUsd`), snapshoteado en el pivot.
  */
 @Entity({ name: 'accounts_payable' })
@@ -77,18 +79,10 @@ export class AccountsPayable {
   applyRetention: boolean;
 
   /**
-   * Monto MANUAL de la retención en Bs. Si no es NULL (y `applyRetention`),
-   * reemplaza al cálculo automático (Decreto 1.808): retención = este valor y
-   * neto = bruto − este valor. NULL = automático. Se limpia al desactivar la
-   * retención. Casos especiales donde el monto a retener difiere del legal.
-   */
-  @Column({ type: 'numeric', precision: 18, scale: 2, nullable: true })
-  customRetentionBs?: string | null;
-
-  /**
-   * Tasa de pago USD/Bs del lote: convierte el bruto USD a Bs (bruto Bs,
-   * retención y neto a pagar). NULL = tasa de facturación de cada orden
-   * (lotes previos a la columna).
+   * Tasa de pago USD/Bs POR DEFECTO del lote: la que se propone a cada abono
+   * nuevo y con la que se proyecta en Bs el saldo aún no pagado. No afecta a
+   * los abonos ya registrados (cada uno snapshotea la suya). NULL = tasa de
+   * facturación de cada orden (lotes previos a la columna).
    */
   @Column({ type: 'uuid', nullable: true })
   exchangeRateId?: string | null;
@@ -107,15 +101,11 @@ export class AccountsPayable {
   @OneToMany(() => AccountsPayableOrder, (o) => o.payable, { cascade: false })
   orders: AccountsPayableOrder[];
 
-  @ManyToMany(() => AccountsPayablePayment, (p) => p.accounts, {
+  /** Abonos del lote (cada uno con su tasa, su retención y sus filas de pago). */
+  @OneToMany(() => AccountsPayableSettlement, (s) => s.payable, {
     cascade: false,
   })
-  @JoinTable({
-    name: 'accounts_payable_payment_links',
-    joinColumn: { name: 'payableId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'paymentId', referencedColumnName: 'id' },
-  })
-  payments: AccountsPayablePayment[];
+  settlements: AccountsPayableSettlement[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -134,17 +124,27 @@ export class AccountsPayable {
   orderCount?: number;
   /** Suma de `grossUsd` del pivot (bruto USD del lote). */
   grossUsd?: number;
+  /** Nº de abonos registrados. */
+  settlementCount?: number;
+  /** USD del bruto ya cubiertos por abonos (Σ `coveredUsd`). */
+  coveredUsd?: number;
+  /** USD del bruto que faltan por pagar (= grossUsd − coveredUsd, ≥ 0): el saldo real. */
+  pendingUsd?: number;
+  /** Bruto en Bs de los abonos registrados (Σ `grossBs`, a la tasa de cada uno). */
+  settledGrossBs?: number;
+  /** Retención en Bs ya practicada (Σ `retentionBs` de los abonos). */
+  settledRetentionBs?: number;
   /**
-   * Total del lote en Bs (Σ grossUsd × tasa). Tasa = `exchangeRate` del lote
-   * (tasa de pago) o, si es NULL, la de facturación de cada orden.
+   * Total del lote en Bs: lo abonado a la tasa de cada abono + el saldo
+   * pendiente proyectado a la tasa por defecto del lote.
    */
   grossBs?: number;
-  /** Retención SENIAT en Bs sobre el bruto del lote. */
+  /** Retención SENIAT en Bs: la practicada + la proyectada sobre el saldo. */
   retentionBs?: number;
-  /** Neto a entregar al proveedor en Bs (= bruto − retención). */
+  /** Neto al proveedor en Bs (= bruto − retención), con el saldo proyectado. */
   netBs?: number;
-  /** Pagado al proveedor en Bs (Σ pagos del lote). */
+  /** Entregado al proveedor en Bs (Σ `netBs` de los abonos). */
   paidBs?: number;
-  /** Falta por pagar en Bs (= neto − pagado, ≥ 0). */
+  /** Neto proyectado del saldo pendiente en Bs (= netBs − paidBs, ≥ 0). */
   pendingBs?: number;
 }

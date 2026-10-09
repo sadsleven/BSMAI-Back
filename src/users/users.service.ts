@@ -11,6 +11,7 @@ import { In, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
+import { AuthContextCache } from '../auth/services/auth-context-cache.service';
 import { Branch } from '../branches/entities/branch.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -30,6 +31,7 @@ export class UsersService {
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     @InjectRepository(Role) private readonly rolesRepo: Repository<Role>,
     @InjectRepository(Branch) private readonly branchesRepo: Repository<Branch>,
+    private readonly authContext: AuthContextCache,
   ) {}
 
   async findAll(
@@ -199,6 +201,7 @@ export class UsersService {
     }
 
     await this.usersRepo.save(user);
+    this.authContext.invalidateUser(id);
     return this.findOne(id);
   }
 
@@ -229,6 +232,7 @@ export class UsersService {
     }
     user.password = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.usersRepo.save(user);
+    this.authContext.invalidateUser(id);
   }
 
   async toggleActive(
@@ -247,6 +251,7 @@ export class UsersService {
     }
     user.isActive = !user.isActive;
     await this.usersRepo.save(user);
+    this.authContext.invalidateUser(id);
     return this.findOne(id);
   }
 
@@ -260,6 +265,7 @@ export class UsersService {
       throw new BadRequestException('No puedes eliminar tu propio usuario');
     }
     await this.usersRepo.softDelete(id);
+    this.authContext.invalidateUser(id);
   }
 
   async hardDelete(id: string, actor: AuthenticatedUser): Promise<void> {
@@ -275,6 +281,7 @@ export class UsersService {
       throw new BadRequestException('No puedes eliminar tu propio usuario');
     }
     await this.usersRepo.delete(id);
+    this.authContext.invalidateUser(id);
   }
 
   async restore(id: string): Promise<PublicUserView> {

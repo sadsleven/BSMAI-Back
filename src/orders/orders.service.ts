@@ -4384,9 +4384,10 @@ export class OrdersService implements OnModuleInit {
          JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
          JOIN "accounts_payable" ap
            ON ap.id = apo."payableId" AND ap."deletedAt" IS NULL
-         JOIN "accounts_payable_payment_links" apl ON apl."payableId" = ap.id
+         JOIN "accounts_payable_settlements" aps
+           ON aps."payableId" = ap.id AND aps."deletedAt" IS NULL
          JOIN "accounts_payable_payments" app
-           ON app.id = apl."paymentId" AND app."deletedAt" IS NULL
+           ON app."settlementId" = aps.id AND app."deletedAt" IS NULL
         WHERE iio."orderId" = $1
         ORDER BY 1`,
       [orderId],

@@ -69,6 +69,50 @@ export class AccountsPayablePaymentDto {
   amountValue: number;
 }
 
+/**
+ * ABONO: una porción del bruto del lote (`coveredUsd`) pagada a UNA tasa, con
+ * SU retención y las filas de pago que entregan el neto al proveedor.
+ */
+export class AccountsPayableSettlementDto {
+  /** Fecha del abono: define el período fiscal de su retención. */
+  @IsISO8601()
+  settlementDate: string;
+
+  /** USD del bruto del lote que cubre este abono (≤ el saldo pendiente). */
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  coveredUsd: number;
+
+  /** Tasa USD/Bs a la que se pagó esta porción. */
+  @IsUUID()
+  exchangeRateId: string;
+
+  /** UT para la retención del abono. Sin enviar = la del lote / la vigente. */
+  @IsOptional()
+  @IsUUID()
+  taxUnitId?: string;
+
+  /**
+   * Monto manual de la retención del abono en Bs. Sin enviar (o `null`) = el
+   * cálculo prorrateado. Se ignora si el lote no aplica retención.
+   */
+  @IsOptional()
+  @ValidateIf(
+    (o: AccountsPayableSettlementDto) => o.customRetentionBs !== null,
+  )
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  customRetentionBs?: number | null;
+
+  /** Filas con las que se entregó el neto: deben sumarlo exactamente. */
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Registrá al menos una forma de pago' })
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => AccountsPayablePaymentDto)
+  payments: AccountsPayablePaymentDto[];
+}
+
 /** Crear un lote de Cuentas por pagar para UN proveedor, con sus órdenes internas. */
 export class CreateAccountsPayableBatchDto {
   @IsIn(['doctor', 'care_center'])
@@ -93,16 +137,7 @@ export class CreateAccountsPayableBatchDto {
   applyRetention?: boolean;
 
   /**
-   * Monto manual de la retención en Bs (reemplaza al cálculo automático).
-   * Sin enviar = automático. Se ignora si `applyRetention` es `false`.
-   */
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  customRetentionBs?: number;
-
-  /**
-   * Tasa de pago USD/Bs del lote (define bruto Bs, retención y neto a pagar).
+   * Tasa de pago USD/Bs por defecto del lote (la que se propone a cada abono).
    * Sin enviar = tasa USD vigente.
    */
   @IsOptional()
@@ -129,18 +164,7 @@ export class SetPayableRetentionDto {
   applyRetention: boolean;
 }
 
-/**
- * Fijar (número) o quitar (`null` ⇒ automático) el monto manual de la retención
- * de un lote existente. Requiere que el lote aplique retención.
- */
-export class SetPayableCustomRetentionDto {
-  @ValidateIf((o: SetPayableCustomRetentionDto) => o.customRetentionBs !== null)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  customRetentionBs: number | null;
-}
-
-/** Cambiar la tasa de pago USD/Bs de un lote existente (recalcula neto/estado). */
+/** Cambiar la tasa de pago USD/Bs por defecto de un lote existente. */
 export class SetPayableExchangeRateDto {
   @IsUUID()
   exchangeRateId: string;
@@ -154,16 +178,6 @@ export class MutateAccountsPayableOrdersDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   internalOrderIds: string[];
-}
-
-/** Registrar uno o más pagos sobre un lote (id por path). */
-export class RegisterPaymentDto {
-  @IsArray()
-  @ArrayMinSize(1, { message: 'Registrá al menos un pago' })
-  @ArrayMaxSize(20)
-  @ValidateNested({ each: true })
-  @Type(() => AccountsPayablePaymentDto)
-  payments: AccountsPayablePaymentDto[];
 }
 
 /** Pendientes (órdenes internas facturadas, sin lote). */

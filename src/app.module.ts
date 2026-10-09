@@ -30,6 +30,7 @@ import { BranchesModule } from './branches/branches.module';
 import { TaxUnitsModule } from './tax-units/tax-units.module';
 import { OrdersModule } from './orders/orders.module';
 import { OrderDraftsModule } from './order-drafts/order-drafts.module';
+import { BudgetsModule } from './budgets/budgets.module';
 import { AccountsPayableModule } from './accounts-payable/accounts-payable.module';
 import { AccountsReceivableModule } from './accounts-receivable/accounts-receivable.module';
 import { TaxesPayableModule } from './taxes-payable/taxes-payable.module';
@@ -68,6 +69,7 @@ import { ReportsModule } from './reports/reports.module';
     TaxUnitsModule,
     OrdersModule,
     OrderDraftsModule,
+    BudgetsModule,
     AccountsPayableModule,
     AccountsReceivableModule,
     TaxesPayableModule,

@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { AccountsPayable } from './entities/accounts-payable.entity';
 import { AccountsPayablePayment } from './entities/accounts-payable-payment.entity';
+import { AccountsPayableSettlement } from './entities/accounts-payable-settlement.entity';
 import { AccountsPayableOrder } from './entities/accounts-payable-order.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
@@ -17,6 +18,7 @@ import { TaxUnit } from '../tax-units/entities/tax-unit.entity';
 import { TaxUnitsService } from '../tax-units/tax-units.service';
 import {
   AccountsPayablePaymentDto,
+  AccountsPayableSettlementDto,
   CreateAccountsPayableBatchDto,
   QueryAccountsPayableDto,
   QueryPendingPayableDto,
@@ -29,11 +31,13 @@ import {
   resolveUsdRate,
 } from '../shared/utils/payment-conversion';
 import {
-  calcRetention,
+  calcSliceRetention,
   SeniatPersonType,
+  SliceRetentionResult,
 } from '../shared/utils/seniat-retention';
 
 const TOLERANCE_BS = 0.01;
+const TOLERANCE_USD = 0.01;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** Orden interna facturada disponible para armar un lote (Pendiente). */
@@ -62,17 +66,37 @@ interface PayableOrderTotals {
   grossBsBilling: number;
 }
 
-interface BatchNet {
-  grossUsd: number;
+/** Agregados de los abonos de un lote, resueltos en SQL (listado). */
+interface PayableSettlementTotals {
+  count: number;
+  /** Σ `coveredUsd`: USD del bruto ya cubiertos. */
+  coveredUsd: number;
+  /** Σ `grossBs`: bruto abonado, a la tasa de cada abono. */
+  grossBs: number;
+  /** Σ `retentionBs`: retención ya practicada. */
+  retentionBs: number;
+  /** Σ `netBs`: entregado al proveedor. */
+  netBs: number;
+}
+
+/**
+ * Cálculo de UN abono, todo a SU tasa: bruto de la porción cubierta, retención
+ * (prorrateada o manual) y neto a entregar al proveedor. Es lo que se
+ * snapshotea en `accounts_payable_settlements`.
+ */
+interface SettlementCalc {
+  coveredUsd: number;
+  exchangeRateId: string;
+  rateBs: number;
   grossBs: number;
   personType: SeniatPersonType;
-  taxUnitId: string;
+  taxUnitId: string | null;
   taxUnitAmountBs: number;
   taxRate: number;
   subtrahendBs: number;
   retentionBs: number;
   netBs: number;
-  /** ¿`retentionBs` es el monto manual del lote (no el cálculo automático)? */
+  /** ¿`retentionBs` lo fijó el usuario (no el cálculo prorrateado)? */
   isCustomRetention: boolean;
 }
 
@@ -283,7 +307,7 @@ export class AccountsPayableService {
 
     // Paso 2: hidratar sólo la página. El pivot NO se trae: sus agregados
     // (nº de órdenes y brutos) salen de una única query agrupada.
-    const [rows, totals, taxUnitBs] = await Promise.all([
+    const [rows, totals, settlements, taxUnitBs] = await Promise.all([
       this.repo.find({
         where: { id: In(ids) },
         relations: {
@@ -291,17 +315,20 @@ export class AccountsPayableService {
           careCenter: true,
           taxUnit: true,
           exchangeRate: true,
-          payments: { exchangeRate: true },
         },
       }),
       this.orderTotals(ids),
+      this.settlementsByPayable(ids),
       this.currentTaxUnitBs(),
     ]);
     const byId = new Map(rows.map((b) => [b.id, b]));
     const data = ids
       .map((id) => byId.get(id))
       .filter((b): b is AccountsPayable => !!b);
-    for (const b of data) this.computeFigures(b, taxUnitBs, totals.get(b.id));
+    for (const b of data) {
+      b.settlements = settlements.get(b.id) ?? [];
+      this.computeFigures(b, taxUnitBs, totals.get(b.id));
+    }
     return { data, metadata: { total, page, lastPage } };
   }
 
@@ -345,35 +372,79 @@ export class AccountsPayableService {
     );
   }
 
+  /**
+   * Abonos de varios lotes en una query (listado). Sin sus filas de pago: el
+   * listado sólo necesita los totales y la fecha/tasa de cada abono.
+   */
+  private async settlementsByPayable(
+    ids: string[],
+  ): Promise<Map<string, AccountsPayableSettlement[]>> {
+    const rows = await this.dataSource.manager.find(AccountsPayableSettlement, {
+      where: { payableId: In(ids) },
+      order: { settlementDate: 'ASC', createdAt: 'ASC' },
+    });
+    const out = new Map<string, AccountsPayableSettlement[]>();
+    for (const r of rows) {
+      const arr = out.get(r.payableId) ?? [];
+      arr.push(r);
+      out.set(r.payableId, arr);
+    }
+    return out;
+  }
+
   async findOneBatch(
     id: string,
     user: AuthenticatedUser,
   ): Promise<AccountsPayable> {
-    const batch = await this.loadBatch(this.dataSource.manager, id);
+    // El lote y la UT vigente no dependen entre sí: una sola ida y vuelta.
+    const [batch, taxUnitBs] = await Promise.all([
+      this.loadBatch(this.dataSource.manager, id),
+      this.currentTaxUnitBs(),
+    ]);
     if (!batch)
       throw new NotFoundException('Lote de cuentas por pagar no encontrado');
     await this.assertVisibility(batch, user);
-    this.computeFigures(batch, await this.currentTaxUnitBs());
+    this.computeFigures(batch, taxUnitBs);
     return batch;
   }
 
-  private loadBatch(
+  /**
+   * Lote con sus órdenes y sus abonos. Las dos colecciones se traen en queries
+   * paralelas a propósito: en un solo \`findOne\` TypeORM las une por LEFT JOIN y
+   * devuelve el producto cartesiano órdenes × abonos × filas de pago.
+   */
+  private async loadBatch(
     mgr: EntityManager,
     id: string,
   ): Promise<AccountsPayable | null> {
-    return mgr.findOne(AccountsPayable, {
-      where: { id },
-      relations: {
-        doctor: true,
-        careCenter: true,
-        taxUnit: true,
-        exchangeRate: true,
-        orders: {
-          internalOrder: { order: { branch: true, billingExchangeRate: true } },
+    const [batch, settlements] = await Promise.all([
+      mgr.findOne(AccountsPayable, {
+        where: { id },
+        relations: {
+          doctor: true,
+          careCenter: true,
+          taxUnit: true,
+          exchangeRate: true,
+          orders: {
+            internalOrder: {
+              order: { branch: true, billingExchangeRate: true },
+            },
+          },
         },
-        payments: { exchangeRate: true },
-      },
-    });
+      }),
+      mgr.find(AccountsPayableSettlement, {
+        where: { payableId: id },
+        relations: {
+          exchangeRate: true,
+          taxUnit: true,
+          payments: { exchangeRate: true },
+        },
+        order: { settlementDate: 'ASC', createdAt: 'ASC' },
+      }),
+    ]);
+    if (!batch) return null;
+    batch.settlements = settlements;
+    return batch;
   }
 
   private async assertVisibility(
@@ -440,18 +511,6 @@ export class AccountsPayableService {
     return current;
   }
 
-  /**
-   * Tasa USD/Bs de contexto para convertir pagos sin tasa propia (USD): la de
-   * pago del lote o, en lotes previos sin ella, la de facturación de la 1ª orden.
-   */
-  private batchUsdRateId(batch: AccountsPayable): string | null {
-    return (
-      batch.exchangeRateId ??
-      batch.orders[0]?.internalOrder?.order?.billingExchangeRateId ??
-      null
-    );
-  }
-
   private personTypeOf(batch: AccountsPayable): SeniatPersonType {
     if (batch.recipientType === 'care_center') return 'legal_entity';
     return batch.doctor?.isLegalEntity ? 'legal_entity' : 'natural';
@@ -462,164 +521,223 @@ export class AccountsPayableService {
     return batch.applyRetention !== false;
   }
 
-  /** Monto manual de la retención del lote (Bs) o `null` = cálculo automático. */
-  private customRetentionBs(batch: AccountsPayable): number | null {
-    if (batch.customRetentionBs === null || batch.customRetentionBs === undefined)
-      return null;
-    const n = Number(batch.customRetentionBs);
-    return Number.isFinite(n) ? round2(n) : null;
-  }
-
   /**
-   * Retención del lote sobre `grossBs`: 0 si no aplica; el monto manual si lo
-   * tiene (tasa/sustraendo nominales del régimen, sólo informativos); si no,
-   * el cálculo automático (Decreto 1.808).
-   */
-  private retentionOf(
-    batch: AccountsPayable,
-    grossBs: number,
-    taxUnitBs: number,
-  ): {
-    taxRate: number;
-    subtrahendBs: number;
-    taxAmountBs: number;
-    isCustom: boolean;
-  } {
-    if (!this.appliesRetention(batch)) {
-      return { taxRate: 0, subtrahendBs: 0, taxAmountBs: 0, isCustom: false };
-    }
-    const auto = calcRetention({
-      grossBs,
-      personType: this.personTypeOf(batch),
-      taxUnitBs,
-    });
-    const custom = this.customRetentionBs(batch);
-    return {
-      taxRate: auto.taxRate,
-      subtrahendBs: auto.subtrahendBs,
-      taxAmountBs: custom ?? auto.taxAmountBs,
-      isCustom: custom !== null,
-    };
-  }
-
-  /**
-   * Tasa de pago USD/Bs del lote (si la tiene y es válida). NULL ⇒ cada orden
-   * se convierte con su tasa de facturación (lotes previos a la columna).
+   * Tasa de pago USD/Bs POR DEFECTO del lote (si la tiene y es válida): la que
+   * se propone a cada abono nuevo y con la que se proyecta en Bs el saldo
+   * pendiente. NULL ⇒ cae a la tasa de facturación de las órdenes.
    */
   private batchRateBs(batch: AccountsPayable): number | null {
     const bs = Number(batch.exchangeRate?.amountBs);
     return Number.isFinite(bs) && bs > 0 ? bs : null;
   }
 
-  /** Calcula y adjunta los campos transient (gross/retención/neto/pagado/pendiente). */
+  /** Bruto USD del lote (Σ del pivot de órdenes). */
+  private grossUsdOf(batch: AccountsPayable): number {
+    return round2(
+      (batch.orders ?? []).reduce((s, o) => s + (Number(o.grossUsd) || 0), 0),
+    );
+  }
+
+  /** Agregados de los abonos ya hidratados (detalle). */
+  private settlementFigures(
+    settlements: AccountsPayableSettlement[],
+  ): PayableSettlementTotals {
+    let coveredUsd = 0;
+    let grossBs = 0;
+    let retentionBs = 0;
+    let netBs = 0;
+    for (const s of settlements) {
+      coveredUsd += Number(s.coveredUsd) || 0;
+      grossBs += Number(s.grossBs) || 0;
+      retentionBs += Number(s.retentionBs) || 0;
+      netBs += Number(s.netBs) || 0;
+    }
+    return {
+      count: settlements.length,
+      coveredUsd: round2(coveredUsd),
+      grossBs: round2(grossBs),
+      retentionBs: round2(retentionBs),
+      netBs: round2(netBs),
+    };
+  }
+
+  /**
+   * Proyección en Bs del saldo aún no abonado, a la tasa por defecto del lote:
+   * lo que costaría terminar de pagarlo hoy. No se persiste — el abono que lo
+   * liquide fijará su propia tasa y su propia retención.
+   */
+  private projectPending(
+    batch: AccountsPayable,
+    pendingUsd: number,
+    grossUsd: number,
+    rateBs: number,
+    taxUnitBs: number,
+  ): { grossBs: number; retentionBs: number } {
+    if (pendingUsd <= 0 || !(rateBs > 0)) return { grossBs: 0, retentionBs: 0 };
+    const grossBs = round2(pendingUsd * rateBs);
+    if (!this.appliesRetention(batch)) return { grossBs, retentionBs: 0 };
+    const r = calcSliceRetention({
+      sliceUsd: pendingUsd,
+      totalUsd: grossUsd,
+      rateBs,
+      personType: this.personTypeOf(batch),
+      taxUnitBs,
+    });
+    return { grossBs, retentionBs: r.taxAmountBs };
+  }
+
+  /**
+   * Calcula y adjunta los campos transient del lote. El saldo se lleva en USD
+   * (`pendingUsd`); los importes en Bs mezclan lo ya abonado — a la tasa de
+   * cada abono — con la proyección del saldo a la tasa por defecto.
+   */
   private computeFigures(
     batch: AccountsPayable,
     fallbackTaxUnitBs: number,
     totals?: PayableOrderTotals,
   ): void {
     let grossUsd = 0;
-    let grossBs = 0;
-    const batchRate = this.batchRateBs(batch);
+    let billedGrossBs = 0;
     if (totals) {
       // Listado: el pivot no viene hidratado, los brutos ya vienen sumados.
       grossUsd = totals.grossUsd;
-      grossBs =
-        batchRate !== null
-          ? totals.grossUsd * batchRate
-          : totals.grossBsBilling;
+      billedGrossBs = totals.grossBsBilling;
       batch.orderCount = totals.orderCount;
     } else {
       for (const apo of batch.orders ?? []) {
         const g = Number(apo.grossUsd) || 0;
         grossUsd += g;
-        const rateBs =
-          batchRate ??
+        billedGrossBs +=
+          g *
           Number(apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0);
-        grossBs += g * rateBs;
       }
       batch.orderCount = (batch.orders ?? []).length;
     }
     grossUsd = round2(grossUsd);
-    grossBs = round2(grossBs);
+
+    const s = this.settlementFigures(batch.settlements ?? []);
+    const coveredUsd = round2(Math.min(grossUsd, s.coveredUsd));
+    const pendingUsd = Math.max(0, round2(grossUsd - coveredUsd));
     const taxUnitBs = batch.taxUnit
       ? Number(batch.taxUnit.amountBs)
       : fallbackTaxUnitBs;
-    // Retención del lote: desactivada ⇒ 0; manual ⇒ monto fijo; sino automática.
-    const retention = this.retentionOf(batch, grossBs, taxUnitBs);
-    const netBs = round2(grossBs - retention.taxAmountBs);
-    const paidBs = round2(
-      (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
+    const projRate =
+      this.batchRateBs(batch) ?? (grossUsd > 0 ? billedGrossBs / grossUsd : 0);
+    const proj = this.projectPending(
+      batch,
+      pendingUsd,
+      grossUsd,
+      projRate,
+      taxUnitBs,
     );
+
     batch.grossUsd = grossUsd;
-    batch.grossBs = grossBs;
-    batch.retentionBs = round2(retention.taxAmountBs);
-    batch.netBs = netBs;
-    batch.paidBs = paidBs;
-    batch.pendingBs = Math.max(0, round2(netBs - paidBs));
+    batch.settlementCount = s.count;
+    batch.coveredUsd = coveredUsd;
+    batch.pendingUsd = pendingUsd;
+    batch.settledGrossBs = s.grossBs;
+    batch.settledRetentionBs = s.retentionBs;
+    batch.grossBs = round2(s.grossBs + proj.grossBs);
+    batch.retentionBs = round2(s.retentionBs + proj.retentionBs);
+    batch.netBs = round2(batch.grossBs - batch.retentionBs);
+    batch.paidBs = s.netBs;
+    batch.pendingBs = Math.max(0, round2(proj.grossBs - proj.retentionBs));
   }
 
-  /** Bruto/retención/neto autoritativos del lote (Bs), resolviendo tasas faltantes. */
-  private async computeNet(batch: AccountsPayable): Promise<BatchNet> {
-    if (!batch.orders || batch.orders.length === 0) {
-      throw new BadRequestException('El lote no tiene órdenes');
+  /**
+   * Resuelve el cálculo de un abono sobre el lote: valida que la porción en USD
+   * quepa en el saldo, fija la tasa y calcula la retención (prorrateada o
+   * manual) y el neto. `excludeSettlementId` deja fuera del saldo al abono que
+   * se está editando.
+   */
+  private async buildSettlementCalc(
+    batch: AccountsPayable,
+    dto: AccountsPayableSettlementDto,
+    excludeSettlementId?: string,
+  ): Promise<SettlementCalc> {
+    const grossUsd = this.grossUsdOf(batch);
+    if (grossUsd <= 0) throw new BadRequestException('El lote no tiene órdenes');
+    const covered = round2(
+      (batch.settlements ?? [])
+        .filter((s) => s.id !== excludeSettlementId)
+        .reduce((acc, s) => acc + (Number(s.coveredUsd) || 0), 0),
+    );
+    const coveredUsd = round2(dto.coveredUsd);
+    if (coveredUsd <= 0) {
+      throw new BadRequestException('Los USD a cubrir deben ser mayores a 0');
     }
-    let grossUsd = 0;
-    let grossBs = 0;
-    // Tasa de pago del lote (si la tiene); sino, la de facturación por orden.
-    let batchRate = this.batchRateBs(batch);
-    if (!batchRate && batch.exchangeRateId) {
-      batchRate = Number(
-        (await resolveUsdRate(this.ratesRepo, batch.exchangeRateId)).amountBs,
-      );
-    }
-    for (const apo of batch.orders) {
-      const g = Number(apo.grossUsd) || 0;
-      grossUsd += g;
-      const order = apo.internalOrder?.order;
-      const rateBs =
-        batchRate ??
-        (order?.billingExchangeRate
-          ? Number(order.billingExchangeRate.amountBs)
-          : Number(
-              (
-                await resolveUsdRate(
-                  this.ratesRepo,
-                  order?.billingExchangeRateId ?? null,
-                )
-              ).amountBs,
-            ));
-      if (!Number.isFinite(rateBs) || rateBs <= 0) {
-        throw new BadRequestException(
-          'Tasa de cambio inválida para convertir el lote a Bs',
-        );
-      }
-      grossBs += g * rateBs;
-    }
-    grossUsd = round2(grossUsd);
-    grossBs = round2(grossBs);
-    const personType = this.personTypeOf(batch);
-    const taxUnit = batch.taxUnit ?? (await this.taxUnits.getCurrentOrThrow());
-    const taxUnitAmountBs = Number(taxUnit.amountBs);
-    // Retención del lote: desactivada ⇒ 0; manual ⇒ monto fijo; sino automática.
-    const retention = this.retentionOf(batch, grossBs, taxUnitAmountBs);
-    // El monto manual no puede superar el bruto (neto negativo). Se valida acá
-    // para cubrir también quitar órdenes / cambiar la tasa con monto ya fijado.
-    if (retention.isCustom && retention.taxAmountBs > grossBs + TOLERANCE_BS) {
+    const remainingUsd = round2(grossUsd - covered);
+    if (coveredUsd - remainingUsd > TOLERANCE_USD) {
       throw new BadRequestException(
-        `La retención manual (${retention.taxAmountBs.toFixed(2)} Bs) supera el bruto del lote (${grossBs.toFixed(2)} Bs). Ajusta el monto de la retención primero.`,
+        `El pago cubre ${coveredUsd.toFixed(2)} USD pero al lote sólo le faltan ${remainingUsd.toFixed(2)} USD (bruto ${grossUsd.toFixed(2)} USD, ya cubiertos ${covered.toFixed(2)} USD).`,
       );
     }
+
+    const rate = await this.resolvePaymentRate(dto.exchangeRateId);
+    const rateBs = Number(rate.amountBs);
+    const grossBs = round2(coveredUsd * rateBs);
+    const personType = this.personTypeOf(batch);
+    const applies = this.appliesRetention(batch);
+
+    let taxUnit: TaxUnit | null = null;
+    let auto: SliceRetentionResult | null = null;
+    if (applies) {
+      taxUnit = await this.resolveTaxUnit(
+        dto.taxUnitId ?? batch.taxUnitId ?? undefined,
+      );
+      auto = calcSliceRetention({
+        sliceUsd: coveredUsd,
+        totalUsd: grossUsd,
+        rateBs,
+        personType,
+        taxUnitBs: Number(taxUnit.amountBs),
+      });
+    }
+    const custom =
+      applies &&
+      dto.customRetentionBs !== undefined &&
+      dto.customRetentionBs !== null
+        ? round2(dto.customRetentionBs)
+        : null;
+    if (custom !== null && custom - grossBs > TOLERANCE_BS) {
+      throw new BadRequestException(
+        `La retención del pago (${custom.toFixed(2)} Bs) supera su bruto (${grossBs.toFixed(2)} Bs).`,
+      );
+    }
+    const retentionBs = applies ? (custom ?? auto?.taxAmountBs ?? 0) : 0;
     return {
-      grossUsd,
+      coveredUsd,
+      exchangeRateId: rate.id,
+      rateBs,
       grossBs,
       personType,
-      taxUnitId: taxUnit.id,
-      taxUnitAmountBs,
-      taxRate: retention.taxRate,
-      subtrahendBs: retention.subtrahendBs,
-      retentionBs: round2(retention.taxAmountBs),
-      netBs: round2(grossBs - retention.taxAmountBs),
-      isCustomRetention: retention.isCustom,
+      taxUnitId: taxUnit?.id ?? null,
+      taxUnitAmountBs: taxUnit ? Number(taxUnit.amountBs) : 0,
+      taxRate: auto?.taxRate ?? 0,
+      subtrahendBs: auto?.subtrahendBs ?? 0,
+      retentionBs,
+      netBs: round2(grossBs - retentionBs),
+      isCustomRetention: custom !== null,
+    };
+  }
+
+  /** Columnas persistibles de un {@link SettlementCalc}. */
+  private calcToColumns(
+    calc: SettlementCalc,
+  ): Partial<AccountsPayableSettlement> {
+    return {
+      coveredUsd: calc.coveredUsd.toFixed(2),
+      exchangeRateId: calc.exchangeRateId,
+      rateBs: calc.rateBs.toFixed(2),
+      grossBs: calc.grossBs.toFixed(2),
+      personType: calc.personType,
+      taxUnitId: calc.taxUnitId,
+      taxUnitAmountBs: calc.taxUnitAmountBs.toFixed(2),
+      taxRate: calc.taxRate.toFixed(4),
+      subtrahendBs: calc.subtrahendBs.toFixed(2),
+      retentionBs: calc.retentionBs.toFixed(2),
+      isCustomRetention: calc.isCustomRetention,
+      netBs: calc.netBs.toFixed(2),
     };
   }
 
@@ -647,14 +765,11 @@ export class AccountsPayableService {
         );
       }
     }
-    const taxUnit = await this.resolveTaxUnit(dto.taxUnitId);
-    const paymentRate = await this.resolvePaymentRate(dto.exchangeRateId);
-    // Monto manual de retención: sólo tiene sentido si el lote aplica retención.
+    const [taxUnit, paymentRate] = await Promise.all([
+      this.resolveTaxUnit(dto.taxUnitId),
+      this.resolvePaymentRate(dto.exchangeRateId),
+    ]);
     const applyRetention = dto.applyRetention ?? true;
-    const customRetentionBs =
-      applyRetention && dto.customRetentionBs !== undefined
-        ? round2(dto.customRetentionBs)
-        : null;
 
     const id = await this.dataSource.transaction(async (mgr) => {
       const seq = await mgr.query<{ nextval: string }[]>(
@@ -662,8 +777,8 @@ export class AccountsPayableService {
       );
       const payableNumber = String(seq[0].nextval);
       const inserted = await mgr.query<{ id: string }[]>(
-        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "customRetentionBs", "exchangeRateId", "status")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'unpaid') RETURNING id`,
+        `INSERT INTO "accounts_payable" ("payableNumber", "recipientType", "doctorId", "careCenterId", "taxUnitId", "applyRetention", "exchangeRateId", "status")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'unpaid') RETURNING id`,
         [
           payableNumber,
           dto.recipientType,
@@ -671,7 +786,6 @@ export class AccountsPayableService {
           dto.recipientType === 'care_center' ? providerId : null,
           taxUnit.id,
           applyRetention,
-          customRetentionBs === null ? null : customRetentionBs.toFixed(2),
           paymentRate.id,
         ],
       );
@@ -682,10 +796,6 @@ export class AccountsPayableService {
            VALUES ($1, $2, $3)`,
           [batchId, r.internalOrderId, Number(r.grossUsd).toFixed(2)],
         );
-      }
-      // Con monto manual, validar que no supere el bruto (lanza ⇒ rollback).
-      if (customRetentionBs !== null) {
-        await this.recomputeBatchStatus(mgr, batchId);
       }
       return batchId;
     });
@@ -701,11 +811,8 @@ export class AccountsPayableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'No se pueden agregar órdenes a un lote pagado. Edita o quita un pago primero.',
-      );
-    }
+    // Agregar órdenes a un lote pagado sube su bruto y lo reabre como parcial:
+    // los abonos ya hechos (y sus retenciones) no se tocan.
     const providerId =
       batch.recipientType === 'doctor' ? batch.doctorId : batch.careCenterId;
     const rows = await this.validatePendingRows(internalOrderIds, user);
@@ -738,17 +845,21 @@ export class AccountsPayableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'No se pueden quitar órdenes de un lote pagado. Edita o quita un pago primero.',
-      );
-    }
     const remaining = (batch.orders ?? []).filter(
       (o) => !internalOrderIds.includes(o.internalOrderId),
     );
     if (remaining.length === 0) {
       throw new BadRequestException(
         'El lote quedaría vacío. Eliminá el lote en su lugar.',
+      );
+    }
+    const remainingUsd = round2(
+      remaining.reduce((s, o) => s + (Number(o.grossUsd) || 0), 0),
+    );
+    const coveredUsd = this.settlementFigures(batch.settlements ?? []).coveredUsd;
+    if (coveredUsd - remainingUsd > TOLERANCE_USD) {
+      throw new BadRequestException(
+        `El lote quedaría en ${remainingUsd.toFixed(2)} USD y ya tiene ${coveredUsd.toFixed(2)} USD pagados. Elimina un pago primero.`,
       );
     }
     await this.dataSource.transaction(async (mgr) => {
@@ -763,8 +874,9 @@ export class AccountsPayableService {
   }
 
   /**
-   * Cambia la UT del lote y recalcula neto/estado. Bloqueado si ya está pagado
-   * (editá o quitá un pago primero): el neto define el cuadre de los pagos.
+   * Cambia la UT del lote: la que se propone a los PRÓXIMOS abonos y con la que
+   * se proyecta la retención del saldo. Los abonos ya registrados conservan la
+   * UT con la que se practicó su retención.
    */
   async setTaxUnit(
     id: string,
@@ -774,23 +886,15 @@ export class AccountsPayableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'El lote ya está pagado. Para cambiar la Unidad Tributaria, edita o elimina un pago primero.',
-      );
-    }
     const taxUnit = await this.resolveTaxUnit(taxUnitId);
-    await this.dataSource.transaction(async (mgr) => {
-      await mgr.update(AccountsPayable, id, { taxUnitId: taxUnit.id });
-      await this.recomputeBatchStatus(mgr, id);
-    });
+    await this.repo.update(id, { taxUnitId: taxUnit.id });
     return this.findOneBatch(id, user);
   }
 
   /**
-   * Activa/desactiva la retención de ISLR del lote y recalcula neto/estado.
-   * Bloqueado si ya está pagado (el neto define el cuadre de los pagos y la
-   * obligación SENIAT ya nació): edita o quita un pago primero.
+   * Activa/desactiva la retención de ISLR del lote. Sólo mientras no tenga
+   * abonos: cada abono snapshotea su retención y su obligación SENIAT, así que
+   * cambiar el régimen a mitad de camino dejaría el lote mezclado.
    */
   async setRetention(
     id: string,
@@ -800,65 +904,22 @@ export class AccountsPayableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'El lote ya está pagado. Para cambiar la retención, edita o elimina un pago primero.',
-      );
-    }
     if (this.appliesRetention(batch) === applyRetention)
       return this.findOneBatch(id, user);
-    await this.dataSource.transaction(async (mgr) => {
-      // Al desactivar la retención se descarta el monto manual: al reactivarla
-      // vuelve el cálculo automático.
-      await mgr.update(AccountsPayable, id, {
-        applyRetention,
-        ...(applyRetention ? {} : { customRetentionBs: null }),
-      });
-      await this.recomputeBatchStatus(mgr, id);
-    });
+    if ((batch.settlements ?? []).length > 0) {
+      throw new BadRequestException(
+        'El lote ya tiene pagos registrados. Para cambiar la retención, elimina sus pagos primero.',
+      );
+    }
+    await this.repo.update(id, { applyRetention });
     return this.findOneBatch(id, user);
   }
 
   /**
-   * Fija (número) o quita (`null` ⇒ cálculo automático) el monto manual de la
-   * retención del lote y recalcula neto/estado. Requiere que el lote aplique
-   * retención. Bloqueado si ya está pagado (el neto define el cuadre de los
-   * pagos y la obligación SENIAT ya nació): edita o quita un pago primero.
-   */
-  async setCustomRetention(
-    id: string,
-    customRetentionBs: number | null,
-    user: AuthenticatedUser,
-  ): Promise<AccountsPayable> {
-    const batch = await this.loadBatch(this.dataSource.manager, id);
-    if (!batch) throw new NotFoundException('Lote no encontrado');
-    await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'El lote ya está pagado. Para cambiar la retención, edita o elimina un pago primero.',
-      );
-    }
-    if (customRetentionBs !== null && !this.appliesRetention(batch)) {
-      throw new BadRequestException(
-        'El lote no aplica retención. Activa la retención de ISLR antes de fijar un monto manual.',
-      );
-    }
-    const next = customRetentionBs === null ? null : round2(customRetentionBs);
-    if (this.customRetentionBs(batch) === next)
-      return this.findOneBatch(id, user);
-    await this.dataSource.transaction(async (mgr) => {
-      await mgr.update(AccountsPayable, id, {
-        customRetentionBs: next === null ? null : next.toFixed(2),
-      });
-      await this.recomputeBatchStatus(mgr, id);
-    });
-    return this.findOneBatch(id, user);
-  }
-
-  /**
-   * Cambia la tasa de pago USD/Bs del lote y recalcula bruto Bs, retención,
-   * neto y estado. Bloqueado si ya está pagado (el neto define el cuadre de
-   * los pagos y la obligación SENIAT ya nació): edita o quita un pago primero.
+   * Cambia la tasa de pago USD/Bs POR DEFECTO del lote: la que se propone al
+   * próximo abono y con la que se proyecta el saldo en Bs. Los abonos ya
+   * registrados conservan la suya — por eso puede cambiarse en cualquier
+   * momento sin alterar lo ya pagado.
    */
   async setExchangeRate(
     id: string,
@@ -868,17 +929,9 @@ export class AccountsPayableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'El lote ya está pagado. Para cambiar la tasa de pago, edita o elimina un pago primero.',
-      );
-    }
     const rate = await this.resolvePaymentRate(exchangeRateId);
     if (batch.exchangeRateId === rate.id) return this.findOneBatch(id, user);
-    await this.dataSource.transaction(async (mgr) => {
-      await mgr.update(AccountsPayable, id, { exchangeRateId: rate.id });
-      await this.recomputeBatchStatus(mgr, id);
-    });
+    await this.repo.update(id, { exchangeRateId: rate.id });
     return this.findOneBatch(id, user);
   }
 
@@ -957,56 +1010,43 @@ export class AccountsPayableService {
   }
 
   // ---------------------------------------------------------------------------
-  // Pagos.
+  // Abonos (la unidad de pago: USD cubiertos + tasa + retención + filas).
   // ---------------------------------------------------------------------------
-  async registerPayment(
+  async registerSettlement(
     id: string,
-    payments: AccountsPayablePaymentDto[],
+    dto: AccountsPayableSettlementDto,
     user: AuthenticatedUser,
   ): Promise<AccountsPayable> {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'paid') {
-      throw new BadRequestException(
-        'El lote ya está pagado. Para corregir, editá o eliminá un pago.',
-      );
-    }
 
-    const net = await this.computeNet(batch);
-    const usdRateId = this.batchUsdRateId(batch);
-    const priorPaidBs = round2(
-      (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
-    );
-    // Resolver primero: valida cada pago y fija su tasa efectiva; el cuadre se
-    // hace sobre los mismos montos que se van a persistir.
-    const payloads: Partial<AccountsPayablePayment>[] = [];
-    for (const p of payments) {
-      payloads.push(await this.resolvePaymentForSave(p, usdRateId));
-    }
-    const newPaymentsBs = round2(
-      payloads.reduce((s, pl) => s + Number(pl.amountInBs ?? 0), 0),
-    );
-    if (newPaymentsBs <= 0) {
-      throw new BadRequestException('El monto de los pagos debe ser mayor a 0');
-    }
-    const cumulativeBs = round2(priorPaidBs + newPaymentsBs);
-    if (cumulativeBs - net.netBs > TOLERANCE_BS) {
-      throw new BadRequestException(
-        `El pago excede el neto a entregar: acumulado Bs ${cumulativeBs.toFixed(2)} > neto Bs ${net.netBs.toFixed(2)} (ya pagado Bs ${priorPaidBs.toFixed(2)} + nuevos Bs ${newPaymentsBs.toFixed(2)}).`,
-      );
-    }
+    const calc = await this.buildSettlementCalc(batch, dto);
+    const payloads = await this.resolveSettlementPayments(dto.payments, calc);
 
     await this.dataSource.transaction(async (mgr) => {
+      const saved = await mgr.save(
+        mgr.create(AccountsPayableSettlement, {
+          payableId: id,
+          settlementDate: dto.settlementDate.slice(0, 10),
+          ...this.calcToColumns(calc),
+        }),
+      );
       for (const payload of payloads) {
-        const saved = await mgr.save(
-          mgr.create(AccountsPayablePayment, payload),
+        await mgr.save(
+          mgr.create(AccountsPayablePayment, {
+            ...payload,
+            settlementId: saved.id,
+          }),
         );
-        await mgr.query(
-          `INSERT INTO "accounts_payable_payment_links" ("payableId", "paymentId")
-           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [id, saved.id],
-        );
+      }
+      await this.upsertSettlementRetention(mgr, batch, saved.id, calc);
+      // La tasa del último abono pasa a ser la del lote: el saldo pendiente se
+      // proyecta a la tasa a la que se está pagando de verdad.
+      if (batch.exchangeRateId !== calc.exchangeRateId) {
+        await mgr.update(AccountsPayable, id, {
+          exchangeRateId: calc.exchangeRateId,
+        });
       }
       await this.recomputeBatchStatus(mgr, id);
     });
@@ -1014,49 +1054,111 @@ export class AccountsPayableService {
     return this.findOneBatch(id, user);
   }
 
-  async editPayment(
+  /**
+   * Reemplaza por completo un abono (porción cubierta, tasa, retención y filas
+   * de pago). Bloqueado si su retención ya fue enterada al SENIAT.
+   */
+  async editSettlement(
     id: string,
-    paymentId: string,
-    dto: AccountsPayablePaymentDto,
+    settlementId: string,
+    dto: AccountsPayableSettlementDto,
     user: AuthenticatedUser,
   ): Promise<AccountsPayable> {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
+    const current = (batch.settlements ?? []).find((x) => x.id === settlementId);
+    if (!current) throw new NotFoundException('Pago no encontrado en este lote');
+
+    const calc = await this.buildSettlementCalc(batch, dto, settlementId);
+    const payloads = await this.resolveSettlementPayments(dto.payments, calc);
+
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.update(AccountsPayableSettlement, settlementId, {
+        settlementDate: dto.settlementDate.slice(0, 10),
+        ...this.calcToColumns(calc),
+      });
+      await mgr.query(
+        `DELETE FROM "accounts_payable_payments" WHERE "settlementId" = $1`,
+        [settlementId],
+      );
+      for (const payload of payloads) {
+        await mgr.save(
+          mgr.create(AccountsPayablePayment, { ...payload, settlementId }),
+        );
+      }
+      await this.upsertSettlementRetention(mgr, batch, settlementId, calc);
+      await this.recomputeBatchStatus(mgr, id);
+    });
+
+    return this.findOneBatch(id, user);
+  }
+
+  /**
+   * Elimina un abono: sus filas de pago y su obligación SENIAT caen por
+   * CASCADE, y el lote vuelve a deber esos USD. Bloqueado si la retención ya
+   * fue enterada al SENIAT.
+   */
+  async deleteSettlement(
+    id: string,
+    settlementId: string,
+    user: AuthenticatedUser,
+  ): Promise<AccountsPayable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+    if (!(batch.settlements ?? []).some((x) => x.id === settlementId)) {
       throw new NotFoundException('Pago no encontrado en este lote');
     }
-    const usdRateId = this.batchUsdRateId(batch);
     await this.dataSource.transaction(async (mgr) => {
-      const payload = await this.resolvePaymentForSave(dto, usdRateId);
-      await mgr.update(AccountsPayablePayment, paymentId, payload);
+      await this.assertRetentionNotEntered(mgr, settlementId);
+      await mgr.query(
+        `DELETE FROM "accounts_payable_settlements" WHERE id = $1`,
+        [settlementId],
+      );
       await this.recomputeBatchStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
   }
 
-  async deletePayment(
-    id: string,
-    paymentId: string,
-    user: AuthenticatedUser,
-  ): Promise<AccountsPayable> {
-    const batch = await this.loadBatch(this.dataSource.manager, id);
-    if (!batch) throw new NotFoundException('Lote no encontrado');
-    await this.assertVisibility(batch, user);
-    if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
-      throw new NotFoundException('Pago no encontrado en este lote');
-    }
-    await this.dataSource.transaction(async (mgr) => {
-      await mgr.query(
-        `DELETE FROM "accounts_payable_payment_links" WHERE "payableId" = $1 AND "paymentId" = $2`,
-        [id, paymentId],
+  /**
+   * Resuelve las filas de pago del abono y valida que sumen exactamente su
+   * neto. Las filas en Bs se registran a la tasa del abono (es la tasa a la
+   * que se pagó esa porción); las filas en EUR llevan su propia tasa EUR/Bs.
+   */
+  private async resolveSettlementPayments(
+    payments: AccountsPayablePaymentDto[],
+    calc: SettlementCalc,
+  ): Promise<Partial<AccountsPayablePayment>[]> {
+    const payloads: Partial<AccountsPayablePayment>[] = [];
+    for (const p of payments) {
+      payloads.push(
+        await this.resolvePaymentForSave(
+          p.amountCurrency === 'BS'
+            ? { ...p, exchangeRateId: calc.exchangeRateId }
+            : p,
+          calc.exchangeRateId,
+        ),
       );
-      await mgr.query(`DELETE FROM "accounts_payable_payments" WHERE id = $1`, [
-        paymentId,
-      ]);
-      await this.recomputeBatchStatus(mgr, id);
-    });
-    return this.findOneBatch(id, user);
+    }
+    const totalBs = round2(
+      payloads.reduce((acc, pl) => acc + Number(pl.amountInBs ?? 0), 0),
+    );
+    // Un monto en USD/EUR se captura con 2 decimales en SU moneda: al pasarlo a
+    // Bs el redondeo puede desviarse hasta medio centavo × tasa. Se tolera eso
+    // (por fila), además del centavo de Bs.
+    const tolerance = payloads.reduce((acc, pl) => {
+      if (pl.amountCurrency === 'BS') return acc;
+      const value = Number(pl.amountValue) || 0;
+      const rate = value > 0 ? Number(pl.amountInBs) / value : 0;
+      return acc + 0.005 * rate;
+    }, TOLERANCE_BS);
+    if (Math.abs(totalBs - calc.netBs) > tolerance) {
+      throw new BadRequestException(
+        `El monto del pago equivale a ${totalBs.toFixed(2)} Bs y el neto a entregar es ${calc.netBs.toFixed(2)} Bs (bruto ${calc.grossBs.toFixed(2)} − retención ${calc.retentionBs.toFixed(2)}).`,
+      );
+    }
+    return payloads;
   }
 
   async deleteBatch(id: string, user: AuthenticatedUser): Promise<void> {
@@ -1064,7 +1166,7 @@ export class AccountsPayableService {
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
     await this.dataSource.transaction(async (mgr) => {
-      // Bloquear si la retención generada ya fue pagada al SENIAT.
+      // Bloquear si alguna retención generada ya fue pagada al SENIAT.
       const blocked = await mgr.query<{ c: string }[]>(
         `SELECT count(*)::int AS c
          FROM "taxes_payable" tp
@@ -1077,15 +1179,7 @@ export class AccountsPayableService {
           'La retención de este lote ya fue pagada al SENIAT; no se puede anular.',
         );
       }
-      // Borrar pagos del lote (los links caen por CASCADE al borrar el lote).
-      const payIds = (batch.payments ?? []).map((p) => p.id);
-      if (payIds.length) {
-        await mgr.query(
-          `DELETE FROM "accounts_payable_payments" WHERE id = ANY($1)`,
-          [payIds],
-        );
-      }
-      // Borrar el lote: CASCADE limpia pivot de órdenes, links y la retención (sourcePayableId).
+      // CASCADE limpia pivot de órdenes, abonos, filas de pago y retenciones.
       await mgr.query(`DELETE FROM "accounts_payable" WHERE id = $1`, [id]);
     });
   }
@@ -1093,71 +1187,102 @@ export class AccountsPayableService {
   // ---------------------------------------------------------------------------
   // Recompute + retención.
   // ---------------------------------------------------------------------------
+  /**
+   * Estado del lote según los USD cubiertos por sus abonos (no los Bs): pagar
+   * a otra tasa no mueve el saldo de lo ya abonado.
+   */
   private async recomputeBatchStatus(
     mgr: EntityManager,
     id: string,
   ): Promise<void> {
-    const batch = await this.loadBatch(mgr, id);
-    if (!batch) return;
-    const net = await this.computeNet(batch);
-    const cumulativeBs = round2(
-      (batch.payments ?? []).reduce((s, p) => s + Number(p.amountInBs || 0), 0),
+    await mgr.query(
+      `WITH g AS (
+         SELECT COALESCE(SUM("grossUsd"), 0) AS v
+           FROM "accounts_payable_orders" WHERE "payableId" = $1
+       ), c AS (
+         SELECT COALESCE(SUM("coveredUsd"), 0) AS v
+           FROM "accounts_payable_settlements"
+          WHERE "payableId" = $1 AND "deletedAt" IS NULL
+       )
+       UPDATE "accounts_payable" ap
+          SET status = CASE
+                WHEN c.v > 0 AND c.v + $2 >= g.v THEN 'paid'
+                WHEN c.v > 0 THEN 'partially_paid'
+                ELSE 'unpaid' END,
+              "paidAt" = CASE
+                WHEN c.v > 0 AND c.v + $2 >= g.v THEN COALESCE(ap."paidAt", now())
+                ELSE NULL END,
+              "updatedAt" = now()
+         FROM g, c
+        WHERE ap.id = $1`,
+      [id, TOLERANCE_USD],
     );
-    let status: 'unpaid' | 'partially_paid' | 'paid';
-    if (cumulativeBs + TOLERANCE_BS >= net.netBs && cumulativeBs > 0)
-      status = 'paid';
-    else if (cumulativeBs > 0) status = 'partially_paid';
-    else status = 'unpaid';
+  }
 
-    await mgr.update(AccountsPayable, id, {
-      status,
-      paidAt: status === 'paid' ? (batch.paidAt ?? new Date()) : null,
-    });
-
-    // La obligación SENIAT nace sólo si el lote quedó pagado Y descuenta retención.
-    if (status === 'paid' && this.appliesRetention(batch)) {
-      await this.upsertRetention(mgr, batch, net);
-    } else {
-      await this.removeRetentionIfReversible(mgr, id);
+  /** Lanza si la retención del abono ya fue enterada al SENIAT. */
+  private async assertRetentionNotEntered(
+    mgr: EntityManager,
+    settlementId: string,
+  ): Promise<void> {
+    const rows = await mgr.query<{ c: string }[]>(
+      `SELECT count(*)::int AS c
+         FROM "taxes_payable" tp
+         JOIN "tax_payment_batches" tpb ON tpb.id = tp."taxPaymentBatchId"
+        WHERE tp."sourceSettlementId" = $1 AND tpb.status = 'paid'`,
+      [settlementId],
+    );
+    if (Number(rows[0]?.c ?? 0) > 0) {
+      throw new BadRequestException(
+        'La retención de este pago ya fue pagada al SENIAT; no se puede modificar ni eliminar.',
+      );
     }
   }
 
-  /** Crea (o actualiza) la obligación de retención al quedar el lote pagado. */
-  private async upsertRetention(
+  /**
+   * Crea, actualiza o elimina la obligación SENIAT del abono. Nace con el
+   * abono (no al terminar de pagar el lote): un lote pagado en dos meses
+   * declara en sus dos períodos fiscales.
+   */
+  private async upsertSettlementRetention(
     mgr: EntityManager,
     batch: AccountsPayable,
-    net: BatchNet,
+    settlementId: string,
+    calc: SettlementCalc,
   ): Promise<void> {
-    const existing = await mgr.query<
-      { id: string; taxPaymentBatchId: string | null }[]
-    >(
-      `SELECT id, "taxPaymentBatchId" FROM "taxes_payable" WHERE "sourcePayableId" = $1`,
-      [batch.id],
+    await this.assertRetentionNotEntered(mgr, settlementId);
+    const existing = await mgr.query<{ id: string }[]>(
+      `SELECT id FROM "taxes_payable" WHERE "sourceSettlementId" = $1`,
+      [settlementId],
     );
+    const owed = this.appliesRetention(batch) && calc.retentionBs > 0;
     if (existing.length > 0) {
-      // Ya existe; sólo refrescar montos si aún no está en un lote SENIAT.
-      if (!existing[0].taxPaymentBatchId) {
-        await mgr.query(
-          `UPDATE "taxes_payable"
-           SET "personType" = $2, "taxUnitId" = $3, "taxUnitAmountBs" = $4,
-               "grossAmountBs" = $5, "taxRate" = $6, "subtrahendBs" = $7, "taxAmountBs" = $8,
-               "isCustomAmount" = $9
-           WHERE id = $1`,
-          [
-            existing[0].id,
-            net.personType,
-            net.taxUnitId,
-            net.taxUnitAmountBs.toFixed(2),
-            net.grossBs.toFixed(2),
-            net.taxRate.toFixed(4),
-            net.subtrahendBs.toFixed(2),
-            net.retentionBs.toFixed(2),
-            net.isCustomRetention,
-          ],
-        );
+      if (!owed) {
+        await mgr.query(`DELETE FROM "taxes_payable" WHERE id = $1`, [
+          existing[0].id,
+        ]);
+        return;
       }
+      await mgr.query(
+        `UPDATE "taxes_payable"
+            SET "personType" = $2, "taxUnitId" = $3, "taxUnitAmountBs" = $4,
+                "grossAmountBs" = $5, "taxRate" = $6, "subtrahendBs" = $7,
+                "taxAmountBs" = $8, "isCustomAmount" = $9
+          WHERE id = $1`,
+        [
+          existing[0].id,
+          calc.personType,
+          calc.taxUnitId,
+          calc.taxUnitAmountBs.toFixed(2),
+          calc.grossBs.toFixed(2),
+          calc.taxRate.toFixed(4),
+          calc.subtrahendBs.toFixed(2),
+          calc.retentionBs.toFixed(2),
+          calc.isCustomRetention,
+        ],
+      );
       return;
     }
+    if (!owed) return;
     const seq = await mgr.query<{ nextval: string }[]>(
       `SELECT nextval('taxes_payable_seq') AS nextval`,
     );
@@ -1166,59 +1291,31 @@ export class AccountsPayableService {
          "taxPayableNumber", "recipientType", "doctorId", "careCenterId",
          "personType", "taxUnitId", "taxUnitAmountBs",
          "grossAmountBs", "taxRate", "subtrahendBs", "taxAmountBs", "isCustomAmount",
-         "status", "sourcePayableId"
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'unpaid',$13)`,
+         "status", "sourcePayableId", "sourceSettlementId"
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'unpaid',$13,$14)`,
       [
         String(seq[0].nextval),
         batch.recipientType,
         batch.doctorId ?? null,
         batch.careCenterId ?? null,
-        net.personType,
-        net.taxUnitId,
-        net.taxUnitAmountBs.toFixed(2),
-        net.grossBs.toFixed(2),
-        net.taxRate.toFixed(4),
-        net.subtrahendBs.toFixed(2),
-        net.retentionBs.toFixed(2),
-        net.isCustomRetention,
+        calc.personType,
+        calc.taxUnitId,
+        calc.taxUnitAmountBs.toFixed(2),
+        calc.grossBs.toFixed(2),
+        calc.taxRate.toFixed(4),
+        calc.subtrahendBs.toFixed(2),
+        calc.retentionBs.toFixed(2),
+        calc.isCustomRetention,
         batch.id,
+        settlementId,
       ],
     );
-  }
-
-  /** Al reabrirse el lote (parcial), elimina la retención salvo que ya esté pagada al SENIAT. */
-  private async removeRetentionIfReversible(
-    mgr: EntityManager,
-    batchId: string,
-  ): Promise<void> {
-    const existing = await mgr.query<
-      {
-        id: string;
-        taxPaymentBatchId: string | null;
-        batchStatus: string | null;
-      }[]
-    >(
-      `SELECT tp.id, tp."taxPaymentBatchId", tpb.status AS "batchStatus"
-       FROM "taxes_payable" tp
-       LEFT JOIN "tax_payment_batches" tpb ON tpb.id = tp."taxPaymentBatchId"
-       WHERE tp."sourcePayableId" = $1`,
-      [batchId],
-    );
-    if (existing.length === 0) return;
-    if (existing[0].batchStatus === 'paid') {
-      throw new BadRequestException(
-        'La retención de este lote ya fue pagada al SENIAT; no se puede revertir el pago.',
-      );
-    }
-    await mgr.query(`DELETE FROM "taxes_payable" WHERE id = $1`, [
-      existing[0].id,
-    ]);
   }
 
   // ---------------------------------------------------------------------------
   // Conversión de pagos. La tasa USD/Bs del propio pago (si viene) manda sobre
   // la tasa de pago del lote: permite registrar pagos hechos otro día a la
-  // tasa de ese día. Sin tasa propia, cae a la del lote (`batchUsdRateId`).
+  // tasa de ese día. Sin tasa propia, cae a la tasa del abono.
   // ---------------------------------------------------------------------------
   private async resolvePaymentForSave(
     p: AccountsPayablePaymentDto,

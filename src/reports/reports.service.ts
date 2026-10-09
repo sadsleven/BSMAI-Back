@@ -8,6 +8,7 @@ import { TaxUnitsService } from '../tax-units/tax-units.service';
 import { resolveUsdRate } from '../shared/utils/payment-conversion';
 import {
   calcRetention,
+  calcSliceRetention,
   SeniatPersonType,
 } from '../shared/utils/seniat-retention';
 import {
@@ -195,7 +196,12 @@ export class ReportsService {
         payableNumber: string | null;
         payableStatus: string | null;
         payableApplyRetention: boolean | null;
-        payableCustomRetentionBs: string | null;
+        /** Σ retención ya practicada por los abonos del lote. */
+        payableSettledRetentionBs: string | null;
+        /** Σ bruto en Bs de los abonos (a la tasa de cada uno). */
+        payableSettledGrossBs: string | null;
+        /** Σ USD del bruto ya cubiertos por abonos. */
+        payableCoveredUsd: string | null;
       }>
     >(
       `SELECT iio.id AS "internalOrderId", iio."orderId", o."orderNumber",
@@ -221,7 +227,9 @@ export class ReportsService {
               ptu."amountBs"::text AS "payableTaxUnitBs",
               ap.id AS "payableId", ap."payableNumber", ap.status AS "payableStatus",
               ap."applyRetention" AS "payableApplyRetention",
-              ap."customRetentionBs"::text AS "payableCustomRetentionBs"
+              aps."retentionBs"::text AS "payableSettledRetentionBs",
+              aps."grossBs"::text AS "payableSettledGrossBs",
+              aps."coveredUsd"::text AS "payableCoveredUsd"
        FROM "order_internal_orders" iio
        JOIN "orders" o ON o.id = iio."orderId"
        LEFT JOIN "branches" b ON b.id = o."branchId"
@@ -234,6 +242,13 @@ export class ReportsService {
        LEFT JOIN "accounts_payable" ap ON ap.id = apo."payableId"
        LEFT JOIN "exchange_rates" pfx ON pfx.id = ap."exchangeRateId"
        LEFT JOIN "tax_units" ptu ON ptu.id = ap."taxUnitId"
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(s."retentionBs"), 0) AS "retentionBs",
+                COALESCE(SUM(s."grossBs"), 0) AS "grossBs",
+                COALESCE(SUM(s."coveredUsd"), 0) AS "coveredUsd"
+           FROM "accounts_payable_settlements" s
+          WHERE s."payableId" = ap.id AND s."deletedAt" IS NULL
+       ) aps ON true
        WHERE ${where.join(' AND ')}
        ORDER BY iio."internalNumber"::int DESC`,
       params,
@@ -282,12 +297,16 @@ export class ReportsService {
     const loteTaxUnitBs = new Map<string, number>();
     // Lotes que NO descuentan retención (`accounts_payable.applyRetention=false`).
     const loteNoRetention = new Set<string>();
-    // Lotes con monto MANUAL de retención (`accounts_payable.customRetentionBs`).
-    const loteCustomRetentionBs = new Map<string, number>();
+    // Lo ya abonado de cada lote: retención practicada, bruto a la tasa de cada
+    // abono y USD cubiertos. El resto del lote se proyecta.
+    const loteSettledRetentionBs = new Map<string, number>();
+    const loteSettledGrossBs = new Map<string, number>();
+    const loteCoveredUsd = new Map<string, number>();
     for (const r of obligations) {
       if (!r.payableId) continue;
-      if (r.payableCustomRetentionBs != null)
-        loteCustomRetentionBs.set(r.payableId, num(r.payableCustomRetentionBs));
+      loteSettledRetentionBs.set(r.payableId, num(r.payableSettledRetentionBs));
+      loteSettledGrossBs.set(r.payableId, num(r.payableSettledGrossBs));
+      loteCoveredUsd.set(r.payableId, num(r.payableCoveredUsd));
       const rateBs = effectiveRateBs(r);
       const grossBs = num(r.grossUsd) * rateBs;
       const utBs = num(r.payableTaxUnitBs);
@@ -306,19 +325,37 @@ export class ReportsService {
       );
       if (r.payableApplyRetention === false) loteNoRetention.add(r.payableId);
     }
-    // Neto Bs por lote = bruto − retención REAL (calculada sobre el bruto agregado).
-    // Lote sin retención ⇒ neto = bruto. Lote con monto manual ⇒ ese monto.
+    // Retención y neto REALES por lote: lo ya retenido en sus abonos (a la tasa
+    // de cada uno) + la proyección prorrateada del saldo aún no abonado. Así el
+    // neto cuadra con los pagos registrados aunque el lote se haya pagado en
+    // partes a tasas distintas.
+    const loteRetentionBs = new Map<string, number>();
     const loteNetBs = new Map<string, number>();
     for (const [pid, grossBs] of loteGrossBs) {
-      const retentionBs = loteNoRetention.has(pid)
-        ? 0
-        : (loteCustomRetentionBs.get(pid) ??
-          calcRetention({
-            grossBs: round2(grossBs),
-            personType: lotePersonType.get(pid) ?? 'natural',
-            taxUnitBs: loteTaxUnitBs.get(pid) ?? taxUnitBs,
-          }).taxAmountBs);
-      loteNetBs.set(pid, round2(round2(grossBs) - retentionBs));
+      const grossUsd = loteGrossUsd.get(pid) ?? 0;
+      const pendingUsd = Math.max(
+        0,
+        round2(grossUsd - (loteCoveredUsd.get(pid) ?? 0)),
+      );
+      const rateBs = grossUsd > 0 ? grossBs / grossUsd : 0;
+      const projectedRetention =
+        loteNoRetention.has(pid) || pendingUsd <= 0
+          ? 0
+          : calcSliceRetention({
+              sliceUsd: pendingUsd,
+              totalUsd: grossUsd,
+              rateBs,
+              personType: lotePersonType.get(pid) ?? 'natural',
+              taxUnitBs: loteTaxUnitBs.get(pid) ?? taxUnitBs,
+            }).taxAmountBs;
+      const retentionBs = round2(
+        (loteSettledRetentionBs.get(pid) ?? 0) + projectedRetention,
+      );
+      const totalBs = round2(
+        (loteSettledGrossBs.get(pid) ?? 0) + round2(pendingUsd * rateBs),
+      );
+      loteRetentionBs.set(pid, retentionBs);
+      loteNetBs.set(pid, round2(totalBs - retentionBs));
     }
 
     // ---- Filas por obligación (estimado de retención por fila) ----
@@ -326,20 +363,21 @@ export class ReportsService {
       const rateBs = effectiveRateBs(r);
       const grossBs = round2(num(r.grossUsd) * rateBs);
       const personType = this.personTypeFor(r.providerType, r.doctorIsLegal);
-      // Estimado: retención sobre el bruto de esta sola obligación. En un lote
-      // sin retención es 0 (sin lote se estima con retención: es el default).
-      // En un lote con monto manual se prorratea ese monto por el bruto de la fila.
+      // En un lote, la retención de la fila es la parte que le toca de la
+      // retención real del lote (prorrateada por su bruto): sumarlas da la
+      // retención del lote, no una por obligación. Sin lote se estima con el
+      // cálculo completo (es el default al armarlo).
       const rowTaxUnitBs =
         (r.payableId ? loteTaxUnitBs.get(r.payableId) : undefined) ?? taxUnitBs;
-      const loteCustom = r.payableId
-        ? loteCustomRetentionBs.get(r.payableId)
+      const loteRetention = r.payableId
+        ? loteRetentionBs.get(r.payableId)
         : undefined;
       const loteGross = r.payableId ? (loteGrossBs.get(r.payableId) ?? 0) : 0;
       const retentionBs =
         r.payableApplyRetention === false
           ? 0
-          : loteCustom !== undefined
-            ? round2(loteGross > 0 ? (loteCustom * grossBs) / loteGross : 0)
+          : loteRetention !== undefined
+            ? round2(loteGross > 0 ? (loteRetention * grossBs) / loteGross : 0)
             : round2(
                 calcRetention({ grossBs, personType, taxUnitBs: rowTaxUnitBs })
                   .taxAmountBs,
@@ -507,11 +545,11 @@ export class ReportsService {
     const rows = await this.dataSource.query<
       Array<{ payableId: string; paid: string }>
     >(
-      `SELECT l."payableId", COALESCE(SUM(p."amountInBs"), 0)::text AS paid
-       FROM "accounts_payable_payment_links" l
-       JOIN "accounts_payable_payments" p ON p.id = l."paymentId"
-       WHERE l."payableId" = ANY($1) AND p."deletedAt" IS NULL
-       GROUP BY l."payableId"`,
+      `SELECT s."payableId", COALESCE(SUM(p."amountInBs"), 0)::text AS paid
+       FROM "accounts_payable_settlements" s
+       JOIN "accounts_payable_payments" p ON p."settlementId" = s.id
+       WHERE s."payableId" = ANY($1) AND s."deletedAt" IS NULL AND p."deletedAt" IS NULL
+       GROUP BY s."payableId"`,
       [payableIds],
     );
     for (const r of rows) out.set(r.payableId, num(r.paid));
@@ -527,13 +565,13 @@ export class ReportsService {
     const rows = await this.dataSource.query<
       Array<{ payableId: string; date: string | null; ref: string | null }>
     >(
-      `SELECT l."payableId",
+      `SELECT s."payableId",
               MAX(p."paymentDate")::text AS date,
               string_agg(DISTINCT NULLIF(p."referenceNumber", ''), ', ') AS ref
-       FROM "accounts_payable_payment_links" l
-       JOIN "accounts_payable_payments" p ON p.id = l."paymentId"
-       WHERE l."payableId" = ANY($1) AND p."deletedAt" IS NULL
-       GROUP BY l."payableId"`,
+       FROM "accounts_payable_settlements" s
+       JOIN "accounts_payable_payments" p ON p."settlementId" = s.id
+       WHERE s."payableId" = ANY($1) AND s."deletedAt" IS NULL AND p."deletedAt" IS NULL
+       GROUP BY s."payableId"`,
       [payableIds],
     );
     for (const r of rows) out.set(r.payableId, { date: r.date, ref: r.ref });
@@ -1572,10 +1610,12 @@ export class ReportsService {
        LEFT JOIN "doctors" d ON d.id = tp."doctorId"
        LEFT JOIN "care_centers" cc ON cc.id = tp."careCenterId"
        LEFT JOIN LATERAL (
-         SELECT MAX(app."paymentDate") AS abono
-         FROM "accounts_payable_payment_links" apl
-         JOIN "accounts_payable_payments" app ON app.id = apl."paymentId"
-         WHERE apl."payableId" = tp."sourcePayableId" AND app."deletedAt" IS NULL
+         SELECT COALESCE(
+                  (SELECT s."settlementDate" FROM "accounts_payable_settlements" s
+                    WHERE s.id = tp."sourceSettlementId"),
+                  (SELECT MAX(s2."settlementDate") FROM "accounts_payable_settlements" s2
+                    WHERE s2."payableId" = tp."sourcePayableId" AND s2."deletedAt" IS NULL)
+                ) AS abono
        ) ab ON true
        LEFT JOIN LATERAL (
          SELECT MAX(tpp."paymentDate") AS enterado,
@@ -1709,8 +1749,8 @@ export class ReportsService {
               ap."payableNumber", ap."recipientType" AS "providerType",
               COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName"
        FROM "accounts_payable_payments" p
-       JOIN "accounts_payable_payment_links" l ON l."paymentId" = p.id
-       JOIN "accounts_payable" ap ON ap.id = l."payableId"
+       JOIN "accounts_payable_settlements" s ON s.id = p."settlementId"
+       JOIN "accounts_payable" ap ON ap.id = s."payableId"
        LEFT JOIN "doctors" d ON d.id = ap."doctorId"
        LEFT JOIN "care_centers" cc ON cc.id = ap."careCenterId"
        WHERE ${where.join(' AND ')}

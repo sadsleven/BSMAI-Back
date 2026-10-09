@@ -12,6 +12,7 @@ import {
 import { Doctor } from '../../doctors/entities/doctor.entity';
 import { CareCenter } from '../../care-centers/entities/care-center.entity';
 import { AccountsPayable } from '../../accounts-payable/entities/accounts-payable.entity';
+import { AccountsPayableSettlement } from '../../accounts-payable/entities/accounts-payable-settlement.entity';
 import { TaxUnit } from '../../tax-units/entities/tax-unit.entity';
 import { TaxPaymentBatch } from './tax-payment-batch.entity';
 
@@ -106,9 +107,10 @@ export class TaxPayable {
   paidAt?: Date | null;
 
   /**
-   * Lote de Cuentas por pagar que originó esta retención (1:1). Se generó al
-   * quedar el lote AP totalmente pagado. CASCADE: anular el lote AP (sin haber
-   * pagado la retención al SENIAT) elimina la obligación.
+   * Lote de Cuentas por pagar que originó esta retención. CASCADE: anular el
+   * lote AP (sin haber pagado la retención al SENIAT) elimina la obligación.
+   * Un lote pagado en varios abonos origina VARIAS obligaciones — la unidad es
+   * el abono (`sourceSettlementId`), no el lote.
    */
   @Column({ type: 'uuid', nullable: true })
   sourcePayableId?: string | null;
@@ -116,6 +118,21 @@ export class TaxPayable {
   @ManyToOne(() => AccountsPayable, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'sourcePayableId' })
   sourcePayable?: AccountsPayable | null;
+
+  /**
+   * Abono de Cuentas por pagar que practicó esta retención (1:1). Define su
+   * fecha —y por tanto su período fiscal— y su base imponible a la tasa de ese
+   * pago. NULL sólo en obligaciones previas a los abonos.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  sourceSettlementId?: string | null;
+
+  @ManyToOne(() => AccountsPayableSettlement, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'sourceSettlementId' })
+  sourceSettlement?: AccountsPayableSettlement | null;
 
   /** Lote SENIAT al que pertenece esta obligación (null = pendiente, no agrupada). */
   @Column({ type: 'uuid', nullable: true })
@@ -142,6 +159,12 @@ export class TaxPayable {
    * retención. Lo popula el servicio al listar/ver para los comprobantes/UI.
    */
   internalNumbers?: string[];
+
+  /**
+   * Transient (NO columna). Fecha del abono que practicó la retención: con ella
+   * el usuario agrupa las obligaciones del mismo período en un lote SENIAT.
+   */
+  settlementDate?: string | null;
 
   /**
    * Transients del ajuste de UT del lote SENIAT (NO columnas). Retención
