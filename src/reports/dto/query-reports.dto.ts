@@ -69,3 +69,20 @@ export class QueryArcReportDto extends QueryReportsDto {
   @IsString()
   year?: string;
 }
+
+/**
+ * Filtros de los reportes basados en FACTURAS (`order_invoices`): "Facturas" y
+ * "Relación de ingresos". A diferencia del resto, `from`/`to` filtran sobre
+ * `order_invoices.invoiceDate` (la fecha de emisión), no sobre `orders.orderDate`.
+ */
+export class QueryInvoicesReportDto extends QueryReportsDto {
+  /** Estado de la factura: vigente o anulada. Sin valor = ambas. */
+  @IsOptional()
+  @IsIn(['active', 'cancelled'])
+  status?: 'active' | 'cancelled';
+
+  /** Tipo de cliente de la factura (deudor del documento). */
+  @IsOptional()
+  @IsIn(['insurance', 'holder'])
+  clientType?: 'insurance' | 'holder';
+}

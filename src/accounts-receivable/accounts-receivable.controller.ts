@@ -19,6 +19,7 @@ import {
   QueryAccountsReceivableDto,
   QueryPendingReceivableDto,
   RegisterCollectionDto,
+  SetReceivableOrderRateDto,
 } from './dto/register-collection.dto';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -83,6 +84,22 @@ export class AccountsReceivableController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.removeOrders(id, dto.orderIds, user);
+  }
+
+  /**
+   * Cambia la tasa USD/Bs de UNA orden del lote (seguro no indexado: cada
+   * orden tiene su tasa amarrada). Recalcula el objetivo en Bs de esa fila.
+   * Va después de `orders/add` y `orders/remove` para no capturar esas rutas.
+   */
+  @RequirePermissions(PERMISSIONS.ACCOUNTS_RECEIVABLE.UPDATE)
+  @Patch(':id/orders/:orderId/rate')
+  setOrderRate(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('orderId', new ParseUUIDPipe()) orderId: string,
+    @Body() dto: SetReceivableOrderRateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setOrderRate(id, orderId, dto.exchangeRateId, user);
   }
 
   /**

@@ -119,6 +119,16 @@ export class MutateAccountsReceivableOrdersDto {
   orderIds: string[];
 }
 
+/**
+ * Tasa USD/Bs con la que UNA orden del lote se cobra. Sólo en lotes de seguro
+ * "No indexado" (tasa fija), donde cada orden trae su propia tasa amarrada:
+ * recalcula el objetivo en Bs de esa fila (`targetUsd × tasa`).
+ */
+export class SetReceivableOrderRateDto {
+  @IsUUID()
+  exchangeRateId: string;
+}
+
 /** Registrar uno o más cobros sobre un lote (id por path). */
 export class RegisterCollectionDto {
   @IsArray()

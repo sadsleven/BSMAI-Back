@@ -22,6 +22,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import {
   computeAmountInBs,
   computeAmountInUsd,
+  type UsdConversionContext,
 } from '../shared/utils/payment-conversion';
 import { Order } from '../orders/entities/order.entity';
 import { PaymentAccountsService } from '../payment-accounts/payment-accounts.service';
@@ -30,6 +31,7 @@ import {
   targetBsForOrder,
   targetBsForPortion,
   targetUsdForOrder,
+  weightedFixedRateBs,
 } from './ar-targets';
 import type { AroPortion } from './entities/accounts-receivable-order.entity';
 
@@ -39,11 +41,37 @@ export {
   casheaFinancingForOrder,
   targetUsdForOrder,
   targetBsForOrder,
+  weightedFixedRateBs,
 } from './ar-targets';
 
 const TOLERANCE_USD = 0.01;
 const TOLERANCE_BS = 0.01;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/**
+ * Referencia USD/Bs para convertir los cobros de un lote. En modo USD es una
+ * tasa concreta del catálogo (`usdRateId`); en modo tasa fija (seguro no
+ * indexado) NO hay una sola tasa — cada orden trae la suya — y la referencia
+ * es la PONDERADA del lote (`usdRateBs` = Σ targetBs / Σ targetUsd).
+ */
+interface BatchRateCtx {
+  usdRateId: string | null;
+  usdRateBs: number | null;
+}
+
+/**
+ * Fila a insertar en el pivot lote ↔ orden: snapshot de modo, montos objetivo
+ * y, en tasa fija, la tasa amarrada de la orden.
+ */
+interface PivotRow {
+  orderId: string;
+  portion: AroPortion;
+  useFixedRate: boolean;
+  targetUsd: number | null;
+  targetBs: number | null;
+  /** Tasa USD/Bs de la fila. Sólo en filas `useFixedRate`; null en modo USD. */
+  exchangeRateId: string | null;
+}
 
 /** Agregados del pivot de un lote, resueltos en SQL (1 query por página). */
 interface ReceivableOrderTotals {
@@ -65,6 +93,8 @@ interface ReceivableOrderTotals {
 export interface PendingReceivable {
   orderId: string;
   orderNumber: string;
+  /** N° de la factura VIGENTE de la orden (espejo); null si no tiene. */
+  invoiceNumber: string | null;
   orderType: string;
   portion: AroPortion;
   debtorType: 'insurance' | 'holder' | 'cashea';
@@ -224,6 +254,7 @@ export class AccountsReceivableService {
       Array<{
         orderId: string;
         orderNumber: string;
+        invoiceNumber: string | null;
         orderType: string;
         insuranceId: string | null;
         holderId: string | null;
@@ -246,7 +277,7 @@ export class AccountsReceivableService {
         createdAt: string;
       }>
     >(
-      `SELECT o.id AS "orderId", o."orderNumber", o."type" AS "orderType",
+      `SELECT o.id AS "orderId", o."orderNumber", o."invoiceNumber", o."type" AS "orderType",
               o."insuranceId", o."holderId", i."name" AS "insuranceName",
               p."firstName", p."lastName", p."businessName", p."cedula", p."rif",
               o."useFixedRate", o."priceAmount",
@@ -311,6 +342,7 @@ export class AccountsReceivableService {
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
+        invoiceNumber: r.invoiceNumber,
         orderType: r.orderType,
         portion: r.portion,
         debtorType,
@@ -517,6 +549,8 @@ export class AccountsReceivableService {
           // holder/patient/fixedExchangeRate de cada orden: los usa el estado
           // de cuenta Excel del lote de seguro en el FE.
           orders: {
+            // Tasa de la fila (tasa fija por orden, ajustable en el lote).
+            exchangeRate: true,
             order: {
               branch: true,
               holder: true,
@@ -700,8 +734,8 @@ export class AccountsReceivableService {
       for (const r of rows) {
         await mgr.query(
           `INSERT INTO "accounts_receivable_orders"
-             ("receivableId", "orderId", "portion", "useFixedRate", "targetUsd", "targetBs")
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+             ("receivableId", "orderId", "portion", "useFixedRate", "targetUsd", "targetBs", "exchangeRateId")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             batchId,
             r.orderId,
@@ -709,6 +743,7 @@ export class AccountsReceivableService {
             r.useFixedRate,
             r.targetUsd != null ? r.targetUsd.toFixed(2) : null,
             r.targetBs != null ? r.targetBs.toFixed(2) : null,
+            r.exchangeRateId,
           ],
         );
       }
@@ -756,8 +791,8 @@ export class AccountsReceivableService {
       for (const r of rows) {
         await mgr.query(
           `INSERT INTO "accounts_receivable_orders"
-             ("receivableId", "orderId", "portion", "useFixedRate", "targetUsd", "targetBs")
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+             ("receivableId", "orderId", "portion", "useFixedRate", "targetUsd", "targetBs", "exchangeRateId")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             id,
             r.orderId,
@@ -765,9 +800,67 @@ export class AccountsReceivableService {
             r.useFixedRate,
             r.targetUsd != null ? r.targetUsd.toFixed(2) : null,
             r.targetBs != null ? r.targetBs.toFixed(2) : null,
+            r.exchangeRateId,
           ],
         );
       }
+      await this.recomputeStatus(mgr, id);
+    });
+    return this.findOneBatch(id, user);
+  }
+
+  /**
+   * Cambia la tasa USD/Bs con la que UNA orden del lote se cobra. Sólo aplica
+   * a lotes de seguro "No indexado" (tasa fija), donde cada orden trae su tasa
+   * amarrada: recalcula `targetBs = targetUsd × tasa` SÓLO de esa fila, deja
+   * el resto del lote intacto y reevalúa el estado.
+   *
+   * No toca `orders.fixedExchangeRateId`: la factura de la orden ya salió con
+   * su tasa; esto corrige lo que el seguro paga en ESTE lote.
+   */
+  async setOrderRate(
+    id: string,
+    orderId: string,
+    exchangeRateId: string,
+    user: AuthenticatedUser,
+  ): Promise<AccountsReceivable> {
+    const batch = await this.loadBatch(this.dataSource.manager, id);
+    if (!batch) throw new NotFoundException('Lote no encontrado');
+    await this.assertVisibility(batch, user);
+    const row = (batch.orders ?? []).find((o) => o.orderId === orderId);
+    if (!row) throw new NotFoundException('La orden no pertenece a este lote');
+    if (!row.useFixedRate) {
+      throw new BadRequestException(
+        'Sólo las órdenes a tasa fija (seguro no indexado) tienen tasa propia en el lote',
+      );
+    }
+    const rate = await this.ratesRepo.findOne({ where: { id: exchangeRateId } });
+    if (!rate || rate.currency !== 'USD') {
+      throw new BadRequestException(
+        'La tasa de la orden debe ser una tasa USD/Bs',
+      );
+    }
+    const rateBs = Number(rate.amountBs);
+    if (!Number.isFinite(rateBs) || rateBs <= 0) {
+      throw new BadRequestException('Tasa USD inválida (amountBs ≤ 0)');
+    }
+    // `targetUsd` es el snapshot de la porción; filas legacy pueden no tenerlo.
+    const targetUsd =
+      Number(row.targetUsd ?? row.order?.priceAmount ?? 0) || 0;
+    if (targetUsd <= 0) {
+      throw new BadRequestException(
+        'La orden no tiene monto en USD para recalcular su objetivo en Bs',
+      );
+    }
+    const targetBs = round2(targetUsd * rateBs);
+
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr.query(
+        `UPDATE "accounts_receivable_orders"
+            SET "exchangeRateId" = $1, "targetUsd" = $2, "targetBs" = $3
+          WHERE "receivableId" = $4 AND "orderId" = $5`,
+        [exchangeRateId, targetUsd.toFixed(2), targetBs.toFixed(2), id, orderId],
+      );
       await this.recomputeStatus(mgr, id);
     });
     return this.findOneBatch(id, user);
@@ -810,15 +903,7 @@ export class AccountsReceivableService {
     dto: CreateAccountsReceivableBatchDto,
     user: AuthenticatedUser,
     forcedMode?: 'usd' | 'fixed',
-  ): Promise<
-    Array<{
-      orderId: string;
-      portion: AroPortion;
-      useFixedRate: boolean;
-      targetUsd: number | null;
-      targetBs: number | null;
-    }>
-  > {
+  ): Promise<PivotRow[]> {
     const orders = await this.ordersRepo.find({
       where: { id: In(orderIds) },
       relations: {
@@ -880,13 +965,7 @@ export class AccountsReceivableService {
 
     const debtorId =
       dto.debtorType === 'insurance' ? dto.insuranceId : dto.holderId;
-    const out: Array<{
-      orderId: string;
-      portion: AroPortion;
-      useFixedRate: boolean;
-      targetUsd: number | null;
-      targetBs: number | null;
-    }> = [];
+    const out: PivotRow[] = [];
     for (const o of orders) {
       if (o.status !== 'finalized') {
         throw new BadRequestException(
@@ -950,6 +1029,8 @@ export class AccountsReceivableService {
           useFixedRate: false,
           targetUsd: indexedUsd > 0 ? indexedUsd : Number(o.priceAmount) || 0,
           targetBs: null,
+          // Porción indexada: se cobra a la tasa del día del cobro, sin tasa amarrada.
+          exchangeRateId: null,
         });
       } else if (portion === 'fixed') {
         out.push({
@@ -959,6 +1040,7 @@ export class AccountsReceivableService {
           // targetUsd de porciones fijas = snapshot USD (estado de cuenta).
           targetUsd: fixedUsd,
           targetBs: targetBsForPortion(o, fixedUsd),
+          exchangeRateId: o.fixedExchangeRateId ?? null,
         });
       } else {
         out.push({
@@ -969,6 +1051,7 @@ export class AccountsReceivableService {
             ? Number(o.priceAmount) || 0
             : targetUsdForOrder(o),
           targetBs: o.useFixedRate ? targetBsForOrder(o) : null,
+          exchangeRateId: o.useFixedRate ? o.fixedExchangeRateId ?? null : null,
         });
       }
     }
@@ -992,12 +1075,12 @@ export class AccountsReceivableService {
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
 
-    const usdRateId = this.batchUsdRateId(batch);
+    const rateCtx = this.batchRateCtx(batch);
     this.computeFigures(batch); // fija batch.mode según las órdenes del lote
-    const newTotal =
-      batch.mode === 'fixed'
-        ? await this.computePaymentsTotalBs(payments, usdRateId)
-        : await this.computePaymentsTotalUsd(payments, usdRateId);
+    const fixedMode = batch.mode === 'fixed';
+    const newTotal = fixedMode
+      ? await this.computePaymentsTotalBs(payments, rateCtx)
+      : await this.computePaymentsTotalUsd(payments, rateCtx);
     if (newTotal <= 0) {
       throw new BadRequestException(
         'El monto de los cobros debe ser mayor a 0',
@@ -1006,7 +1089,7 @@ export class AccountsReceivableService {
 
     await this.dataSource.transaction(async (mgr) => {
       for (const p of payments) {
-        const payload = await this.resolvePaymentForSave(p, usdRateId);
+        const payload = await this.resolvePaymentForSave(p, rateCtx, fixedMode);
         const saved = await mgr.save(
           mgr.create(AccountsReceivablePayment, payload),
         );
@@ -1034,9 +1117,11 @@ export class AccountsReceivableService {
     if (!(batch.payments ?? []).some((p) => p.id === paymentId)) {
       throw new NotFoundException('Cobro no encontrado en este lote');
     }
-    const usdRateId = this.batchUsdRateId(batch);
+    const rateCtx = this.batchRateCtx(batch);
+    this.computeFigures(batch);
+    const fixedMode = batch.mode === 'fixed';
     await this.dataSource.transaction(async (mgr) => {
-      const payload = await this.resolvePaymentForSave(dto, usdRateId);
+      const payload = await this.resolvePaymentForSave(dto, rateCtx, fixedMode);
       await mgr.update(AccountsReceivablePayment, paymentId, payload);
       await this.recomputeStatus(mgr, id);
     });
@@ -1124,29 +1209,55 @@ export class AccountsReceivableService {
   // Conversión de cobros (sin cambios respecto al modelo anterior).
   // ---------------------------------------------------------------------------
   /**
-   * Tasa USD/Bs de referencia para convertir los cobros del lote:
-   *  - Modo tasa fija (seguro "No indexado", isIndexed=true): la tasa fija snapshot de la orden
-   *    (primera del lote que tenga una) — el cobro se convierte a la tasa
-   *    fijada en la orden, no a la del día.
+   * Referencia USD/Bs para convertir los cobros del lote.
+   *
+   *  - Modo tasa fija (seguro "No indexado"): cada orden trae su propia tasa
+   *    amarrada, así que el lote NO tiene una tasa única — los Bs objetivo ya
+   *    salen de la tasa de cada orden (`aro.targetBs`). Para el equivalente de
+   *    un cobro en la otra moneda se usa la tasa PONDERADA del lote
+   *    (Σ targetBs / Σ targetUsd): con una sola orden es exactamente su tasa,
+   *    y con varias reparte el cobro en la proporción real de la deuda. Antes
+   *    se tomaba la tasa de la PRIMERA orden para todas, lo que descuadraba el
+   *    cobro cuando las tasas diferían.
    *  - Modo USD: la tasa de facturación de la primera orden; sin ella,
    *    `resolveUsdRate` cae a la última tasa USD.
    */
-  private batchUsdRateId(batch: AccountsReceivable): string | null {
-    const fixed = (batch.orders ?? []).some((o) => o.useFixedRate);
-    if (fixed) {
-      const withFixed = (batch.orders ?? []).find(
-        (o) => o.order?.fixedExchangeRateId,
+  private batchRateCtx(batch: AccountsReceivable): BatchRateCtx {
+    const pivots = batch.orders ?? [];
+    if (pivots.some((o) => o.useFixedRate)) {
+      const weighted = weightedFixedRateBs(pivots);
+      if (weighted != null) return { usdRateId: null, usdRateBs: weighted };
+      // Sin snapshots utilizables (lote legacy): la tasa de la primera fila.
+      const withRate = pivots.find(
+        (o) => o.exchangeRateId ?? o.order?.fixedExchangeRateId,
       );
-      if (withFixed?.order?.fixedExchangeRateId) {
-        return withFixed.order.fixedExchangeRateId;
-      }
+      return {
+        usdRateId:
+          withRate?.exchangeRateId ??
+          withRate?.order?.fixedExchangeRateId ??
+          null,
+        usdRateBs: null,
+      };
     }
-    return batch.orders?.[0]?.order?.billingExchangeRateId ?? null;
+    return {
+      usdRateId: pivots[0]?.order?.billingExchangeRateId ?? null,
+      usdRateBs: null,
+    };
   }
 
+  /**
+   * Normaliza y convierte un cobro antes de guardarlo.
+   *
+   * `fixedMode` = lote de seguro no indexado (tasa fija): el objetivo está en
+   * Bs y cada orden tiene su tasa amarrada, así que el cobro NO elige tasa —
+   * los Bs se toman tal cual y el equivalente USD sale de la ponderada del
+   * lote. Por eso ahí la tasa de los cobros en Bs es opcional y el efectivo en
+   * EUR no se admite (exigiría una tasa EUR/Bs que el lote no modela).
+   */
   private async resolvePaymentForSave(
     p: AccountsReceivablePaymentDto,
-    usdExchangeRateId?: string | null,
+    rateCtx: BatchRateCtx,
+    fixedMode = false,
   ): Promise<Partial<AccountsReceivablePayment>> {
     const out: Partial<AccountsReceivablePayment> = {
       type: p.type,
@@ -1160,10 +1271,13 @@ export class AccountsReceivableService {
       amountValue: p.amountValue.toFixed(2),
       amountInUsd: '0',
     };
-    // Tasa USD/Bs de referencia para convertir. La tasa elegida en el propio
-    // cobro (Bs) manda sobre la del lote: el cobro pudo hacerse otro día, a
-    // otra tasa. Mismo criterio que Órdenes (Paso 1) y Cuentas por pagar.
-    let usdCtxId = usdExchangeRateId ?? null;
+    // Referencia USD/Bs para convertir. La tasa elegida en el propio cobro
+    // (Bs) manda sobre la del lote: el cobro pudo hacerse otro día, a otra
+    // tasa. Mismo criterio que Órdenes (Paso 1) y Cuentas por pagar.
+    let usdCtx: UsdConversionContext = {
+      usdExchangeRateId: rateCtx.usdRateId,
+      usdRateBs: rateCtx.usdRateBs,
+    };
 
     const needsPaymentAccount =
       p.type === 'mobile_payment' ||
@@ -1195,6 +1309,24 @@ export class AccountsReceivableService {
       );
     }
 
+    /**
+     * Tasa USD/Bs de un cobro en Bs: obligatoria salvo en modo tasa fija,
+     * donde el lote no elige tasa. Si viene, manda sobre la del lote.
+     */
+    const applyBsRate = async (label: string): Promise<void> => {
+      if (!p.exchangeRateId) {
+        if (fixedMode) return;
+        throw new BadRequestException('exchangeRateId requerido');
+      }
+      const rate = await this.ratesRepo.findOne({
+        where: { id: p.exchangeRateId },
+      });
+      if (!rate || rate.currency !== 'USD')
+        throw new BadRequestException(`${label} requiere tasa USD/Bs`);
+      out.exchangeRateId = p.exchangeRateId;
+      usdCtx = { usdExchangeRateId: p.exchangeRateId };
+    };
+
     if (
       p.type === 'mobile_payment' ||
       p.type === 'bank_transfer' ||
@@ -1202,31 +1334,15 @@ export class AccountsReceivableService {
     ) {
       if (!p.referenceNumber)
         throw new BadRequestException('referenceNumber requerido');
-      if (!p.exchangeRateId)
-        throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
         throw new BadRequestException(
           'Pago móvil/transferencia/punto debe ser en BS',
         );
-      const rate = await this.ratesRepo.findOne({
-        where: { id: p.exchangeRateId },
-      });
-      if (!rate || rate.currency !== 'USD')
-        throw new BadRequestException('Cobro en BS requiere tasa USD/Bs');
-      out.exchangeRateId = p.exchangeRateId;
-      usdCtxId = p.exchangeRateId;
+      await applyBsRate('Cobro en BS');
     } else if (p.type === 'cash_bs') {
-      if (!p.exchangeRateId)
-        throw new BadRequestException('exchangeRateId requerido');
       if (p.amountCurrency !== 'BS')
         throw new BadRequestException('cash_bs debe ser en BS');
-      const rate = await this.ratesRepo.findOne({
-        where: { id: p.exchangeRateId },
-      });
-      if (!rate || rate.currency !== 'USD')
-        throw new BadRequestException('cash_bs requiere tasa USD/Bs');
-      out.exchangeRateId = p.exchangeRateId;
-      usdCtxId = p.exchangeRateId;
+      await applyBsRate('cash_bs');
     } else if (p.type === 'bank_transfer_usd') {
       if (!p.referenceNumber)
         throw new BadRequestException('referenceNumber requerido');
@@ -1240,6 +1356,10 @@ export class AccountsReceivableService {
         throw new BadRequestException('cash_usd debe ser en USD');
       out.exchangeRateId = p.exchangeRateId ?? null;
     } else if (p.type === 'cash_eur') {
+      if (fixedMode)
+        throw new BadRequestException(
+          'Los lotes de seguro no indexado (tasa fija) no admiten cobros en efectivo EUR',
+        );
       if (p.amountCurrency !== 'EUR')
         throw new BadRequestException('cash_eur debe ser en EUR');
       if (!p.exchangeRateId)
@@ -1270,7 +1390,8 @@ export class AccountsReceivableService {
         if (p.amountCurrency === 'EUR' && rate.currency !== 'EUR')
           throw new BadRequestException('other en EUR requiere tasa EUR/Bs');
         out.exchangeRateId = p.exchangeRateId;
-        if (p.amountCurrency === 'BS') usdCtxId = p.exchangeRateId;
+        if (p.amountCurrency === 'BS')
+          usdCtx = { usdExchangeRateId: p.exchangeRateId };
       }
     }
 
@@ -1282,34 +1403,36 @@ export class AccountsReceivableService {
     const usdAmount = await computeAmountInUsd(
       conversionInput,
       this.ratesRepo,
-      {
-        usdExchangeRateId: usdCtxId,
-      },
+      usdCtx,
     );
     out.amountInUsd = usdAmount.toFixed(2);
-    const bsAmount = await computeAmountInBs(conversionInput, this.ratesRepo, {
-      usdExchangeRateId: usdCtxId,
-    });
+    const bsAmount = await computeAmountInBs(
+      conversionInput,
+      this.ratesRepo,
+      usdCtx,
+    );
     out.amountInBs = bsAmount.toFixed(2);
     return out;
   }
 
   /**
-   * Tasa USD/Bs con la que se convierte un cobro: la del propio cobro cuando
-   * viene en Bs (manda sobre la del lote), sino la de referencia del lote.
+   * Contexto de conversión de un cobro: la tasa del propio cobro cuando viene
+   * en Bs (manda sobre la del lote), sino la referencia del lote (tasa del
+   * catálogo en modo USD, ponderada en modo tasa fija).
    */
-  private usdCtxIdForPayment(
+  private conversionCtx(
     p: AccountsReceivablePaymentDto,
-    usdExchangeRateId: string | null,
-  ): string | null {
-    return p.amountCurrency === 'BS'
-      ? (p.exchangeRateId ?? usdExchangeRateId)
-      : usdExchangeRateId;
+    rateCtx: BatchRateCtx,
+  ): UsdConversionContext {
+    const own = p.amountCurrency === 'BS' ? (p.exchangeRateId ?? null) : null;
+    return own
+      ? { usdExchangeRateId: own }
+      : { usdExchangeRateId: rateCtx.usdRateId, usdRateBs: rateCtx.usdRateBs };
   }
 
   private async computePaymentsTotalBs(
     payments: AccountsReceivablePaymentDto[],
-    usdExchangeRateId: string | null,
+    rateCtx: BatchRateCtx,
   ): Promise<number> {
     let total = 0;
     for (const p of payments) {
@@ -1320,7 +1443,7 @@ export class AccountsReceivableService {
           exchangeRateId: p.exchangeRateId ?? null,
         },
         this.ratesRepo,
-        { usdExchangeRateId: this.usdCtxIdForPayment(p, usdExchangeRateId) },
+        this.conversionCtx(p, rateCtx),
       );
     }
     return round2(total);
@@ -1328,7 +1451,7 @@ export class AccountsReceivableService {
 
   private async computePaymentsTotalUsd(
     payments: AccountsReceivablePaymentDto[],
-    usdExchangeRateId: string | null,
+    rateCtx: BatchRateCtx,
   ): Promise<number> {
     let total = 0;
     for (const p of payments) {
@@ -1339,7 +1462,7 @@ export class AccountsReceivableService {
           exchangeRateId: p.exchangeRateId ?? null,
         },
         this.ratesRepo,
-        { usdExchangeRateId: this.usdCtxIdForPayment(p, usdExchangeRateId) },
+        this.conversionCtx(p, rateCtx),
       );
     }
     return round2(total);

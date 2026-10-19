@@ -725,6 +725,18 @@ const reportsDefs: Array<{ key: string; label: string; description: string }> =
       description:
         'Permite acceder al reporte de dinero recibido en las cuentas propias (órdenes y cuentas por cobrar)',
     },
+    {
+      key: 'invoices',
+      label: 'Ver reporte de facturas',
+      description:
+        'Permite acceder al listado de facturas emitidas (vigentes y anuladas) con sus montos',
+    },
+    {
+      key: 'income-relation',
+      label: 'Ver relación de ingresos',
+      description:
+        'Permite acceder a la relación de ingresos por factura (monto $, tasa del día y monto Bs)',
+    },
   ];
 
 const filesPermissions: PermissionDefinition[] = [
@@ -938,5 +950,7 @@ export const PERMISSIONS = {
     TAXES_RETAINED_LIST: 'reports.taxes-retained.list',
     ARC_LIST: 'reports.arc.list',
     PAYMENT_ACCOUNT_INFLOWS_LIST: 'reports.payment-account-inflows.list',
+    INVOICES_LIST: 'reports.invoices.list',
+    INCOME_RELATION_LIST: 'reports.income-relation.list',
   },
 } as const;

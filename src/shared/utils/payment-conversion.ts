@@ -26,6 +26,32 @@ export interface UsdConversionContext {
    * (ver `resolveUsdRateForEur`).
    */
   usdExchangeRateId?: string | null;
+  /**
+   * Tasa USD/Bs numérica de referencia, cuando el contexto NO es una tasa
+   * concreta del catálogo. Se usa sólo si no hay `usdExchangeRateId`.
+   * Caso de uso: un lote de cuentas por cobrar de seguro no indexado, donde
+   * cada orden tiene su propia tasa fija amarrada y la referencia del lote es
+   * la ponderada (Σ Bs objetivo / Σ USD objetivo), no la de una orden suelta.
+   */
+  usdRateBs?: number | null;
+}
+
+/**
+ * Tasa USD/Bs numérica del contexto: la del `usdExchangeRateId` cuando viene,
+ * sino el override numérico `usdRateBs`, sino la última tasa USD cargada.
+ */
+export async function resolveUsdRateBs(
+  ratesRepo: Repository<ExchangeRate>,
+  ctx: UsdConversionContext,
+): Promise<number> {
+  if (!ctx.usdExchangeRateId) {
+    const override = Number(ctx.usdRateBs);
+    if (Number.isFinite(override) && override > 0) return override;
+  }
+  return positiveBs(
+    await resolveUsdRate(ratesRepo, ctx.usdExchangeRateId),
+    'USD',
+  );
 }
 
 /**
@@ -50,8 +76,7 @@ export async function computeAmountInUsd(
   if (payment.amountCurrency === 'USD') return v;
 
   if (payment.amountCurrency === 'BS') {
-    const usdRate = await resolveUsdRate(ratesRepo, ctx.usdExchangeRateId);
-    return roundUsd(v / positiveBs(usdRate, 'USD'));
+    return roundUsd(v / (await resolveUsdRateBs(ratesRepo, ctx)));
   }
 
   // EUR: rate EUR/Bs del pago + rate USD/Bs del mismo día de esa tasa EUR.
@@ -224,12 +249,7 @@ export async function computeAmountInBs(
   if (payment.amountCurrency === 'BS') return roundBs(v);
 
   if (payment.amountCurrency === 'USD') {
-    const usdRate = await resolveUsdRate(ratesRepo, ctx.usdExchangeRateId);
-    const usdRateBs = Number(usdRate.amountBs);
-    if (!Number.isFinite(usdRateBs) || usdRateBs <= 0) {
-      throw new BadRequestException('Tasa USD inválida (amountBs ≤ 0)');
-    }
-    return roundBs(v * usdRateBs);
+    return roundBs(v * (await resolveUsdRateBs(ratesRepo, ctx)));
   }
 
   // EUR

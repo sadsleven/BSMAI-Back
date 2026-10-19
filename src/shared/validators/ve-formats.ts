@@ -32,3 +32,12 @@ export function normalizeCedula(value: string): string {
 export function normalizeRif(value: string): string {
   return value.trim().toUpperCase().replace(/\./g, '');
 }
+
+/**
+ * Normaliza un documento para búsquedas: deja sólo alfanuméricos en minúscula.
+ * `V-27.690.407` → `v27690407`, igual que lo que el usuario teclea (`v27690407`).
+ * Devuelve `''` si no queda nada útil.
+ */
+export function normalizeDocumentSearch(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}

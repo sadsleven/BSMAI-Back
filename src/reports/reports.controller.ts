@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import {
   QueryArcReportDto,
+  QueryInvoicesReportDto,
   QueryPayablesReportDto,
   QueryReceivablesReportDto,
   QueryReportsDto,
@@ -92,5 +93,31 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.aging(query, user);
+  }
+
+  /**
+   * Facturas emitidas — una fila por factura (`order_invoices`), anuladas
+   * incluidas. Filtra por fecha de EMISIÓN (`invoiceDate`).
+   */
+  @RequirePermissions(PERMISSIONS.REPORTS.INVOICES_LIST)
+  @Get('invoices')
+  invoicesReport(
+    @Query() query: QueryInvoicesReportDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.invoices(query, user);
+  }
+
+  /**
+   * Relación de ingresos — las facturas del período en orden cronológico, con
+   * monto $, tasa del día y monto Bs, más el desglose por cliente.
+   */
+  @RequirePermissions(PERMISSIONS.REPORTS.INCOME_RELATION_LIST)
+  @Get('income-relation')
+  incomeRelation(
+    @Query() query: QueryInvoicesReportDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.incomeRelation(query, user);
   }
 }

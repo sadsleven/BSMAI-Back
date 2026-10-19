@@ -8,6 +8,7 @@ describe('PatientsController (e2e)', () => {
   let app: INestApplication;
   let token: string;
   let id: string;
+  let cedula: string;
 
   beforeAll(async () => {
     app = await bootstrapApp();
@@ -36,7 +37,7 @@ describe('PatientsController (e2e)', () => {
       .set(authHeader(token))
       .send({
         personType: 'natural',
-        cedula: uniqueCedula(),
+        cedula: (cedula = uniqueCedula()),
         firstName: 'Juan',
         lastName: 'Perez',
         birthDate: '1990-01-15',
@@ -52,6 +53,19 @@ describe('PatientsController (e2e)', () => {
       .get(`/patients/${id}`)
       .set(authHeader(token))
       .expect(200);
+  });
+
+  it('GET /patients?search → cédula sin separadores (v27690407)', async () => {
+    // `V-27.690.407` debe encontrarse tecleando `v27690407` o sólo los dígitos.
+    const digits = cedula.replace(/[^0-9]/g, '');
+    for (const term of [`v${digits}`, digits, cedula.toLowerCase()]) {
+      const res = await request(app.getHttpServer())
+        .get('/patients')
+        .query({ search: term, limit: 10 })
+        .set(authHeader(token))
+        .expect(200);
+      expect(res.body.data.map((p: { id: string }) => p.id)).toContain(id);
+    }
   });
 
   it('GET /patients/:id/available-insurances', async () => {
