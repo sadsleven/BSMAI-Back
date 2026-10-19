@@ -125,3 +125,29 @@ export function targetBsForPortion(
   if (!Number.isFinite(rateBs) || !Number.isFinite(portionUsd)) return null;
   return +(portionUsd * rateBs).toFixed(2);
 }
+
+/**
+ * Tasa USD/Bs PONDERADA de las filas a tasa fija de un lote:
+ * Σ `targetBs` / Σ `targetUsd`. En un lote de seguro "No indexado" cada orden
+ * trae su propia tasa amarrada, así que el lote no tiene una tasa única; ésta
+ * es la referencia con la que se convierte un cobro a la otra moneda — con
+ * una sola orden da exactamente su tasa, y con varias reparte el cobro en la
+ * proporción real de la deuda. `null` si no hay base utilizable.
+ */
+export function weightedFixedRateBs(
+  rows: Array<{
+    useFixedRate: boolean;
+    targetUsd?: string | number | null;
+    targetBs?: string | number | null;
+  }>,
+): number | null {
+  let usd = 0;
+  let bs = 0;
+  for (const r of rows) {
+    if (!r.useFixedRate) continue;
+    usd += Number(r.targetUsd ?? 0) || 0;
+    bs += Number(r.targetBs ?? 0) || 0;
+  }
+  if (usd <= 0 || bs <= 0) return null;
+  return Math.round((bs / usd) * 10000) / 10000;
+}

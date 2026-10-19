@@ -12,6 +12,7 @@ import {
   SeniatPersonType,
 } from '../shared/utils/seniat-retention';
 import {
+  QueryInvoicesReportDto,
   QueryPayablesReportDto,
   QueryReceivablesReportDto,
   QueryReportsDto,
@@ -22,6 +23,128 @@ const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+/**
+ * Columna `date` → `YYYY-MM-DD`. El driver de pg devuelve las fechas-solo como
+ * `Date` (medianoche LOCAL del server), así que se toman los componentes
+ * locales: `toISOString()` restaría un día en VE (UTC-4).
+ */
+const dateOnly = (v: string | Date | null | undefined): string => {
+  if (!v) return '';
+  if (v instanceof Date) {
+    const y = v.getFullYear();
+    const m = `${v.getMonth() + 1}`.padStart(2, '0');
+    const d = `${v.getDate()}`.padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(v).slice(0, 10);
+};
+
+/** Un pago concreto de un lote AP (para la ref. del edo. de cuenta). */
+interface PayablePaymentDetail {
+  date: string | null;
+  type: string;
+  reference: string | null;
+  bankCode: string | null;
+  bankName: string | null;
+  amountBs: number;
+}
+
+interface PayablePaymentMeta {
+  /** Última fecha de pago del lote. */
+  date: string | null;
+  /** Referencias únicas, separadas por coma (compatibilidad). */
+  ref: string | null;
+  payments: PayablePaymentDetail[];
+}
+
+/** Fila cruda de la consulta de facturas (todo numérico llega como texto). */
+interface RawInvoiceRow {
+  invoiceId: string;
+  invoiceNumber: string;
+  controlNumber: string;
+  /** Columna `date`: el driver la devuelve como `Date`. */
+  invoiceDate: string | Date;
+  status: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdByName: string | null;
+  orderId: string;
+  orderNumber: string;
+  orderType: string;
+  orderDate: string | Date;
+  branchId: string;
+  branchName: string | null;
+  insuranceId: string | null;
+  holderId: string | null;
+  insuranceName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  businessName: string | null;
+  holderIdDisplay: string | null;
+  patientName: string | null;
+  patientIdDisplay: string | null;
+  serviceKey: string | null;
+  rateBs: string | null;
+  ordersCount: string;
+  orderNumbers: string | null;
+  internalNumbers: string | null;
+  doctorName: string | null;
+  amountUsd: string;
+  costUsd: string;
+}
+
+/**
+ * Factura ya normalizada: una fila de los reportes "Facturas" y "Relación de
+ * ingresos". `amountUsd`/`costUsd` son 0 en las anuladas (no son ingreso).
+ */
+export interface InvoiceReportRow {
+  invoiceId: string;
+  invoiceNumber: string;
+  controlNumber: string;
+  invoiceDate: string;
+  status: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdByName: string;
+  orderId: string;
+  orderNumber: string;
+  orderType: string;
+  orderDate: string;
+  branchId: string;
+  branchName: string | null;
+  clientType: 'insurance' | 'holder';
+  clientId: string | null;
+  clientName: string;
+  holderName: string;
+  holderId: string;
+  patientName: string;
+  patientId: string;
+  doctorName: string;
+  serviceKey: string;
+  /** N° de orden interna de cada proveedor cubierto, separados por coma. */
+  internalNumbers: string;
+  /** N° de las órdenes cubiertas por la factura, separados por coma. */
+  orderNumbers: string;
+  ordersCount: number;
+  amountUsd: number;
+  rateBs: number | null;
+  amountBs: number | null;
+  costUsd: number;
+  marginUsd: number;
+}
+
+/** Agregado por cliente de la relación de ingresos. */
+export interface InvoiceClientAgg {
+  clientType: 'insurance' | 'holder';
+  clientId: string | null;
+  clientName: string;
+  invoicesCount: number;
+  amountUsd: number;
+  amountBs: number;
+  costUsd: number;
+  marginUsd: number;
+}
 
 /**
  * Servicio de reportes financieros. A diferencia del modelo viejo (que sólo leía
@@ -413,6 +536,7 @@ export class ReportsService {
         payableNumber: r.payableNumber,
         paymentDate: meta?.date ?? null,
         paymentReference: meta?.ref ?? null,
+        payments: meta?.payments ?? [],
         state,
       };
     });
@@ -556,25 +680,62 @@ export class ReportsService {
     return out;
   }
 
-  /** Fecha (última) y referencias de pago por lote AP, para el edo. de cuenta. */
+  /**
+   * Fecha (última), referencias y detalle de los pagos de cada lote AP, para
+   * el edo. de cuenta: cada pago con su banco, referencia y monto en Bs.
+   */
   private async paymentMetaByPayable(
     payableIds: string[],
-  ): Promise<Map<string, { date: string | null; ref: string | null }>> {
-    const out = new Map<string, { date: string | null; ref: string | null }>();
+  ): Promise<Map<string, PayablePaymentMeta>> {
+    const out = new Map<string, PayablePaymentMeta>();
     if (payableIds.length === 0) return out;
     const rows = await this.dataSource.query<
-      Array<{ payableId: string; date: string | null; ref: string | null }>
+      Array<{
+        payableId: string;
+        date: string | null;
+        type: string;
+        reference: string | null;
+        bankCode: string | null;
+        bankName: string | null;
+        amountBs: string | null;
+      }>
     >(
       `SELECT s."payableId",
-              MAX(p."paymentDate")::text AS date,
-              string_agg(DISTINCT NULLIF(p."referenceNumber", ''), ', ') AS ref
+              p."paymentDate"::text AS date,
+              p."type" AS type,
+              NULLIF(p."referenceNumber", '') AS reference,
+              NULLIF(p."bankCode", '') AS "bankCode",
+              b."name" AS "bankName",
+              p."amountInBs"::text AS "amountBs"
        FROM "accounts_payable_settlements" s
        JOIN "accounts_payable_payments" p ON p."settlementId" = s.id
+       LEFT JOIN "banks" b ON b."code" = p."bankCode"
        WHERE s."payableId" = ANY($1) AND s."deletedAt" IS NULL AND p."deletedAt" IS NULL
-       GROUP BY s."payableId"`,
+       ORDER BY p."paymentDate" ASC, p."createdAt" ASC`,
       [payableIds],
     );
-    for (const r of rows) out.set(r.payableId, { date: r.date, ref: r.ref });
+    for (const r of rows) {
+      const meta = out.get(r.payableId) ?? { date: null, ref: null, payments: [] };
+      meta.payments.push({
+        date: r.date,
+        type: r.type,
+        reference: r.reference,
+        bankCode: r.bankCode,
+        bankName: r.bankName,
+        amountBs: round2(num(r.amountBs)),
+      });
+      // `date`/`ref` del lote: última fecha y referencias únicas en orden.
+      if (!meta.date || (r.date && r.date > meta.date)) meta.date = r.date;
+      out.set(r.payableId, meta);
+    }
+    for (const meta of out.values()) {
+      const refs = [
+        ...new Set(
+          meta.payments.map((p) => p.reference).filter((x): x is string => !!x),
+        ),
+      ];
+      meta.ref = refs.length > 0 ? refs.join(', ') : null;
+    }
     return out;
   }
 
@@ -2014,6 +2175,312 @@ export class ReportsService {
       '31-60': { count: 0, amountUsd: 0, amountBs: 0 },
       '61-90': { count: 0, amountUsd: 0, amountBs: 0 },
       '90+': { count: 0, amountUsd: 0, amountBs: 0 },
+    };
+  }
+
+  // ===========================================================================
+  // 7. FACTURAS / RELACIÓN DE INGRESOS (base: order_invoices)
+  // ===========================================================================
+
+  /**
+   * Filas base de los reportes de facturación. Una fila = UNA factura emitida
+   * (`order_invoices`), anuladas incluidas. Una factura puede AGRUPAR varias
+   * órdenes del mismo contratante: montos, órdenes internas y médicos se
+   * agregan por el pivot `order_invoice_orders` (la orden emisora incluida),
+   * de modo que el total del reporte nunca duplica ni pierde órdenes.
+   *
+   * La tasa de la fila ("tasa del día") es la de la factura si quedó guardada;
+   * si no, cae a la de facturación de la orden emisora (`invoiceExchangeRateId`
+   * → `billingExchangeRateId` → tasa fija) y, en último caso, a la vigente.
+   */
+  private async invoiceReportRows(
+    query: QueryInvoicesReportDto,
+    user: AuthenticatedUser,
+  ): Promise<InvoiceReportRow[]> {
+    const allowed = await this.resolveUserBranchIds(user);
+    if (!user.isSuperAdmin && allowed.length === 0) return [];
+
+    const where: string[] = ['o."deletedAt" IS NULL'];
+    const params: unknown[] = [];
+
+    if (!user.isSuperAdmin) {
+      params.push(allowed);
+      where.push(`o."branchId" = ANY($${params.length})`);
+    }
+    if (query.branchId) {
+      params.push(query.branchId);
+      where.push(`o."branchId" = $${params.length}`);
+    }
+    // Fechas sobre la EMISIÓN de la factura, no sobre la fecha de la orden.
+    if (query.from) {
+      params.push(query.from);
+      where.push(`inv."invoiceDate" >= $${params.length}`);
+    }
+    if (query.to) {
+      params.push(query.to);
+      where.push(`inv."invoiceDate" <= $${params.length}`);
+    }
+    if (query.status === 'active' || query.status === 'cancelled') {
+      params.push(query.status);
+      where.push(`inv."status" = $${params.length}`);
+    }
+    if (query.insuranceId) {
+      params.push(query.insuranceId);
+      where.push(`o."insuranceId" = $${params.length}`);
+    }
+    if (query.holderId) {
+      params.push(query.holderId);
+      where.push(`o."holderId" = $${params.length}`);
+    }
+    if (query.clientType === 'insurance') {
+      where.push(`o."type" = 'insurance' AND o."insuranceId" IS NOT NULL`);
+    }
+    if (query.clientType === 'holder') {
+      where.push(`(o."type" <> 'insurance' OR o."insuranceId" IS NULL)`);
+    }
+    if (query.search && query.search.trim()) {
+      params.push(`%${query.search.trim().toLowerCase()}%`);
+      const n = params.length;
+      where.push(
+        `(LOWER(inv."invoiceNumber") LIKE $${n}
+          OR LOWER(inv."controlNumber") LIKE $${n}
+          OR LOWER(o."orderNumber") LIKE $${n}
+          OR LOWER(COALESCE(o."serviceKey", '')) LIKE $${n}
+          OR LOWER(COALESCE(i."name", '')) LIKE $${n}
+          OR LOWER(COALESCE(h."businessName", '')) LIKE $${n}
+          OR LOWER(COALESCE(h."firstName", '') || ' ' || COALESCE(h."lastName", '')) LIKE $${n}
+          OR LOWER(COALESCE(pac."businessName", '')) LIKE $${n}
+          OR LOWER(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')) LIKE $${n})`,
+      );
+    }
+
+    const raw = await this.dataSource.query<RawInvoiceRow[]>(
+      `SELECT inv.id AS "invoiceId", inv."invoiceNumber", inv."controlNumber",
+              inv."invoiceDate", inv."status", inv."cancelledAt", inv."cancelReason",
+              NULLIF(TRIM(COALESCE(cu."firstName", '') || ' ' || COALESCE(cu."lastName", '')), '') AS "createdByName",
+              o.id AS "orderId", o."orderNumber", o."type" AS "orderType", o."orderDate",
+              o."branchId", b."name" AS "branchName",
+              o."insuranceId", o."holderId", i."name" AS "insuranceName",
+              h."firstName", h."lastName", h."businessName",
+              COALESCE(h."cedula", h."rif") AS "holderIdDisplay",
+              COALESCE(pac."businessName", NULLIF(TRIM(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')), '')) AS "patientName",
+              COALESCE(pac."cedula", pac."rif") AS "patientIdDisplay",
+              o."serviceKey",
+              COALESCE(fxi."amountBs", fxoi."amountBs", fxb."amountBs", fxf."amountBs")::text AS "rateBs",
+              (SELECT COUNT(*) FROM "order_invoice_orders" p
+                WHERE p."invoiceId" = inv.id)::text AS "ordersCount",
+              (SELECT string_agg(co."orderNumber", ', ' ORDER BY co."orderNumber")
+                 FROM "order_invoice_orders" p
+                 JOIN "orders" co ON co.id = p."orderId"
+                WHERE p."invoiceId" = inv.id) AS "orderNumbers",
+              (SELECT string_agg(DISTINCT iio."internalNumber", ', ')
+                 FROM "order_invoice_orders" p
+                 JOIN "order_internal_orders" iio ON iio."orderId" = p."orderId"
+                WHERE p."invoiceId" = inv.id) AS "internalNumbers",
+              (SELECT string_agg(DISTINCT prov.name, ', ')
+                 FROM "order_invoice_orders" p
+                 JOIN "order_service_types" ost ON ost."orderId" = p."orderId"
+                 LEFT JOIN "doctors" doc ON doc.id = ost."doctorId"
+                 LEFT JOIN "care_centers" cc ON cc.id = ost."careCenterId"
+                 CROSS JOIN LATERAL (
+                   SELECT COALESCE(
+                     NULLIF(TRIM(COALESCE(doc."firstName", '') || ' ' || COALESCE(doc."lastName", '')), ''),
+                     cc."businessName"
+                   ) AS name
+                 ) prov
+                WHERE p."invoiceId" = inv.id AND prov.name IS NOT NULL) AS "doctorName",
+              (SELECT COALESCE(SUM(co."priceAmount"), 0)
+                 FROM "order_invoice_orders" p
+                 JOIN "orders" co ON co.id = p."orderId"
+                WHERE p."invoiceId" = inv.id)::text AS "amountUsd",
+              (SELECT COALESCE(SUM(iio."providerAmountUsd"), 0)
+                 FROM "order_invoice_orders" p
+                 JOIN "order_internal_orders" iio ON iio."orderId" = p."orderId"
+                WHERE p."invoiceId" = inv.id)::text AS "costUsd"
+       FROM "order_invoices" inv
+       JOIN "orders" o ON o.id = inv."orderId"
+       LEFT JOIN "branches" b ON b.id = o."branchId"
+       LEFT JOIN "insurances" i ON i.id = o."insuranceId"
+       LEFT JOIN "patients" h ON h.id = o."holderId"
+       LEFT JOIN "patients" pac ON pac.id = o."patientId"
+       LEFT JOIN "users" cu ON cu.id = inv."createdById"
+       LEFT JOIN "exchange_rates" fxi ON fxi.id = inv."exchangeRateId"
+       LEFT JOIN "exchange_rates" fxoi ON fxoi.id = o."invoiceExchangeRateId"
+       LEFT JOIN "exchange_rates" fxb ON fxb.id = o."billingExchangeRateId"
+       LEFT JOIN "exchange_rates" fxf ON fxf.id = o."fixedExchangeRateId"
+       WHERE ${where.join(' AND ')}
+       ORDER BY inv."invoiceDate" ASC, inv."invoiceNumber" ASC`,
+      params,
+    );
+
+    // Tasa de respaldo (última activa) sólo para facturas históricas sin tasa.
+    let fallbackRate: number | null = null;
+    if (raw.some((r) => !num(r.rateBs))) {
+      try {
+        fallbackRate = await this.fallbackUsdRateBs();
+      } catch {
+        fallbackRate = null;
+      }
+    }
+
+    return raw.map((r) => {
+      const isInsurance = r.orderType === 'insurance' && !!r.insuranceId;
+      const holderName =
+        r.businessName ??
+        (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
+      const rate = num(r.rateBs) || fallbackRate || null;
+      const cancelled = r.status === 'cancelled';
+      // Una factura anulada no es ingreso: su monto no suma en ninguna vista.
+      const amountUsd = cancelled ? 0 : round2(num(r.amountUsd));
+      const costUsd = cancelled ? 0 : round2(num(r.costUsd));
+      return {
+        invoiceId: r.invoiceId,
+        invoiceNumber: r.invoiceNumber,
+        controlNumber: r.controlNumber,
+        invoiceDate: dateOnly(r.invoiceDate),
+        status: r.status,
+        cancelledAt: r.cancelledAt,
+        cancelReason: r.cancelReason,
+        createdByName: r.createdByName ?? '',
+        orderId: r.orderId,
+        orderNumber: r.orderNumber,
+        orderType: r.orderType,
+        orderDate: dateOnly(r.orderDate),
+        branchId: r.branchId,
+        branchName: r.branchName,
+        clientType: isInsurance ? ('insurance' as const) : ('holder' as const),
+        clientId: isInsurance ? r.insuranceId : r.holderId,
+        clientName: isInsurance ? (r.insuranceName ?? '—') : holderName,
+        holderName,
+        holderId: r.holderIdDisplay ?? '',
+        patientName: r.patientName ?? holderName,
+        patientId: r.patientIdDisplay ?? '',
+        doctorName: r.doctorName ?? '',
+        serviceKey: r.serviceKey ?? '',
+        internalNumbers: r.internalNumbers ?? '',
+        orderNumbers: r.orderNumbers ?? r.orderNumber,
+        ordersCount: Number(r.ordersCount) || 0,
+        amountUsd,
+        rateBs: rate ? round2(rate) : null,
+        amountBs: rate ? round2(amountUsd * rate) : null,
+        costUsd,
+        marginUsd: round2(amountUsd - costUsd),
+      };
+    });
+  }
+
+  /**
+   * Facturas emitidas — una fila por factura (anuladas incluidas, con monto 0).
+   * Ordenadas de la más reciente a la más vieja para la vista de listado.
+   */
+  async invoices(
+    query: QueryInvoicesReportDto,
+    user: AuthenticatedUser,
+  ): Promise<{ rows: InvoiceReportRow[]; summary: Record<string, number> }> {
+    const rows = await this.invoiceReportRows(query, user);
+    const summary = this.invoiceSummary(rows);
+    const sorted = [...rows].sort((a, b) => {
+      const d = b.invoiceDate.localeCompare(a.invoiceDate);
+      if (d !== 0) return d;
+      return b.invoiceNumber.localeCompare(a.invoiceNumber, 'es', {
+        numeric: true,
+      });
+    });
+    return { rows: sorted, summary };
+  }
+
+  /**
+   * Relación de ingresos — las mismas facturas en orden cronológico ascendente
+   * (como se lleva el libro), más el desglose por cliente que alimenta el
+   * resumen de la vista y la segunda hoja del Excel.
+   */
+  async incomeRelation(
+    query: QueryInvoicesReportDto,
+    user: AuthenticatedUser,
+  ): Promise<{
+    rows: InvoiceReportRow[];
+    byClient: InvoiceClientAgg[];
+    summary: Record<string, number>;
+  }> {
+    const rows = await this.invoiceReportRows(query, user);
+    const summary = this.invoiceSummary(rows);
+
+    const agg = new Map<
+      string,
+      {
+        clientType: 'insurance' | 'holder';
+        clientId: string | null;
+        clientName: string;
+        invoicesCount: number;
+        amountUsd: number;
+        amountBs: number;
+        costUsd: number;
+      }
+    >();
+    for (const r of rows) {
+      if (r.status === 'cancelled') continue;
+      const key = `${r.clientType}:${r.clientId ?? r.clientName}`;
+      let a = agg.get(key);
+      if (!a) {
+        a = {
+          clientType: r.clientType,
+          clientId: r.clientId,
+          clientName: r.clientName,
+          invoicesCount: 0,
+          amountUsd: 0,
+          amountBs: 0,
+          costUsd: 0,
+        };
+        agg.set(key, a);
+      }
+      a.invoicesCount += 1;
+      a.amountUsd += r.amountUsd;
+      a.amountBs += r.amountBs ?? 0;
+      a.costUsd += r.costUsd;
+    }
+    const byClient: InvoiceClientAgg[] = Array.from(agg.values())
+      .map((a) => ({
+        clientType: a.clientType,
+        clientId: a.clientId,
+        clientName: a.clientName,
+        invoicesCount: a.invoicesCount,
+        amountUsd: round2(a.amountUsd),
+        amountBs: round2(a.amountBs),
+        costUsd: round2(a.costUsd),
+        marginUsd: round2(a.amountUsd - a.costUsd),
+      }))
+      .sort((x, y) => y.amountUsd - x.amountUsd);
+
+    return { rows, byClient, summary };
+  }
+
+  /** Totales compartidos por "Facturas" y "Relación de ingresos". */
+  private invoiceSummary(rows: InvoiceReportRow[]): Record<string, number> {
+    let amountUsd = 0;
+    let amountBs = 0;
+    let costUsd = 0;
+    let active = 0;
+    let cancelled = 0;
+    for (const r of rows) {
+      if (r.status === 'cancelled') {
+        cancelled += 1;
+        continue;
+      }
+      active += 1;
+      amountUsd += r.amountUsd;
+      amountBs += r.amountBs ?? 0;
+      costUsd += r.costUsd;
+    }
+    return {
+      count: rows.length,
+      activeCount: active,
+      cancelledCount: cancelled,
+      amountUsd: round2(amountUsd),
+      amountBs: round2(amountBs),
+      costUsd: round2(costUsd),
+      marginUsd: round2(amountUsd - costUsd),
+      avgUsd: active > 0 ? round2(amountUsd / active) : 0,
+      avgRateBs: amountUsd > 0 ? round2(amountBs / amountUsd) : 0,
     };
   }
 }

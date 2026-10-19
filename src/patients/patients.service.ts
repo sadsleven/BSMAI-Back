@@ -16,7 +16,11 @@ import { QueryPatientsDto } from './dto/query-patients.dto';
 import { PhoneDto } from './dto/phone.dto';
 import { paginateBuilder } from '../shared/utils/paginate';
 import { PaginatedResponse } from '../shared/interfaces/PaginatedResponse';
-import { normalizeCedula, normalizeRif } from '../shared/validators/ve-formats';
+import {
+  normalizeCedula,
+  normalizeDocumentSearch,
+  normalizeRif,
+} from '../shared/validators/ve-formats';
 
 @Injectable()
 export class PatientsService {
@@ -63,15 +67,29 @@ export class PatientsService {
     }
 
     if (search && search.trim()) {
-      qb.andWhere(
-        `(LOWER(patient.firstName) LIKE :s
-          OR LOWER(patient.lastName) LIKE :s
-          OR LOWER(patient.businessName) LIKE :s
-          OR LOWER(patient.email) LIKE :s
-          OR LOWER(patient.cedula) LIKE :s
-          OR LOWER(patient.rif) LIKE :s)`,
-        { s: `%${search.trim().toLowerCase()}%` },
-      );
+      const term = search.trim().toLowerCase();
+      const params: Record<string, string> = { s: `%${term}%` };
+      const clauses = [
+        'LOWER(patient.firstName) LIKE :s',
+        'LOWER(patient.lastName) LIKE :s',
+        'LOWER(patient.businessName) LIKE :s',
+        'LOWER(patient.email) LIKE :s',
+        'LOWER(patient.cedula) LIKE :s',
+        'LOWER(patient.rif) LIKE :s',
+      ];
+
+      // Documento sin separadores: `v27690407`, `27690407` o `27.690.407`
+      // matchean la cédula guardada como `V-27.690.407` (idem RIF `J-12345678-9`).
+      const doc = normalizeDocumentSearch(term);
+      if (doc) {
+        params.doc = `%${doc}%`;
+        clauses.push(
+          `REGEXP_REPLACE(LOWER(patient.cedula), '[^a-z0-9]', '', 'g') LIKE :doc`,
+          `REGEXP_REPLACE(LOWER(patient.rif), '[^a-z0-9]', '', 'g') LIKE :doc`,
+        );
+      }
+
+      qb.andWhere(`(${clauses.join(' OR ')})`, params);
     }
 
     if (isActive === 'true' || isActive === 'false') {

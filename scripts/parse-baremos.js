@@ -53,7 +53,13 @@ const norm = (v) =>
 const round2 = (n) => Math.round(n * 100) / 100;
 
 // nombre = fila de sección/categoría, no un servicio real
-const CATEGORY_RE = /^(consultas|consultas y procedimientos|laboratorios|imagenologia|rayos x|especialidades|tomografias|servicios|servicio de imagen)/i;
+const CATEGORY_RE = /^(consultas|consultas y procedimientos|laboratorios|imagenologia|especialidades|tomografias|servicios|servicio de imagen)/i;
+
+// "RAYOS X" sola = fila de sección; "RAYOS X 1 PROYECCION" (Altamira, Estar,
+// Enviasistencia, Hispana) es un servicio real, así que aquí el match tiene que
+// ser exacto y no por prefijo. Los nombres llegan al catálogo vía
+// BAREMO_NAME_ALIASES -> "RX CUALQUIER PARTE DEL CUERPO (N PROYECCIONES)".
+const SECTION_EXACT_RE = /^rayos\s*x$/i;
 
 // nombre = nota al pie del procedimiento anterior ("INCLUYE: USO DEL
 // GASTROSCOPIO Y TOMA DE BIOPSIA" en Previsora), no un servicio propio
@@ -141,12 +147,19 @@ const CONFIGS = [
     ],
   },
   {
-    // Sólo APS: actos quirúrgicos / gastos clínicos excluidos por decisión de negocio
-    file: 'BAREMO SEGUROS ALTAMIRA FEBRERO 2026.xlsx',
+    // Baremo vigente 17-10 (reemplaza a BAREMO SEGUROS ALTAMIRA FEBRERO 2026.xlsx
+    // y al borrador BAREMO AFMI - ALTAMIRA - 13-10.xlsx, idéntico en contenido).
+    // Hoja única "APS": col B = servicio, col C = monto $. Las filas de sección
+    // (CONSULTAS, LABORATORIOS, RADIOLOGIA, TOMOGRAFIAS, ECOSONOGRAMAS, OTROS
+    // ESTUDIOS, REHABILITACION FISICA) repiten el encabezado "MONTO $" en la
+    // columna de precio y quedan fuera solas (no es numérico). La hoja "Hoja2"
+    // es una tabla dinámica con el conteo de consultas, sin precios: se ignora.
+    // Actos quirúrgicos / gastos clínicos siguen excluidos por decisión de negocio.
+    file: 'BAREMO AFMI - ALTAMIRA 17-10.xlsx',
     insurance: 'SEGUROS ALTAMIRA, C.A',
     aliases: ['Seguros Altamira'],
     rif: null,
-    sheets: [{ name: 'APS', nameCol: 2, priceCol: 4, startRow: 12 }],
+    sheets: [{ name: 'APS', nameCol: 2, priceCol: 3, startRow: 8 }],
   },
   {
     file: 'BAREMOS ACTUAL ESTAR SEGUROS.xlsx',
@@ -256,7 +269,8 @@ const CONFIGS = [
         // altPriceCol = columna de contraoferta: gana si trae monto (si trae
         // texto tipo "APROBADO" se queda el de priceCol).
         const alt = sc.altPriceCol ? cellNum(row.getCell(sc.altPriceCol).value) : null;
-        if (!name || CATEGORY_RE.test(name) || NOTE_RE.test(name)) continue;
+        if (!name || CATEGORY_RE.test(name) || SECTION_EXACT_RE.test(name)) continue;
+        if (NOTE_RE.test(name)) continue;
         if (base === null || base <= 0) continue;
         const price = alt !== null && alt > 0 ? alt : base;
         if (name.length > 200) {

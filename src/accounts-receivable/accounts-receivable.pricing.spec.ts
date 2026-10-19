@@ -3,6 +3,7 @@ import {
   casheaFinancingForOrder,
   targetUsdForOrder,
   targetBsForOrder,
+  weightedFixedRateBs,
 } from './accounts-receivable.service';
 import { Order } from '../orders/entities/order.entity';
 
@@ -139,5 +140,43 @@ describe('Cashea pricing (funciones puras)', () => {
       });
       expect(targetBsForOrder(order)).toBeNull();
     });
+  });
+});
+
+describe('weightedFixedRateBs (tasa de lote a tasa fija)', () => {
+  it('una sola orden → exactamente su tasa', () => {
+    expect(
+      weightedFixedRateBs([
+        { useFixedRate: true, targetUsd: '180.00', targetBs: '87336.00' },
+      ]),
+    ).toBe(485.2);
+  });
+
+  it('varias órdenes con tasas distintas → ponderada por el monto en USD', () => {
+    // 100 USD a 400 Bs (40.000) + 300 USD a 500 Bs (150.000) = 190.000 / 400.
+    expect(
+      weightedFixedRateBs([
+        { useFixedRate: true, targetUsd: '100.00', targetBs: '40000.00' },
+        { useFixedRate: true, targetUsd: '300.00', targetBs: '150000.00' },
+      ]),
+    ).toBe(475);
+  });
+
+  it('ignora las filas que no son de tasa fija', () => {
+    expect(
+      weightedFixedRateBs([
+        { useFixedRate: true, targetUsd: '100.00', targetBs: '50000.00' },
+        { useFixedRate: false, targetUsd: '900.00', targetBs: null },
+      ]),
+    ).toBe(500);
+  });
+
+  it('sin base utilizable → null', () => {
+    expect(weightedFixedRateBs([])).toBeNull();
+    expect(
+      weightedFixedRateBs([
+        { useFixedRate: true, targetUsd: null, targetBs: '1000.00' },
+      ]),
+    ).toBeNull();
   });
 });

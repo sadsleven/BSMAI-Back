@@ -46,6 +46,8 @@ export interface PendingPayable {
   internalNumber: string;
   orderId: string;
   orderNumber: string;
+  /** N° de la factura VIGENTE de la orden (espejo); null si no tiene. */
+  invoiceNumber: string | null;
   providerType: 'doctor' | 'care_center';
   doctorId: string | null;
   careCenterId: string | null;
@@ -202,7 +204,7 @@ export class AccountsPayableService {
     const dataParams = [...params, limit, offset];
     const rows = await this.dataSource.query<PendingPayable[]>(
       `SELECT iio.id AS "internalOrderId", iio."internalNumber", iio."orderId",
-              o."orderNumber", iio."providerType", iio."doctorId", iio."careCenterId",
+              o."orderNumber", o."invoiceNumber", iio."providerType", iio."doctorId", iio."careCenterId",
               iio."providerAmountUsd"::float8 AS "grossUsd",
               o."billingExchangeRateId", o."branchId", b."name" AS "branchName",
               COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName",
