@@ -29,9 +29,14 @@ export class QueryCareCentersDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['businessName', 'email', 'rif', 'createdAt', 'updatedAt'])
-  sortBy?: 'businessName' | 'email' | 'rif' | 'createdAt' | 'updatedAt' =
-    'createdAt';
+  @IsIn(['businessName', 'shortName', 'email', 'rif', 'createdAt', 'updatedAt'])
+  sortBy?:
+    | 'businessName'
+    | 'shortName'
+    | 'email'
+    | 'rif'
+    | 'createdAt'
+    | 'updatedAt' = 'createdAt';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])

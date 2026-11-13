@@ -28,8 +28,8 @@ export class QueryInsurancesDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['name', 'createdAt', 'updatedAt'])
-  sortBy?: 'name' | 'createdAt' | 'updatedAt' = 'createdAt';
+  @IsIn(['name', 'shortName', 'createdAt', 'updatedAt'])
+  sortBy?: 'name' | 'shortName' | 'createdAt' | 'updatedAt' = 'createdAt';
 
   @IsOptional()
   @IsIn(['ASC', 'DESC', 'asc', 'desc'])

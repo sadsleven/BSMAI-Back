@@ -78,7 +78,7 @@ export class CareCentersService {
 
     if (search && search.trim()) {
       qb.andWhere(
-        '(LOWER(center.businessName) LIKE :s OR LOWER(center.email) LIKE :s OR LOWER(center.rif) LIKE :s)',
+        '(LOWER(center.businessName) LIKE :s OR LOWER(COALESCE(center."shortName", \'\')) LIKE :s OR LOWER(center.email) LIKE :s OR LOWER(center.rif) LIKE :s)',
         { s: `%${search.trim().toLowerCase()}%` },
       );
     }
@@ -142,6 +142,7 @@ export class CareCentersService {
 
     const center = this.repo.create({
       businessName,
+      shortName: dto.shortName?.trim() || null,
       email,
       rif,
       centerAddress: dto.centerAddress?.trim() || null,
@@ -196,6 +197,9 @@ export class CareCentersService {
         center.businessName = businessName;
         accountFieldsChanged = true;
       }
+    }
+    if (dto.shortName !== undefined) {
+      center.shortName = dto.shortName?.trim() || null;
     }
     if (dto.email !== undefined) {
       const trimmed = dto.email ? dto.email.toLowerCase().trim() : null;

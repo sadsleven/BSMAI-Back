@@ -127,6 +127,11 @@ export class AccountsReceivable {
    * se hidrata); en el detalle es `orders.length`.
    */
   orderCount?: number;
+  /**
+   * N° de factura de las órdenes del lote, sin repetir. Un lote puede agrupar
+   * órdenes de varias facturas (o de ninguna, si aún no se emitió).
+   */
+  invoiceNumbers?: string[];
   /** Target USD del lote (modo usd), YA con el ajuste aplicado. */
   targetUsd?: number;
   /** Target Bs del lote (modo fixed), YA con el ajuste aplicado. */

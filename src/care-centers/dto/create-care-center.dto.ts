@@ -26,6 +26,12 @@ export class CreateCareCenterDto {
   @MaxLength(200)
   businessName: string;
 
+  /** Nombre corto / comercial ("URIMECA"). Opcional, no único. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  shortName?: string;
+
   /** Opcional; requerido sólo para habilitar el acceso (password). `''`→null. */
   @IsOptional()
   @ValidateIf(

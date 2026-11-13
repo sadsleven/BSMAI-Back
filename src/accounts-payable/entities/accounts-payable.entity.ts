@@ -122,6 +122,11 @@ export class AccountsPayable {
    * pivot no se hidrata); en el detalle es `orders.length`.
    */
   orderCount?: number;
+  /**
+   * N° de factura de las órdenes del lote, sin repetir. Un lote puede agrupar
+   * órdenes de varias facturas (o de ninguna, si aún no se emitió).
+   */
+  invoiceNumbers?: string[];
   /** Suma de `grossUsd` del pivot (bruto USD del lote). */
   grossUsd?: number;
   /** Nº de abonos registrados. */

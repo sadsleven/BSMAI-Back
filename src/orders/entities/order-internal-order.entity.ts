@@ -87,6 +87,19 @@ export class OrderInternalOrder {
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
   providerAmountUsd?: string | null;
 
+  /**
+   * El proveedor ya cobró en el acto (órdenes de contado). La obligación existe
+   * — `providerAmountUsd` sigue siendo el monto liquidado — pero NO es deuda:
+   * queda fuera de los pendientes de Cuentas por pagar y de su reporte. Se marca
+   * en el Paso 4 y se puede corregir mientras no esté dentro de un lote.
+   */
+  @Column({ type: 'boolean', default: false })
+  providerPaidOnSite: boolean;
+
+  /** Cuándo se marcó como pagada en el acto. `null` si nunca se marcó. */
+  @Column({ type: 'timestamptz', nullable: true })
+  providerPaidOnSiteAt?: Date | null;
+
   /** Ordinal 1-based del proveedor dentro de la orden (orden de aparición). `1` = base. */
   @Column({ type: 'integer' })
   sequencePosition: number;
