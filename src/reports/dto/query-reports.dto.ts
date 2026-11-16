@@ -74,13 +74,11 @@ export class QueryReceivablesReportDto extends QueryReportsDto {
     'uncollected',
     'partially_collected',
     'collected',
-    'overcollected',
   ])
   state?:
     | 'uncollected'
     | 'partially_collected'
-    | 'collected'
-    | 'overcollected';
+    | 'collected';
 }
 
 /**

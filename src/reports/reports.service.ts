@@ -1103,8 +1103,6 @@ export class ReportsService {
         map.set(key, agg);
       }
       agg.orders.add(r.orderId);
-      agg.targetUsd += num(row.targetUsd);
-      agg.targetBs += num(row.targetBs);
       if (r.receivableId) {
         agg.lotes.add(r.receivableId);
         let seen = seenLotePerDebtor.get(key);
@@ -1118,27 +1116,25 @@ export class ReportsService {
           if (mode === 'fixed') {
             const tgt = round2(loteTargetBs.get(r.receivableId) ?? 0);
             const col = round2(collectedBs.get(r.receivableId) ?? 0);
+            agg.targetBs += tgt;
             agg.collectedBs += col;
-            if (
-              r.receivableStatus !== 'collected' &&
-              r.receivableStatus !== 'overcollected'
-            ) {
+            if (r.receivableStatus !== 'collected') {
               agg.pendingBs += Math.max(0, round2(tgt - col));
             }
           } else {
             const tgt = round2(loteTargetUsd.get(r.receivableId) ?? 0);
             const col = round2(collectedUsd.get(r.receivableId) ?? 0);
+            agg.targetUsd += tgt;
             agg.collectedUsd += col;
-            if (
-              r.receivableStatus !== 'collected' &&
-              r.receivableStatus !== 'overcollected'
-            ) {
+            if (r.receivableStatus !== 'collected') {
               agg.pendingUsd += Math.max(0, round2(tgt - col));
             }
           }
         }
       } else {
         // Sin lote: target completo es pendiente, en su moneda nativa.
+        agg.targetUsd += num(row.targetUsd);
+        agg.targetBs += num(row.targetBs);
         if (row.useFixedRate) agg.pendingBs += num(row.targetBs);
         else agg.pendingUsd += num(row.targetUsd);
       }
@@ -1263,27 +1259,11 @@ export class ReportsService {
       loteAdjustment?: Map<string, number>;
     },
   ): Record<string, number> {
+    const seen = new Set<string>();
     let targetUsd = 0;
     let targetBs = 0;
-    for (const row of perOrderRows) {
-      targetUsd += num(row.targetUsd);
-      targetBs += num(row.targetBs);
-    }
-    // Los targets por fila son el snapshot por orden (sin ajuste): el ajuste
-    // vive en el lote, así que se suma una vez por lote en su moneda.
-    for (const [lote, adj] of ctx.loteAdjustment ?? []) {
-      if (!adj) continue;
-      if (ctx.loteMode.get(lote) === 'fixed') targetBs += adj;
-      else targetUsd += adj;
-    }
-    let collectedUsd = 0;
-    let collectedBs = 0;
-    for (const [, v] of ctx.collectedUsd) collectedUsd += v;
-    for (const [, v] of ctx.collectedBs) collectedBs += v;
-    // Sólo sumar collected del modo correspondiente.
     let collUsd = 0;
     let collBs = 0;
-    const seen = new Set<string>();
     let pendingUsd = 0;
     let pendingBs = 0;
     for (let i = 0; i < orders.length; i++) {
@@ -1296,31 +1276,28 @@ export class ReportsService {
         if (mode === 'fixed') {
           const tgt = round2(ctx.loteTargetBs.get(r.receivableId) ?? 0);
           const col = round2(ctx.collectedBs.get(r.receivableId) ?? 0);
+          targetBs += tgt;
           collBs += col;
-          if (
-            r.receivableStatus !== 'collected' &&
-            r.receivableStatus !== 'overcollected'
-          ) {
+          if (r.receivableStatus !== 'collected') {
             pendingBs += Math.max(0, round2(tgt - col));
           }
         } else {
           const tgt = round2(ctx.loteTargetUsd.get(r.receivableId) ?? 0);
           const col = round2(ctx.collectedUsd.get(r.receivableId) ?? 0);
+          targetUsd += tgt;
           collUsd += col;
-          if (
-            r.receivableStatus !== 'collected' &&
-            r.receivableStatus !== 'overcollected'
-          ) {
+          if (r.receivableStatus !== 'collected') {
             pendingUsd += Math.max(0, round2(tgt - col));
           }
         }
       } else {
+        targetUsd += num(row.targetUsd);
+        targetBs += num(row.targetBs);
         if (row.useFixedRate) pendingBs += num(row.targetBs);
         else pendingUsd += num(row.targetUsd);
       }
     }
-    void collectedUsd;
-    void collectedBs;
+    void ctx.loteAdjustment;
     return {
       // Órdenes distintas: una orden mixta emite 2 filas (porción fija+indexada)
       // y el FE muestra este valor como "Cantidad de órdenes".
@@ -2109,7 +2086,7 @@ export class ReportsService {
       useFixedRate: boolean;
       orderDate: string;
     }>) {
-      if (row.state === 'collected' || row.state === 'overcollected') continue;
+      if (row.state === 'collected') continue;
       const b = bucketOf(row.orderDate);
       receivableBuckets[b].count += 1;
       if (row.useFixedRate) {

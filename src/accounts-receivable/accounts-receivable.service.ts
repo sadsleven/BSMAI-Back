@@ -782,7 +782,7 @@ export class AccountsReceivableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'collected' || batch.status === 'overcollected') {
+    if (batch.status === 'collected') {
       throw new BadRequestException(
         'No se pueden agregar órdenes a un lote ya cobrado. Edita o quita un cobro primero.',
       );
@@ -1200,12 +1200,11 @@ export class AccountsReceivableService {
     let status:
       | 'uncollected'
       | 'partially_collected'
-      | 'collected'
-      | 'overcollected';
+      | 'collected';
     if (batch.mode === 'fixed') {
       const target = batch.targetBs ?? 0;
       const collected = batch.collectedBs ?? 0;
-      if (collected > target + TOLERANCE_BS) status = 'overcollected';
+      if (collected > target + TOLERANCE_BS) status = 'collected';
       else if (collected > 0 && Math.abs(target - collected) <= TOLERANCE_BS)
         status = 'collected';
       else if (collected > 0) status = 'partially_collected';
@@ -1213,14 +1212,14 @@ export class AccountsReceivableService {
     } else {
       const target = batch.targetUsd ?? 0;
       const collected = batch.collectedUsd ?? 0;
-      if (collected > target + TOLERANCE_USD) status = 'overcollected';
+      if (collected > target + TOLERANCE_USD) status = 'collected';
       else if (collected > 0 && Math.abs(target - collected) <= TOLERANCE_USD)
         status = 'collected';
       else if (collected > 0) status = 'partially_collected';
       else status = 'uncollected';
     }
     const collectedAt =
-      status === 'collected' || status === 'overcollected'
+      status === 'collected'
         ? (batch.collectedAt ?? new Date())
         : null;
     await mgr.update(AccountsReceivable, id, { status, collectedAt });

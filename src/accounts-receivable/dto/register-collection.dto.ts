@@ -187,12 +187,11 @@ export class QueryAccountsReceivableDto {
   search?: string;
 
   @IsOptional()
-  @IsIn(['collected', 'uncollected', 'partially_collected', 'overcollected'])
+  @IsIn(['collected', 'uncollected', 'partially_collected'])
   status?:
     | 'collected'
     | 'uncollected'
-    | 'partially_collected'
-    | 'overcollected';
+    | 'partially_collected';
 
   @IsOptional()
   @IsUUID()
