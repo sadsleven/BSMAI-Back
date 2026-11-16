@@ -1114,12 +1114,23 @@ export class ReportsService {
           seen.add(r.receivableId);
           const mode = loteMode.get(r.receivableId) ?? 'usd';
           if (mode === 'fixed') {
-            const tgt = round2(loteTargetBs.get(r.receivableId) ?? 0);
-            const col = round2(collectedBs.get(r.receivableId) ?? 0);
-            agg.targetBs += tgt;
-            agg.collectedBs += col;
+            const tgtBs = round2(loteTargetBs.get(r.receivableId) ?? 0);
+            const tgtUsd = round2(loteTargetUsd.get(r.receivableId) ?? 0);
+            const colBs = round2(collectedBs.get(r.receivableId) ?? 0);
+            // Tasa del lote: Bs por USD (usamos los targets para calcularla).
+            const rateBs = tgtUsd > 0 ? tgtBs / tgtUsd : 0;
+            // Convertir Bs a USD para los campos *Usd.
+            const tgtUsdConverted = rateBs > 0 ? round2(tgtBs / rateBs) : tgtUsd;
+            const colUsdConverted = rateBs > 0 ? round2(colBs / rateBs) : 0;
+            agg.targetUsd += tgtUsdConverted;
+            agg.targetBs += tgtBs;
+            agg.collectedUsd += colUsdConverted;
+            agg.collectedBs += colBs;
             if (r.receivableStatus !== 'collected') {
-              agg.pendingBs += Math.max(0, round2(tgt - col));
+              const pendingBs = Math.max(0, round2(tgtBs - colBs));
+              const pendingUsd = rateBs > 0 ? round2(pendingBs / rateBs) : 0;
+              agg.pendingUsd += pendingUsd;
+              agg.pendingBs += pendingBs;
             }
           } else {
             const tgt = round2(loteTargetUsd.get(r.receivableId) ?? 0);
@@ -1274,12 +1285,20 @@ export class ReportsService {
         seen.add(r.receivableId);
         const mode = ctx.loteMode.get(r.receivableId) ?? 'usd';
         if (mode === 'fixed') {
-          const tgt = round2(ctx.loteTargetBs.get(r.receivableId) ?? 0);
-          const col = round2(ctx.collectedBs.get(r.receivableId) ?? 0);
-          targetBs += tgt;
-          collBs += col;
+          const tgtBs = round2(ctx.loteTargetBs.get(r.receivableId) ?? 0);
+          const tgtUsd = round2(ctx.loteTargetUsd.get(r.receivableId) ?? 0);
+          const colBs = round2(ctx.collectedBs.get(r.receivableId) ?? 0);
+          // Tasa del lote: Bs por USD (usamos los targets para calcularla).
+          const rateBs = tgtUsd > 0 ? tgtBs / tgtUsd : 0;
+          // Convertir Bs a USD para los campos *Usd.
+          targetUsd += rateBs > 0 ? round2(tgtBs / rateBs) : tgtUsd;
+          targetBs += tgtBs;
+          collUsd += rateBs > 0 ? round2(colBs / rateBs) : 0;
+          collBs += colBs;
           if (r.receivableStatus !== 'collected') {
-            pendingBs += Math.max(0, round2(tgt - col));
+            const pBs = Math.max(0, round2(tgtBs - colBs));
+            pendingUsd += rateBs > 0 ? round2(pBs / rateBs) : 0;
+            pendingBs += pBs;
           }
         } else {
           const tgt = round2(ctx.loteTargetUsd.get(r.receivableId) ?? 0);
