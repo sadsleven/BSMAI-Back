@@ -26,6 +26,14 @@ export class CareCenter {
   @Column({ type: 'varchar', length: 200, unique: true })
   businessName: string;
 
+  /**
+   * Nombre corto / comercial del centro ("URIMECA", "RISLAB"). Opcional y no
+   * único. Se usa en listados y reportes; los documentos legales (facturas,
+   * comprobantes SENIAT) siguen imprimiendo la razón social completa.
+   */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  shortName?: string | null;
+
   @Column({ type: 'varchar', length: 200, nullable: true })
   email?: string | null;
 

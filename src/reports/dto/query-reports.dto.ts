@@ -56,6 +56,29 @@ export class QueryReceivablesReportDto extends QueryReportsDto {
   @IsOptional()
   @IsIn(['insurance', 'holder'])
   groupBy?: 'insurance' | 'holder';
+
+  /**
+   * Tipo de deudor. Sustituye al uso histórico de `status` para lo mismo, que
+   * se sigue aceptando por compatibilidad con los enlaces guardados.
+   */
+  @IsOptional()
+  @IsIn(['insurance', 'holder'])
+  debtorType?: 'insurance' | 'holder';
+
+  /**
+   * Estado de cobro del lote. `uncollected` incluye las órdenes aún sin lote
+   * (el FE las etiqueta igual: "Por cobrar"). Sin valor = todas.
+   */
+  @IsOptional()
+  @IsIn([
+    'uncollected',
+    'partially_collected',
+    'collected',
+  ])
+  state?:
+    | 'uncollected'
+    | 'partially_collected'
+    | 'collected';
 }
 
 /**

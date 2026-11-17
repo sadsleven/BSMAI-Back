@@ -66,6 +66,8 @@ interface PayableOrderTotals {
   grossUsd: number;
   /** Σ `grossUsd` × tasa de facturación de cada orden (fallback sin tasa de lote). */
   grossBsBilling: number;
+  /** N° de factura de las órdenes del lote, sin repetir y en orden. */
+  invoiceNumbers: string[];
 }
 
 /** Agregados de los abonos de un lote, resueltos en SQL (listado). */
@@ -163,6 +165,8 @@ export class AccountsPayableService {
       `o.status = 'finalized'`,
       `o."deletedAt" IS NULL`,
       `iio."providerAmountUsd" IS NOT NULL`,
+      // Contado liquidado en el acto: no hay deuda que pagar.
+      `iio."providerPaidOnSite" = false`,
       `NOT EXISTS (SELECT 1 FROM "accounts_payable_orders" apo WHERE apo."internalOrderId" = iio.id)`,
     ];
 
@@ -186,8 +190,12 @@ export class AccountsPayableService {
     }
     if (search && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`);
+      const n = params.length;
       where.push(
-        `(LOWER(iio."internalNumber") LIKE $${params.length} OR LOWER(o."orderNumber") LIKE $${params.length})`,
+        `(LOWER(iio."internalNumber") LIKE $${n}
+          OR LOWER(o."orderNumber") LIKE $${n}
+          OR LOWER(COALESCE(o."invoiceNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(o."controlNumber", '')) LIKE $${n})`,
       );
     }
 
@@ -207,7 +215,7 @@ export class AccountsPayableService {
               o."orderNumber", o."invoiceNumber", iio."providerType", iio."doctorId", iio."careCenterId",
               iio."providerAmountUsd"::float8 AS "grossUsd",
               o."billingExchangeRateId", o."branchId", b."name" AS "branchName",
-              COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName",
+              COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName") AS "providerName",
               iio."createdAt"
        FROM "order_internal_orders" iio
        JOIN "orders" o ON o.id = iio."orderId"
@@ -285,7 +293,12 @@ export class AccountsPayableService {
         `(LOWER(ap."payableNumber") LIKE :s
           OR EXISTS (SELECT 1 FROM "accounts_payable_orders" apo4
                      JOIN "order_internal_orders" iio4 ON iio4.id = apo4."internalOrderId"
-                     WHERE apo4."payableId" = ap.id AND LOWER(iio4."internalNumber") LIKE :s))`,
+                     JOIN "orders" o4 ON o4.id = iio4."orderId"
+                     WHERE apo4."payableId" = ap.id
+                       AND (LOWER(iio4."internalNumber") LIKE :s
+                            OR LOWER(o4."orderNumber") LIKE :s
+                            OR LOWER(COALESCE(o4."invoiceNumber", '')) LIKE :s
+                            OR LOWER(COALESCE(o4."controlNumber", '')) LIKE :s)))`,
         { s },
       );
     }
@@ -348,12 +361,15 @@ export class AccountsPayableService {
         orderCount: string;
         grossUsd: string;
         grossBsBilling: string;
+        invoiceNumbers: string[] | null;
       }>
     >(
       `SELECT apo."payableId",
               COUNT(*) AS "orderCount",
               COALESCE(SUM(apo."grossUsd"), 0) AS "grossUsd",
-              COALESCE(SUM(apo."grossUsd" * COALESCE(er."amountBs", 0)), 0) AS "grossBsBilling"
+              COALESCE(SUM(apo."grossUsd" * COALESCE(er."amountBs", 0)), 0) AS "grossBsBilling",
+              ARRAY(SELECT DISTINCT x FROM unnest(array_agg(o."invoiceNumber")) AS x
+                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceNumbers"
        FROM "accounts_payable_orders" apo
        JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
        JOIN "orders" o ON o.id = iio."orderId"
@@ -369,6 +385,7 @@ export class AccountsPayableService {
           orderCount: Number(r.orderCount) || 0,
           grossUsd: Number(r.grossUsd) || 0,
           grossBsBilling: Number(r.grossBsBilling) || 0,
+          invoiceNumbers: r.invoiceNumbers ?? [],
         },
       ]),
     );
@@ -605,15 +622,22 @@ export class AccountsPayableService {
       grossUsd = totals.grossUsd;
       billedGrossBs = totals.grossBsBilling;
       batch.orderCount = totals.orderCount;
+      batch.invoiceNumbers = totals.invoiceNumbers;
     } else {
+      const invoices = new Set<string>();
       for (const apo of batch.orders ?? []) {
         const g = Number(apo.grossUsd) || 0;
         grossUsd += g;
         billedGrossBs +=
           g *
           Number(apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0);
+        const inv = apo.internalOrder?.order?.invoiceNumber;
+        if (inv) invoices.add(inv);
       }
       batch.orderCount = (batch.orders ?? []).length;
+      batch.invoiceNumbers = [...invoices].sort((a, b) =>
+        a.localeCompare(b, 'es', { numeric: true }),
+      );
     }
     grossUsd = round2(grossUsd);
 
@@ -962,11 +986,13 @@ export class AccountsPayableService {
         grossUsd: string | null;
         branchId: string;
         status: string;
+        paidOnSite: boolean;
         inBatch: boolean;
       }>
     >(
       `SELECT iio.id AS "internalOrderId", iio."orderId", iio."providerType",
               iio."doctorId", iio."careCenterId", iio."providerAmountUsd" AS "grossUsd",
+              iio."providerPaidOnSite" AS "paidOnSite",
               o."branchId", o.status,
               EXISTS(SELECT 1 FROM "accounts_payable_orders" apo WHERE apo."internalOrderId" = iio.id) AS "inBatch"
        FROM "order_internal_orders" iio
@@ -989,6 +1015,11 @@ export class AccountsPayableService {
       if (r.grossUsd === null) {
         throw new BadRequestException(
           'Una orden no tiene monto facturado para su proveedor',
+        );
+      }
+      if (r.paidOnSite) {
+        throw new BadRequestException(
+          'Una orden ya se le pagó al proveedor en el acto: no entra en cuentas por pagar',
         );
       }
       if (r.inBatch) {

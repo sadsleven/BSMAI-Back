@@ -17,6 +17,11 @@ import {
   QueryReceivablesReportDto,
   QueryReportsDto,
 } from './dto/query-reports.dto';
+import {
+  computePayableSummary,
+  emptyPayableSummary,
+  groupPayablesByProvider,
+} from './payables-math';
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const num = (v: unknown): number => {
@@ -50,12 +55,29 @@ interface PayablePaymentDetail {
   amountBs: number;
 }
 
+/**
+ * Un abono del lote: lo que cubre en USD, lo que se pagó en Bs y los pagos
+ * concretos que lo respaldan. El estado de cuenta (y el documento mensual de
+ * los centros tipo laboratorio) imprime un renglón por abono.
+ */
+interface PayableSettlementDetail {
+  id: string;
+  settlementDate: string | null;
+  coveredUsd: number;
+  grossBs: number;
+  retentionBs: number;
+  netBs: number;
+  payments: PayablePaymentDetail[];
+}
+
 interface PayablePaymentMeta {
   /** Última fecha de pago del lote. */
   date: string | null;
   /** Referencias únicas, separadas por coma (compatibilidad). */
   ref: string | null;
   payments: PayablePaymentDetail[];
+  /** Abonos del lote en orden cronológico (incluye los parciales). */
+  settlements: PayableSettlementDetail[];
 }
 
 /** Fila cruda de la consulta de facturas (todo numérico llega como texto). */
@@ -263,7 +285,7 @@ export class ReportsService {
     user: AuthenticatedUser,
   ): Promise<{ rows: unknown[]; summary: Record<string, number> }> {
     const scope = await this.orderScopeWhere(user, query);
-    if (scope.blocked) return { rows: [], summary: this.emptyPayableSummary() };
+    if (scope.blocked) return { rows: [], summary: emptyPayableSummary() };
 
     const taxUnitBs = await this.currentTaxUnitBs();
     const fallbackRateBs = await this.fallbackUsdRateBs();
@@ -272,6 +294,9 @@ export class ReportsService {
     const where = [scope.sql];
     const params = [...scope.params];
     where.push(`iio."providerAmountUsd" IS NOT NULL`);
+    // Contado liquidado en el acto: la orden se produjo, pero no es deuda y no
+    // va en cuentas por pagar (pedido del cliente, 28/10/2026).
+    where.push(`iio."providerPaidOnSite" = false`);
     if (query.doctorId) {
       params.push(query.doctorId);
       where.push(`iio."doctorId" = $${params.length}`);
@@ -286,7 +311,9 @@ export class ReportsService {
       where.push(
         `(LOWER(iio."internalNumber") LIKE $${n}
           OR LOWER(o."orderNumber") LIKE $${n}
-          OR LOWER(COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName", '')) LIKE $${n})`,
+          OR LOWER(COALESCE(o."invoiceNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(o."controlNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName", '')) LIKE $${n})`,
       );
     }
 
@@ -296,6 +323,11 @@ export class ReportsService {
         internalOrderId: string;
         orderId: string;
         orderNumber: string;
+        /** N° de la factura VIGENTE de la orden (espejo); null si no tiene. */
+        invoiceNumber: string | null;
+        controlNumber: string | null;
+        /** Fecha de emisión de la factura vigente; null si aún no se facturó. */
+        invoiceDate: string | null;
         internalNumber: string;
         orderDate: string;
         branchId: string;
@@ -328,12 +360,13 @@ export class ReportsService {
       }>
     >(
       `SELECT iio.id AS "internalOrderId", iio."orderId", o."orderNumber",
+              o."invoiceNumber", o."controlNumber", o."invoiceDate",
               iio."internalNumber", o."orderDate", o."branchId", b."name" AS "branchName",
               iio."providerType", iio."doctorId", iio."careCenterId",
               d."isLegalEntity" AS "doctorIsLegal",
-              COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName",
+              COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName") AS "providerName",
               COALESCE(pac."businessName", NULLIF(TRIM(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')), '')) AS "patientName",
-              i."name" AS "insuranceName",
+              COALESCE(NULLIF(i."shortName", ''), i."name") AS "insuranceName",
               (SELECT string_agg(DISTINCT ost."customName", ', ')
                  FROM "order_service_types" ost
                  WHERE ost."internalOrderId" = iio.id) AS "procedure",
@@ -515,6 +548,9 @@ export class ReportsService {
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
+        invoiceNumber: r.invoiceNumber ?? '',
+        controlNumber: r.controlNumber ?? '',
+        invoiceDate: r.invoiceDate ?? null,
         internalNumber: r.internalNumber,
         orderDate: r.orderDate,
         branchId: r.branchId,
@@ -537,12 +573,31 @@ export class ReportsService {
         paymentDate: meta?.date ?? null,
         paymentReference: meta?.ref ?? null,
         payments: meta?.payments ?? [],
+        // Saldos del LOTE completo (se repiten en cada fila del lote): lo que
+        // ya se abonó y lo que falta. Con esto el edo. de cuenta muestra los
+        // pagos parciales sin tener que recalcular nada en el front.
+        payableGrossUsd: r.payableId
+          ? round2(loteGrossUsd.get(r.payableId) ?? 0)
+          : null,
+        payableCoveredUsd: r.payableId
+          ? round2(loteCoveredUsd.get(r.payableId) ?? 0)
+          : null,
+        payablePendingUsd: r.payableId
+          ? Math.max(
+              0,
+              round2(
+                (loteGrossUsd.get(r.payableId) ?? 0) -
+                  (loteCoveredUsd.get(r.payableId) ?? 0),
+              ),
+            )
+          : null,
+        settlements: meta?.settlements ?? [],
         state,
       };
     });
 
     // ---- Summary global (paid/pending exactos) ----
-    const summary = this.computePayableSummary(obligations, {
+    const summary = computePayableSummary(obligations, {
       paidByPayable,
       loteGrossBs,
       loteGrossUsd,
@@ -555,99 +610,13 @@ export class ReportsService {
     }
 
     // ---- groupBy=provider ----
-    type ProvAgg = {
-      providerType: 'doctor' | 'care_center';
-      providerId: string | null;
-      providerName: string;
-      orders: Set<string>;
-      lotes: Set<string>;
-      grossUsd: number;
-      grossBs: number;
-      netBs: number;
-      paidBs: number;
-      pendingBs: number;
-    };
-    const provMap = new Map<string, ProvAgg>();
-    const provKey = (r: {
-      providerType: string;
-      doctorId: string | null;
-      careCenterId: string | null;
-    }) =>
-      r.providerType === 'doctor'
-        ? `doctor:${r.doctorId}`
-        : `cc:${r.careCenterId}`;
-
-    // Acumula bruto/neto por proveedor desde las obligaciones (incluye sin lote).
-    for (let i = 0; i < obligations.length; i++) {
-      const r = obligations[i];
-      const row = perObligationRows[i];
-      const key = provKey(r);
-      let agg = provMap.get(key);
-      if (!agg) {
-        agg = {
-          providerType: r.providerType,
-          providerId: r.providerType === 'doctor' ? r.doctorId : r.careCenterId,
-          providerName: r.providerName ?? '—',
-          orders: new Set(),
-          lotes: new Set(),
-          grossUsd: 0,
-          grossBs: 0,
-          netBs: 0,
-          paidBs: 0,
-          pendingBs: 0,
-        };
-        provMap.set(key, agg);
-      }
-      agg.orders.add(r.orderId);
-      agg.grossUsd += row.grossUsd;
-      agg.grossBs += row.grossBs;
-      if (r.payableId) agg.lotes.add(r.payableId);
-    }
-
-    // paidBs y pendingBs por proveedor (mismas fórmulas que la summary, por proveedor).
-    // Para evitar doble conteo, recorrer lotes únicos y obligaciones sin lote.
-    const seenLotePerProv = new Map<string, Set<string>>();
-    for (let i = 0; i < obligations.length; i++) {
-      const r = obligations[i];
-      const row = perObligationRows[i];
-      const key = provKey(r);
-      const agg = provMap.get(key)!;
-      if (r.payableId) {
-        let seen = seenLotePerProv.get(key);
-        if (!seen) {
-          seen = new Set();
-          seenLotePerProv.set(key, seen);
-        }
-        if (!seen.has(r.payableId)) {
-          seen.add(r.payableId);
-          const netBs = round2(loteNetBs.get(r.payableId) ?? 0);
-          const paidBs = round2(paidByPayable.get(r.payableId) ?? 0);
-          agg.netBs += netBs;
-          agg.paidBs += paidBs;
-          if (r.payableStatus !== 'paid')
-            agg.pendingBs += Math.max(0, round2(netBs - paidBs));
-        }
-      } else {
-        // Sin lote: neto de la obligación cuenta como pendiente; netoBs aporta a netBs.
-        agg.netBs += row.netBs;
-        agg.pendingBs += row.netBs;
-      }
-    }
-
-    const groupRows = Array.from(provMap.values())
-      .map((a) => ({
-        providerType: a.providerType,
-        providerId: a.providerId,
-        providerName: a.providerName,
-        ordersCount: a.orders.size,
-        lotesCount: a.lotes.size,
-        grossUsd: round2(a.grossUsd),
-        grossBs: round2(a.grossBs),
-        netBs: round2(a.netBs),
-        paidBs: round2(a.paidBs),
-        pendingBs: round2(a.pendingBs),
-      }))
-      .sort((x, y) => y.grossUsd - x.grossUsd);
+    const groupRows = groupPayablesByProvider(obligations, perObligationRows, {
+      paidByPayable,
+      loteGrossBs,
+      loteGrossUsd,
+      loteNetBs,
+      loteCoveredUsd,
+    });
 
     return { rows: groupRows, summary };
   }
@@ -681,17 +650,67 @@ export class ReportsService {
   }
 
   /**
-   * Fecha (última), referencias y detalle de los pagos de cada lote AP, para
-   * el edo. de cuenta: cada pago con su banco, referencia y monto en Bs.
+   * Fecha (última), referencias, abonos y detalle de los pagos de cada lote AP.
+   * El edo. de cuenta imprime un renglón por abono (incluidos los parciales),
+   * cada uno con sus pagos: banco, referencia y monto en Bs.
    */
   private async paymentMetaByPayable(
     payableIds: string[],
   ): Promise<Map<string, PayablePaymentMeta>> {
     const out = new Map<string, PayablePaymentMeta>();
     if (payableIds.length === 0) return out;
+    const emptyMeta = (): PayablePaymentMeta => ({
+      date: null,
+      ref: null,
+      payments: [],
+      settlements: [],
+    });
+
+    // 1) Abonos del lote (un lote se puede pagar en varias partes).
+    const settlementRows = await this.dataSource.query<
+      Array<{
+        id: string;
+        payableId: string;
+        settlementDate: string | null;
+        coveredUsd: string | null;
+        grossBs: string | null;
+        retentionBs: string | null;
+        netBs: string | null;
+      }>
+    >(
+      `SELECT s.id, s."payableId",
+              s."settlementDate"::text AS "settlementDate",
+              s."coveredUsd"::text AS "coveredUsd",
+              s."grossBs"::text AS "grossBs",
+              s."retentionBs"::text AS "retentionBs",
+              s."netBs"::text AS "netBs"
+       FROM "accounts_payable_settlements" s
+       WHERE s."payableId" = ANY($1) AND s."deletedAt" IS NULL
+       ORDER BY s."settlementDate" ASC, s."createdAt" ASC`,
+      [payableIds],
+    );
+    const settlementById = new Map<string, PayableSettlementDetail>();
+    for (const s of settlementRows) {
+      const meta = out.get(s.payableId) ?? emptyMeta();
+      const detail: PayableSettlementDetail = {
+        id: s.id,
+        settlementDate: dateOnly(s.settlementDate) || null,
+        coveredUsd: round2(num(s.coveredUsd)),
+        grossBs: round2(num(s.grossBs)),
+        retentionBs: round2(num(s.retentionBs)),
+        netBs: round2(num(s.netBs)),
+        payments: [],
+      };
+      meta.settlements.push(detail);
+      settlementById.set(s.id, detail);
+      out.set(s.payableId, meta);
+    }
+
+    // 2) Pagos de cada abono.
     const rows = await this.dataSource.query<
       Array<{
         payableId: string;
+        settlementId: string;
         date: string | null;
         type: string;
         reference: string | null;
@@ -701,6 +720,7 @@ export class ReportsService {
       }>
     >(
       `SELECT s."payableId",
+              p."settlementId",
               p."paymentDate"::text AS date,
               p."type" AS type,
               NULLIF(p."referenceNumber", '') AS reference,
@@ -715,17 +735,20 @@ export class ReportsService {
       [payableIds],
     );
     for (const r of rows) {
-      const meta = out.get(r.payableId) ?? { date: null, ref: null, payments: [] };
-      meta.payments.push({
-        date: r.date,
+      const meta = out.get(r.payableId) ?? emptyMeta();
+      const payment: PayablePaymentDetail = {
+        date: dateOnly(r.date) || null,
         type: r.type,
         reference: r.reference,
         bankCode: r.bankCode,
         bankName: r.bankName,
         amountBs: round2(num(r.amountBs)),
-      });
+      };
+      meta.payments.push(payment);
+      settlementById.get(r.settlementId)?.payments.push(payment);
       // `date`/`ref` del lote: última fecha y referencias únicas en orden.
-      if (!meta.date || (r.date && r.date > meta.date)) meta.date = r.date;
+      if (!meta.date || (payment.date && payment.date > meta.date))
+        meta.date = payment.date;
       out.set(r.payableId, meta);
     }
     for (const meta of out.values()) {
@@ -735,80 +758,13 @@ export class ReportsService {
         ),
       ];
       meta.ref = refs.length > 0 ? refs.join(', ') : null;
-    }
-    return out;
-  }
-
-  private emptyPayableSummary(): Record<string, number> {
-    return {
-      count: 0,
-      grossUsd: 0,
-      grossBs: 0,
-      netBs: 0,
-      paidBs: 0,
-      pendingBs: 0,
-    };
-  }
-
-  private computePayableSummary(
-    obligations: Array<{
-      payableId: string | null;
-      payableStatus: string | null;
-    }>,
-    ctx: {
-      paidByPayable: Map<string, number>;
-      loteGrossBs: Map<string, number>;
-      loteGrossUsd: Map<string, number>;
-      loteNetBs: Map<string, number>;
-      perObligationRows: Array<{
-        grossUsd: number;
-        grossBs: number;
-        netBs: number;
-      }>;
-    },
-  ): Record<string, number> {
-    let grossUsd = 0;
-    let grossBs = 0;
-    for (const row of ctx.perObligationRows) {
-      grossUsd += row.grossUsd;
-      grossBs += row.grossBs;
-    }
-    // paidBs = Σ pagos de todos los lotes que matchean.
-    let paidBs = 0;
-    for (const [, v] of ctx.paidByPayable) paidBs += v;
-
-    // netBs con la retención REAL del lote (sobre el bruto agregado, una sola
-    // vez) + estimado por fila sólo para sin-lote — igual que groupBy=provider.
-    // Sumar los estimados por fila aplicaría el sustraendo/umbral PNR una vez
-    // por obligación y el neto no cuadraría con los pagos registrados.
-    // pendingBs = Σ lotes no-pagados de max(0, loteNet − lotePaid) + Σ sin-lote de netBs.
-    let netBs = 0;
-    let pendingBs = 0;
-    const seenLote = new Set<string>();
-    for (let i = 0; i < obligations.length; i++) {
-      const r = obligations[i];
-      if (r.payableId) {
-        if (seenLote.has(r.payableId)) continue;
-        seenLote.add(r.payableId);
-        const net = round2(ctx.loteNetBs.get(r.payableId) ?? 0);
-        netBs += net;
-        if (r.payableStatus !== 'paid') {
-          const paid = round2(ctx.paidByPayable.get(r.payableId) ?? 0);
-          pendingBs += Math.max(0, round2(net - paid));
-        }
-      } else {
-        netBs += ctx.perObligationRows[i].netBs;
-        pendingBs += ctx.perObligationRows[i].netBs;
+      // Un abono sin pagos (ej. compensación) conserva su fecha propia.
+      if (!meta.date) {
+        const last = meta.settlements[meta.settlements.length - 1];
+        meta.date = last?.settlementDate ?? null;
       }
     }
-    return {
-      count: ctx.perObligationRows.length,
-      grossUsd: round2(grossUsd),
-      grossBs: round2(grossBs),
-      netBs: round2(netBs),
-      paidBs: round2(paidBs),
-      pendingBs: round2(pendingBs),
-    };
+    return out;
   }
 
   // ===========================================================================
@@ -836,22 +792,26 @@ export class ReportsService {
       params.push(query.holderId);
       where.push(`o."holderId" = $${params.length}`);
     }
-    if (query.status === 'insurance') where.push(`o."type" = 'insurance'`);
-    if (query.status === 'holder')
-      where.push(`o."type" IN ('credit','cashea')`);
+    // `debtorType` es el filtro nuevo; `status` lo conserva por compatibilidad
+    // con los enlaces viejos (antes `status` significaba el tipo de deudor).
+    const debtorType = query.debtorType ?? query.status;
+    if (debtorType === 'insurance') where.push(`o."type" = 'insurance'`);
+    if (debtorType === 'holder') where.push(`o."type" IN ('credit','cashea')`);
     if (query.search && query.search.trim()) {
       params.push(`%${query.search.trim().toLowerCase()}%`);
       const n = params.length;
       where.push(
         `(LOWER(o."orderNumber") LIKE $${n}
-          OR LOWER(COALESCE(i."name", '')) LIKE $${n}
+          OR LOWER(COALESCE(o."invoiceNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(o."controlNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(NULLIF(i."shortName", ''), i."name", '')) LIKE $${n}
           OR LOWER(COALESCE(p."firstName", '')) LIKE $${n}
           OR LOWER(COALESCE(p."lastName", '')) LIKE $${n}
           OR LOWER(COALESCE(p."businessName", '')) LIKE $${n})`,
       );
     }
 
-    const orders = await this.dataSource.query<
+    const allOrders = await this.dataSource.query<
       Array<{
         orderId: string;
         orderNumber: string;
@@ -872,6 +832,8 @@ export class ReportsService {
         serviceKey: string | null;
         invoiceNumber: string | null;
         controlNumber: string | null;
+        /** Fecha de emisión de la factura vigente; null si aún no se facturó. */
+        invoiceDate: string | null;
         costoUsd: string | null;
         useFixedRate: boolean;
         priceAmount: string;
@@ -895,12 +857,12 @@ export class ReportsService {
       // cada una ligada a SU lote (si lo tiene) vía aro.portion.
       `SELECT o.id AS "orderId", o."orderNumber", o."type" AS "orderType", o."orderDate",
               o."branchId", b."name" AS "branchName",
-              o."insuranceId", o."holderId", i."name" AS "insuranceName",
+              o."insuranceId", o."holderId", COALESCE(NULLIF(i."shortName", ''), i."name") AS "insuranceName",
               p."firstName", p."lastName", p."businessName",
               COALESCE(p."cedula", p."rif") AS "holderIdDisplay",
               COALESCE(pac."businessName", NULLIF(TRIM(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')), '')) AS "patientName",
               COALESCE(pac."cedula", pac."rif") AS "patientIdDisplay",
-              o."serviceKey", o."invoiceNumber", o."controlNumber",
+              o."serviceKey", o."invoiceNumber", o."controlNumber", o."invoiceDate",
               (SELECT string_agg(DISTINCT TRIM(COALESCE(doc."firstName", '') || ' ' || COALESCE(doc."lastName", '')), ', ')
                  FROM "order_service_types" ost2
                  JOIN "doctors" doc ON doc.id = ost2."doctorId"
@@ -946,6 +908,22 @@ export class ReportsService {
        ORDER BY o."orderNumber"::int DESC, pt.portion`,
       params,
     );
+
+    // Filtro de estado de cobro: se aplica sobre el estado derivado (lote o
+    // `sin_lote`). El FE etiqueta `sin_lote` igual que `uncollected` ("Por
+    // cobrar"), así que `state=uncollected` incluye ambos. Se filtra ANTES de
+    // los agregados por lote para que filas, lotes y summary se calculen sobre
+    // el mismo conjunto (el estado es del lote: nunca parte un lote por la mitad).
+    const orders = query.state
+      ? allOrders.filter((r) => {
+          const st = r.receivableId
+            ? (r.receivableStatus ?? 'uncollected')
+            : 'sin_lote';
+          if (query.state === 'uncollected')
+            return st === 'uncollected' || st === 'sin_lote';
+          return st === query.state;
+        })
+      : allOrders;
 
     // Cobros por lote (usd-mode → amountInUsd; fixed-mode → amountInBs).
     const receivableIds = Array.from(
@@ -1058,6 +1036,7 @@ export class ReportsService {
         serviceKey: r.serviceKey ?? '',
         invoiceNumber: r.invoiceNumber ?? '',
         controlNumber: r.controlNumber ?? '',
+        invoiceDate: r.invoiceDate ?? null,
         costoUsd: round2(num(r.costoUsd)),
         useFixedRate: isFixedRow,
         rateBs: isFixedRow ? round2(num(r.fixedRateBs)) : null,
@@ -1124,8 +1103,6 @@ export class ReportsService {
         map.set(key, agg);
       }
       agg.orders.add(r.orderId);
-      agg.targetUsd += num(row.targetUsd);
-      agg.targetBs += num(row.targetBs);
       if (r.receivableId) {
         agg.lotes.add(r.receivableId);
         let seen = seenLotePerDebtor.get(key);
@@ -1137,29 +1114,38 @@ export class ReportsService {
           seen.add(r.receivableId);
           const mode = loteMode.get(r.receivableId) ?? 'usd';
           if (mode === 'fixed') {
-            const tgt = round2(loteTargetBs.get(r.receivableId) ?? 0);
-            const col = round2(collectedBs.get(r.receivableId) ?? 0);
-            agg.collectedBs += col;
-            if (
-              r.receivableStatus !== 'collected' &&
-              r.receivableStatus !== 'overcollected'
-            ) {
-              agg.pendingBs += Math.max(0, round2(tgt - col));
+            const tgtBs = round2(loteTargetBs.get(r.receivableId) ?? 0);
+            const tgtUsd = round2(loteTargetUsd.get(r.receivableId) ?? 0);
+            const colBs = round2(collectedBs.get(r.receivableId) ?? 0);
+            // Tasa del lote: Bs por USD (usamos los targets para calcularla).
+            const rateBs = tgtUsd > 0 ? tgtBs / tgtUsd : 0;
+            // Convertir Bs a USD para los campos *Usd.
+            const tgtUsdConverted = rateBs > 0 ? round2(tgtBs / rateBs) : tgtUsd;
+            const colUsdConverted = rateBs > 0 ? round2(colBs / rateBs) : 0;
+            agg.targetUsd += tgtUsdConverted;
+            agg.targetBs += tgtBs;
+            agg.collectedUsd += colUsdConverted;
+            agg.collectedBs += colBs;
+            if (r.receivableStatus !== 'collected') {
+              const pendingBs = Math.max(0, round2(tgtBs - colBs));
+              const pendingUsd = rateBs > 0 ? round2(pendingBs / rateBs) : 0;
+              agg.pendingUsd += pendingUsd;
+              agg.pendingBs += pendingBs;
             }
           } else {
             const tgt = round2(loteTargetUsd.get(r.receivableId) ?? 0);
             const col = round2(collectedUsd.get(r.receivableId) ?? 0);
+            agg.targetUsd += tgt;
             agg.collectedUsd += col;
-            if (
-              r.receivableStatus !== 'collected' &&
-              r.receivableStatus !== 'overcollected'
-            ) {
+            if (r.receivableStatus !== 'collected') {
               agg.pendingUsd += Math.max(0, round2(tgt - col));
             }
           }
         }
       } else {
         // Sin lote: target completo es pendiente, en su moneda nativa.
+        agg.targetUsd += num(row.targetUsd);
+        agg.targetBs += num(row.targetBs);
         if (row.useFixedRate) agg.pendingBs += num(row.targetBs);
         else agg.pendingUsd += num(row.targetUsd);
       }
@@ -1284,27 +1270,11 @@ export class ReportsService {
       loteAdjustment?: Map<string, number>;
     },
   ): Record<string, number> {
+    const seen = new Set<string>();
     let targetUsd = 0;
     let targetBs = 0;
-    for (const row of perOrderRows) {
-      targetUsd += num(row.targetUsd);
-      targetBs += num(row.targetBs);
-    }
-    // Los targets por fila son el snapshot por orden (sin ajuste): el ajuste
-    // vive en el lote, así que se suma una vez por lote en su moneda.
-    for (const [lote, adj] of ctx.loteAdjustment ?? []) {
-      if (!adj) continue;
-      if (ctx.loteMode.get(lote) === 'fixed') targetBs += adj;
-      else targetUsd += adj;
-    }
-    let collectedUsd = 0;
-    let collectedBs = 0;
-    for (const [, v] of ctx.collectedUsd) collectedUsd += v;
-    for (const [, v] of ctx.collectedBs) collectedBs += v;
-    // Sólo sumar collected del modo correspondiente.
     let collUsd = 0;
     let collBs = 0;
-    const seen = new Set<string>();
     let pendingUsd = 0;
     let pendingBs = 0;
     for (let i = 0; i < orders.length; i++) {
@@ -1315,33 +1285,38 @@ export class ReportsService {
         seen.add(r.receivableId);
         const mode = ctx.loteMode.get(r.receivableId) ?? 'usd';
         if (mode === 'fixed') {
-          const tgt = round2(ctx.loteTargetBs.get(r.receivableId) ?? 0);
-          const col = round2(ctx.collectedBs.get(r.receivableId) ?? 0);
-          collBs += col;
-          if (
-            r.receivableStatus !== 'collected' &&
-            r.receivableStatus !== 'overcollected'
-          ) {
-            pendingBs += Math.max(0, round2(tgt - col));
+          const tgtBs = round2(ctx.loteTargetBs.get(r.receivableId) ?? 0);
+          const tgtUsd = round2(ctx.loteTargetUsd.get(r.receivableId) ?? 0);
+          const colBs = round2(ctx.collectedBs.get(r.receivableId) ?? 0);
+          // Tasa del lote: Bs por USD (usamos los targets para calcularla).
+          const rateBs = tgtUsd > 0 ? tgtBs / tgtUsd : 0;
+          // Convertir Bs a USD para los campos *Usd.
+          targetUsd += rateBs > 0 ? round2(tgtBs / rateBs) : tgtUsd;
+          targetBs += tgtBs;
+          collUsd += rateBs > 0 ? round2(colBs / rateBs) : 0;
+          collBs += colBs;
+          if (r.receivableStatus !== 'collected') {
+            const pBs = Math.max(0, round2(tgtBs - colBs));
+            pendingUsd += rateBs > 0 ? round2(pBs / rateBs) : 0;
+            pendingBs += pBs;
           }
         } else {
           const tgt = round2(ctx.loteTargetUsd.get(r.receivableId) ?? 0);
           const col = round2(ctx.collectedUsd.get(r.receivableId) ?? 0);
+          targetUsd += tgt;
           collUsd += col;
-          if (
-            r.receivableStatus !== 'collected' &&
-            r.receivableStatus !== 'overcollected'
-          ) {
+          if (r.receivableStatus !== 'collected') {
             pendingUsd += Math.max(0, round2(tgt - col));
           }
         }
       } else {
+        targetUsd += num(row.targetUsd);
+        targetBs += num(row.targetBs);
         if (row.useFixedRate) pendingBs += num(row.targetBs);
         else pendingUsd += num(row.targetUsd);
       }
     }
-    void collectedUsd;
-    void collectedBs;
+    void ctx.loteAdjustment;
     return {
       // Órdenes distintas: una orden mixta emite 2 filas (porción fija+indexada)
       // y el FE muestra este valor como "Cantidad de órdenes".
@@ -1428,7 +1403,7 @@ export class ReportsService {
       const n = params.length;
       where.push(
         `(LOWER(tp."taxPayableNumber") LIKE $${n}
-          OR LOWER(COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName", '')) LIKE $${n}
+          OR LOWER(COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName", '')) LIKE $${n}
           OR EXISTS (SELECT 1 FROM "accounts_payable_orders" apo_q
                      JOIN "order_internal_orders" iio_q ON iio_q.id = apo_q."internalOrderId"
                      WHERE apo_q."payableId" = tp."sourcePayableId" AND LOWER(iio_q."internalNumber") LIKE $${n}))`,
@@ -1455,7 +1430,7 @@ export class ReportsService {
     >(
       `SELECT tp.id AS "taxPayableId", tp."taxPayableNumber",
               tp."recipientType" AS "providerType", tp."doctorId", tp."careCenterId",
-              COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName",
+              COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName") AS "providerName",
               tp."personType", tp."grossAmountBs"::text AS "grossAmountBs",
               tp."taxRate"::text AS "taxRate", tp."taxAmountBs"::text AS "taxAmountBs",
               tp.status, tp."sourcePayableId",
@@ -1885,7 +1860,7 @@ export class ReportsService {
       where.push(
         `(LOWER(ap."payableNumber") LIKE $${n}
           OR LOWER(COALESCE(p."referenceNumber", '')) LIKE $${n}
-          OR LOWER(COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName", '')) LIKE $${n})`,
+          OR LOWER(COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName", '')) LIKE $${n})`,
       );
     }
 
@@ -1908,7 +1883,7 @@ export class ReportsService {
               p."amountCurrency", p."amountValue"::text AS "amountValue",
               p."amountInUsd"::text AS "amountInUsd", p."amountInBs"::text AS "amountInBs",
               ap."payableNumber", ap."recipientType" AS "providerType",
-              COALESCE(d."firstName" || ' ' || d."lastName", cc."businessName") AS "providerName"
+              COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName") AS "providerName"
        FROM "accounts_payable_payments" p
        JOIN "accounts_payable_settlements" s ON s.id = p."settlementId"
        JOIN "accounts_payable" ap ON ap.id = s."payableId"
@@ -1995,7 +1970,7 @@ export class ReportsService {
       where.push(
         `(LOWER(ar."receivableNumber") LIKE $${n}
           OR LOWER(COALESCE(p."referenceNumber", '')) LIKE $${n}
-          OR LOWER(COALESCE(i."name", '')) LIKE $${n}
+          OR LOWER(COALESCE(NULLIF(i."shortName", ''), i."name", '')) LIKE $${n}
           OR LOWER(COALESCE(h."firstName" || ' ' || h."lastName", h."businessName", '')) LIKE $${n})`,
       );
     }
@@ -2022,7 +1997,7 @@ export class ReportsService {
               CASE WHEN ar."insuranceId" IS NOT NULL THEN 'insurance'
                    WHEN ar."holderId" IS NOT NULL THEN 'holder'
                    ELSE 'cashea' END AS "debtorType",
-              COALESCE(i."name", h."businessName", h."firstName" || ' ' || h."lastName",
+              COALESCE(NULLIF(i."shortName", ''), i."name", h."businessName", h."firstName" || ' ' || h."lastName",
                        CASE WHEN ar."insuranceId" IS NULL AND ar."holderId" IS NULL THEN 'Cashea' END
               ) AS "debtorName"
        FROM "accounts_receivable_payments" p
@@ -2130,7 +2105,7 @@ export class ReportsService {
       useFixedRate: boolean;
       orderDate: string;
     }>) {
-      if (row.state === 'collected' || row.state === 'overcollected') continue;
+      if (row.state === 'collected') continue;
       const b = bucketOf(row.orderDate);
       receivableBuckets[b].count += 1;
       if (row.useFixedRate) {
@@ -2246,7 +2221,7 @@ export class ReportsService {
           OR LOWER(inv."controlNumber") LIKE $${n}
           OR LOWER(o."orderNumber") LIKE $${n}
           OR LOWER(COALESCE(o."serviceKey", '')) LIKE $${n}
-          OR LOWER(COALESCE(i."name", '')) LIKE $${n}
+          OR LOWER(COALESCE(NULLIF(i."shortName", ''), i."name", '')) LIKE $${n}
           OR LOWER(COALESCE(h."businessName", '')) LIKE $${n}
           OR LOWER(COALESCE(h."firstName", '') || ' ' || COALESCE(h."lastName", '')) LIKE $${n}
           OR LOWER(COALESCE(pac."businessName", '')) LIKE $${n}
@@ -2260,7 +2235,7 @@ export class ReportsService {
               NULLIF(TRIM(COALESCE(cu."firstName", '') || ' ' || COALESCE(cu."lastName", '')), '') AS "createdByName",
               o.id AS "orderId", o."orderNumber", o."type" AS "orderType", o."orderDate",
               o."branchId", b."name" AS "branchName",
-              o."insuranceId", o."holderId", i."name" AS "insuranceName",
+              o."insuranceId", o."holderId", COALESCE(NULLIF(i."shortName", ''), i."name") AS "insuranceName",
               h."firstName", h."lastName", h."businessName",
               COALESCE(h."cedula", h."rif") AS "holderIdDisplay",
               COALESCE(pac."businessName", NULLIF(TRIM(COALESCE(pac."firstName", '') || ' ' || COALESCE(pac."lastName", '')), '')) AS "patientName",
@@ -2285,6 +2260,7 @@ export class ReportsService {
                  CROSS JOIN LATERAL (
                    SELECT COALESCE(
                      NULLIF(TRIM(COALESCE(doc."firstName", '') || ' ' || COALESCE(doc."lastName", '')), ''),
+                     NULLIF(cc."shortName", ''),
                      cc."businessName"
                    ) AS name
                  ) prov

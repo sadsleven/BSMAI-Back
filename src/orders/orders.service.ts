@@ -2605,6 +2605,15 @@ export class OrdersService implements OnModuleInit {
     );
     void rate;
 
+    // "Pagado en el acto": sólo contado. La orden se finaliza igual pero sus
+    // obligaciones no entran a Cuentas por pagar (no hay deuda que cobrar).
+    const paidOnSite = dto.providerPaidOnSite === true;
+    if (paidOnSite && order.type !== 'cash') {
+      throw new BadRequestException(
+        'Sólo las órdenes de contado se pueden marcar como pagadas al proveedor en el acto',
+      );
+    }
+
     // Set de proveedores esperados según las filas OST de la orden.
     const orderRows = (order.orderServiceTypes ?? []).map((ost) => ({
       serviceTypeId: ost.serviceTypeId,
@@ -2811,11 +2820,19 @@ export class OrdersService implements OnModuleInit {
           p.providerType === 'doctor' ? p.doctorId! : p.careCenterId!;
         await mgr.query(
           `UPDATE "order_internal_orders"
-           SET "providerAmountUsd" = $1
+           SET "providerAmountUsd" = $1,
+               "providerPaidOnSite" = $5,
+               "providerPaidOnSiteAt" = CASE WHEN $5 THEN now() ELSE NULL END
            WHERE "orderId" = $2
              AND "providerType" = $3
              AND COALESCE("doctorId", "careCenterId") = $4`,
-          [p.amount.toFixed(2), order.id, p.providerType, providerId],
+          [
+            p.amount.toFixed(2),
+            order.id,
+            p.providerType,
+            providerId,
+            paidOnSite,
+          ],
         );
       }
 
@@ -2873,6 +2890,32 @@ export class OrdersService implements OnModuleInit {
       order.id,
       'corregir los montos a proveedor de',
     );
+
+    // Marca "pagado en el acto": sólo contado y sólo mientras la orden no esté
+    // dentro de un lote de CxP (si ya está encolada, primero hay que sacarla).
+    const paidOnSite =
+      dto.providerPaidOnSite === undefined ? null : dto.providerPaidOnSite;
+    if (paidOnSite !== null) {
+      if (order.type !== 'cash') {
+        throw new BadRequestException(
+          'Sólo las órdenes de contado se pueden marcar como pagadas al proveedor en el acto',
+        );
+      }
+      const [{ count }] = await this.dataSource.query<
+        Array<{ count: string }>
+      >(
+        `SELECT COUNT(*)::text AS count
+           FROM "accounts_payable_orders" apo
+           JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
+          WHERE iio."orderId" = $1`,
+        [order.id],
+      );
+      if (Number(count) > 0) {
+        throw new BadRequestException(
+          'La orden ya está en un lote de cuentas por pagar: quítala del lote antes de cambiar la marca de pago en el acto',
+        );
+      }
+    }
 
     // Mismo set de proveedores que la orden (misma validación que al facturar).
     const expected = this.distinctProvidersFromRows(
@@ -2954,6 +2997,15 @@ export class OrdersService implements OnModuleInit {
               AND "providerType" = $3
               AND COALESCE("doctorId", "careCenterId") = $4`,
           [p.amount.toFixed(2), order.id, p.providerType, providerId],
+        );
+      }
+      if (paidOnSite !== null) {
+        await mgr.query(
+          `UPDATE "order_internal_orders"
+              SET "providerPaidOnSite" = $2,
+                  "providerPaidOnSiteAt" = CASE WHEN $2 THEN now() ELSE NULL END
+            WHERE "orderId" = $1`,
+          [order.id, paidOnSite],
         );
       }
       await mgr.update(

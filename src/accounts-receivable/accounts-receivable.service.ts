@@ -76,6 +76,8 @@ interface PivotRow {
 /** Agregados del pivot de un lote, resueltos en SQL (1 query por página). */
 interface ReceivableOrderTotals {
   orderCount: number;
+  /** N° de factura de las órdenes del lote, sin repetir y en orden. */
+  invoiceNumbers: string[];
   /** ¿Alguna orden del lote cobra a tasa fija? ⇒ el lote va en modo `fixed`. */
   anyFixed: boolean;
   /** Σ `targetBs` del pivot. */
@@ -231,7 +233,9 @@ export class AccountsReceivableService {
       const n = params.length;
       where.push(
         `(LOWER(o."orderNumber") LIKE $${n}
-          OR LOWER(COALESCE(i."name", '')) LIKE $${n}
+          OR LOWER(COALESCE(o."invoiceNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(o."controlNumber", '')) LIKE $${n}
+          OR LOWER(COALESCE(NULLIF(i."shortName", ''), i."name", '')) LIKE $${n}
           OR LOWER(COALESCE(p."firstName", '')) LIKE $${n}
           OR LOWER(COALESCE(p."lastName", '')) LIKE $${n}
           OR LOWER(COALESCE(p."businessName", '')) LIKE $${n})`,
@@ -278,7 +282,7 @@ export class AccountsReceivableService {
       }>
     >(
       `SELECT o.id AS "orderId", o."orderNumber", o."invoiceNumber", o."type" AS "orderType",
-              o."insuranceId", o."holderId", i."name" AS "insuranceName",
+              o."insuranceId", o."holderId", COALESCE(NULLIF(i."shortName", ''), i."name") AS "insuranceName",
               p."firstName", p."lastName", p."businessName", p."cedula", p."rif",
               o."useFixedRate", o."priceAmount",
               o."casheaFirstInstallmentAmount", o."casheaCommissionRate", o."casheaFinancingRate",
@@ -428,13 +432,16 @@ export class AccountsReceivableService {
       const s = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(
         `(LOWER(ar."receivableNumber") LIKE :s
-          OR LOWER(COALESCE(insurance."name", '')) LIKE :s
+          OR LOWER(COALESCE(NULLIF(insurance."shortName", ''), insurance."name", '')) LIKE :s
           OR LOWER(COALESCE(holder."firstName", '')) LIKE :s
           OR LOWER(COALESCE(holder."lastName", '')) LIKE :s
           OR LOWER(COALESCE(holder."businessName", '')) LIKE :s
           OR EXISTS (SELECT 1 FROM "accounts_receivable_orders" aro4
                      JOIN "orders" o4 ON o4.id = aro4."orderId"
-                     WHERE aro4."receivableId" = ar.id AND LOWER(o4."orderNumber") LIKE :s))`,
+                     WHERE aro4."receivableId" = ar.id
+                       AND (LOWER(o4."orderNumber") LIKE :s
+                            OR LOWER(COALESCE(o4."invoiceNumber", '')) LIKE :s
+                            OR LOWER(COALESCE(o4."controlNumber", '')) LIKE :s)))`,
         { s },
       );
     }
@@ -491,14 +498,18 @@ export class AccountsReceivableService {
         anyFixed: boolean;
         targetBs: string;
         targetUsd: string;
+        invoiceNumbers: string[] | null;
       }>
     >(
       `SELECT aro."receivableId",
               COUNT(*) AS "orderCount",
               COALESCE(BOOL_OR(aro."useFixedRate"), false) AS "anyFixed",
               COALESCE(SUM(aro."targetBs"), 0) AS "targetBs",
-              COALESCE(SUM(aro."targetUsd"), 0) AS "targetUsd"
+              COALESCE(SUM(aro."targetUsd"), 0) AS "targetUsd",
+              ARRAY(SELECT DISTINCT x FROM unnest(array_agg(o."invoiceNumber")) AS x
+                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceNumbers"
        FROM "accounts_receivable_orders" aro
+       JOIN "orders" o ON o.id = aro."orderId"
        WHERE aro."receivableId" = ANY($1)
        GROUP BY aro."receivableId"`,
       [ids],
@@ -511,6 +522,7 @@ export class AccountsReceivableService {
           anyFixed: !!r.anyFixed,
           targetBs: Number(r.targetBs) || 0,
           targetUsd: Number(r.targetUsd) || 0,
+          invoiceNumbers: r.invoiceNumbers ?? [],
         },
       ]),
     );
@@ -603,6 +615,15 @@ export class AccountsReceivableService {
       : 'usd';
     batch.mode = mode;
     batch.orderCount = totals ? totals.orderCount : pivots.length;
+    batch.invoiceNumbers = totals
+      ? totals.invoiceNumbers
+      : [
+          ...new Set(
+            pivots
+              .map((o) => o.order?.invoiceNumber)
+              .filter((n): n is string => !!n),
+          ),
+        ].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
     // Ajuste firmado en la moneda del lote (negativo resta, positivo suma).
     // El target efectivo nunca baja de 0.
     const adjustment = round2(Number(batch.adjustmentAmount ?? 0) || 0);
@@ -761,7 +782,7 @@ export class AccountsReceivableService {
     const batch = await this.loadBatch(this.dataSource.manager, id);
     if (!batch) throw new NotFoundException('Lote no encontrado');
     await this.assertVisibility(batch, user);
-    if (batch.status === 'collected' || batch.status === 'overcollected') {
+    if (batch.status === 'collected') {
       throw new BadRequestException(
         'No se pueden agregar órdenes a un lote ya cobrado. Edita o quita un cobro primero.',
       );
@@ -1179,12 +1200,11 @@ export class AccountsReceivableService {
     let status:
       | 'uncollected'
       | 'partially_collected'
-      | 'collected'
-      | 'overcollected';
+      | 'collected';
     if (batch.mode === 'fixed') {
       const target = batch.targetBs ?? 0;
       const collected = batch.collectedBs ?? 0;
-      if (collected > target + TOLERANCE_BS) status = 'overcollected';
+      if (collected > target + TOLERANCE_BS) status = 'collected';
       else if (collected > 0 && Math.abs(target - collected) <= TOLERANCE_BS)
         status = 'collected';
       else if (collected > 0) status = 'partially_collected';
@@ -1192,14 +1212,14 @@ export class AccountsReceivableService {
     } else {
       const target = batch.targetUsd ?? 0;
       const collected = batch.collectedUsd ?? 0;
-      if (collected > target + TOLERANCE_USD) status = 'overcollected';
+      if (collected > target + TOLERANCE_USD) status = 'collected';
       else if (collected > 0 && Math.abs(target - collected) <= TOLERANCE_USD)
         status = 'collected';
       else if (collected > 0) status = 'partially_collected';
       else status = 'uncollected';
     }
     const collectedAt =
-      status === 'collected' || status === 'overcollected'
+      status === 'collected'
         ? (batch.collectedAt ?? new Date())
         : null;
     await mgr.update(AccountsReceivable, id, { status, collectedAt });

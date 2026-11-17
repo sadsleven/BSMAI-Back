@@ -21,8 +21,7 @@ import { AccountsReceivableOrder } from './accounts-receivable-order.entity';
 export type AccountsReceivableStatus =
   | 'collected'
   | 'uncollected'
-  | 'partially_collected'
-  | 'overcollected';
+  | 'partially_collected';
 
 /**
  * Tipo de deudor: seguro (orden type='insurance'), titular (type='credit') o
@@ -34,7 +33,7 @@ export type AccountsReceivableDebtorType = 'insurance' | 'holder' | 'cashea';
  * LOTE de Cuentas por cobrar. Creado por el usuario para UN deudor (seguro,
  * titular o Cashea), agrupa N órdenes (`orders` → {@link AccountsReceivableOrder})
  * y acumula M cobros. El target/modo (Bs tasa fija vs USD) se snapshotea por
- * orden en el pivot. Sin tope: puede quedar `overcollected`.
+ * orden en el pivot. Sin tope: puede quedar `collected` incluso si se cobra de más.
  * Deudor Cashea = `insuranceId` y `holderId` ambos NULL.
  */
 @Entity({ name: 'accounts_receivable' })
@@ -127,6 +126,11 @@ export class AccountsReceivable {
    * se hidrata); en el detalle es `orders.length`.
    */
   orderCount?: number;
+  /**
+   * N° de factura de las órdenes del lote, sin repetir. Un lote puede agrupar
+   * órdenes de varias facturas (o de ninguna, si aún no se emitió).
+   */
+  invoiceNumbers?: string[];
   /** Target USD del lote (modo usd), YA con el ajuste aplicado. */
   targetUsd?: number;
   /** Target Bs del lote (modo fixed), YA con el ajuste aplicado. */

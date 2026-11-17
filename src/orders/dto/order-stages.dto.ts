@@ -128,6 +128,15 @@ export class UpdateProviderAmountsDto {
   @ValidateNested({ each: true })
   @Type(() => BillingProviderDto)
   providers: BillingProviderDto[];
+
+  /**
+   * Corrige la marca de "pagado en el acto" (sólo órdenes de contado). No se
+   * puede cambiar si alguna obligación de la orden ya está dentro de un lote
+   * de Cuentas por pagar.
+   */
+  @IsOptional()
+  @IsBoolean()
+  providerPaidOnSite?: boolean;
 }
 
 /**
@@ -160,6 +169,15 @@ export class BillingOrderDto {
   @IsOptional()
   @IsBoolean()
   generateInvoice?: boolean;
+
+  /**
+   * El proveedor cobra en el acto: la orden se finaliza y NO entra a Cuentas
+   * por pagar. Sólo válido en órdenes de contado (`type='cash'`); en el resto
+   * el service rechaza el envío con `true`.
+   */
+  @IsOptional()
+  @IsBoolean()
+  providerPaidOnSite?: boolean;
 
   /**
    * N° de factura como entero (se imprime con ceros a la izquierda). Debe estar
