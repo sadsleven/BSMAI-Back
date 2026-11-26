@@ -984,7 +984,7 @@ export class ReportsService {
       }
     }
 
-    const perOrderRows = orders.map((r) => {
+    const perOrderRows = orders.map((r, idx) => {
       const debtorType: 'insurance' | 'holder' =
         r.orderType === 'insurance' ? 'insurance' : 'holder';
       const debtorName =
@@ -1018,6 +1018,21 @@ export class ReportsService {
         r.businessName ??
         (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
       const isFixedRow = rowFixed(r);
+      
+      // Calcular collectedUsd/collectedBs solo para la primera fila de cada lote
+      let collectedUsdVal = 0;
+      let collectedBsVal = 0;
+      if (r.receivableId) {
+        // Buscar si esta es la primera fila de este lote
+        const isFirstOfLote = !orders.slice(0, idx).some(
+          prev => prev.receivableId === r.receivableId
+        );
+        if (isFirstOfLote) {
+          collectedUsdVal = round2(collectedUsd.get(r.receivableId) ?? 0);
+          collectedBsVal = round2(collectedBs.get(r.receivableId) ?? 0);
+        }
+      }
+      
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
@@ -1046,6 +1061,8 @@ export class ReportsService {
         receivableId: r.receivableId,
         receivableNumber: r.receivableNumber,
         state,
+        collectedUsd: collectedUsdVal,
+        collectedBs: collectedBsVal,
       };
     });
 
