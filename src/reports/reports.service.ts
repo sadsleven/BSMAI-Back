@@ -305,6 +305,13 @@ export class ReportsService {
       params.push(query.careCenterId);
       where.push(`iio."careCenterId" = $${params.length}`);
     }
+    // Antigüedad mínima: fecha de creación de la orden (días desde su creación).
+    if (query.ageDays) {
+      params.push(query.ageDays);
+      where.push(
+        `o."createdAt" <= now() - make_interval(days => $${params.length}::int)`,
+      );
+    }
     if (query.search && query.search.trim()) {
       params.push(`%${query.search.trim().toLowerCase()}%`);
       const n = params.length;
@@ -792,6 +799,14 @@ export class ReportsService {
       params.push(query.holderId);
       where.push(`o."holderId" = $${params.length}`);
     }
+    // Antigüedad mínima: fecha de la factura; sin factura (Cashea/crédito con
+    // factura opcional), la fecha de creación de la orden.
+    if (query.ageDays) {
+      params.push(query.ageDays);
+      where.push(
+        `COALESCE(o."invoiceDate"::timestamp, o."createdAt") <= now() - make_interval(days => $${params.length}::int)`,
+      );
+    }
     // `debtorType` es el filtro nuevo; `status` lo conserva por compatibilidad
     // con los enlaces viejos (antes `status` significaba el tipo de deudor).
     const debtorType = query.debtorType ?? query.status;
@@ -841,6 +856,8 @@ export class ReportsService {
         casheaCommissionRate: string | null;
         casheaFinancingRate: string | null;
         fixedRateBs: string | null;
+        /** Tasa de la FACTURA de la orden (invoiceExchangeRateId → billingExchangeRateId → fija). */
+        invoiceRateBs: string | null;
         portion: 'full' | 'fixed' | 'indexed';
         indexedUsd: string;
         receivableId: string | null;
@@ -875,6 +892,7 @@ export class ReportsService {
               o."casheaCommissionRate"::text AS "casheaCommissionRate",
               o."casheaFinancingRate"::text AS "casheaFinancingRate",
               fx."amountBs"::text AS "fixedRateBs",
+              COALESCE(fxoi."amountBs", fxb."amountBs", fx."amountBs")::text AS "invoiceRateBs",
               pt.portion AS "portion", ix."indexedUsd"::text AS "indexedUsd",
               ar.id AS "receivableId", ar."receivableNumber", ar.status AS "receivableStatus",
               aro."targetUsd"::text AS "arTargetUsd", aro."targetBs"::text AS "arTargetBs",
@@ -885,6 +903,8 @@ export class ReportsService {
        LEFT JOIN "patients" p ON p.id = o."holderId"
        LEFT JOIN "patients" pac ON pac.id = o."patientId"
        LEFT JOIN "exchange_rates" fx ON fx.id = o."fixedExchangeRateId"
+       LEFT JOIN "exchange_rates" fxoi ON fxoi.id = o."invoiceExchangeRateId"
+       LEFT JOIN "exchange_rates" fxb ON fxb.id = o."billingExchangeRateId"
        CROSS JOIN LATERAL (
          SELECT COALESCE(SUM(ROUND(osp."priceUsd" * ost."quantity", 2)), 0) AS "indexedUsd"
          FROM "order_service_types" ost
@@ -984,7 +1004,7 @@ export class ReportsService {
       }
     }
 
-    const perOrderRows = orders.map((r) => {
+    const perOrderRows = orders.map((r, idx) => {
       const debtorType: 'insurance' | 'holder' =
         r.orderType === 'insurance' ? 'insurance' : 'holder';
       const debtorName =
@@ -1018,6 +1038,21 @@ export class ReportsService {
         r.businessName ??
         (`${r.firstName ?? ''} ${r.lastName ?? ''}`.trim() || '—');
       const isFixedRow = rowFixed(r);
+      
+      // Calcular collectedUsd/collectedBs solo para la primera fila de cada lote
+      let collectedUsdVal = 0;
+      let collectedBsVal = 0;
+      if (r.receivableId) {
+        // Buscar si esta es la primera fila de este lote
+        const isFirstOfLote = !orders.slice(0, idx).some(
+          prev => prev.receivableId === r.receivableId
+        );
+        if (isFirstOfLote) {
+          collectedUsdVal = round2(collectedUsd.get(r.receivableId) ?? 0);
+          collectedBsVal = round2(collectedBs.get(r.receivableId) ?? 0);
+        }
+      }
+      
       return {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
@@ -1039,13 +1074,22 @@ export class ReportsService {
         invoiceDate: r.invoiceDate ?? null,
         costoUsd: round2(num(r.costoUsd)),
         useFixedRate: isFixedRow,
-        rateBs: isFixedRow ? round2(num(r.fixedRateBs)) : null,
+        // Tasa de la FACTURA: en filas indexadas, la tasa con que se emitió la
+        // factura (invoiceExchangeRateId → billingExchangeRateId → fija); null
+        // sólo si la orden aún no se facturó (el FE cae a la tasa vigente).
+        rateBs: isFixedRow
+          ? round2(num(r.fixedRateBs))
+          : num(r.invoiceRateBs) > 0
+            ? round2(num(r.invoiceRateBs))
+            : null,
         portion: r.portion,
         targetUsd,
         targetBs,
         receivableId: r.receivableId,
         receivableNumber: r.receivableNumber,
         state,
+        collectedUsd: collectedUsdVal,
+        collectedBs: collectedBsVal,
       };
     });
 

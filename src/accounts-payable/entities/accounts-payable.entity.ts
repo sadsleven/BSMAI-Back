@@ -127,6 +127,11 @@ export class AccountsPayable {
    * órdenes de varias facturas (o de ninguna, si aún no se emitió).
    */
   invoiceNumbers?: string[];
+  /**
+   * Fechas de emisión (YYYY-MM-DD) de las facturas de las órdenes del lote,
+   * sin repetir y en orden. Vacío si ninguna orden se facturó.
+   */
+  invoiceDates?: string[];
   /** Suma de `grossUsd` del pivot (bruto USD del lote). */
   grossUsd?: number;
   /** Nº de abonos registrados. */

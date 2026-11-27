@@ -2764,13 +2764,127 @@ export class OrdersService implements OnModuleInit {
           invoiceShowExchangeRate: showExchangeRate,
           invoiceExchangeRateId: dto.billingExchangeRateId,
         });
+
+        // Para las órdenes agrupadas que NO están finalizadas: auto-finalizarlas
+        // calculando sus montos de proveedor desde los precios sugeridos.
         for (const covered of coveredExtra) {
-          await this.logChange(mgr, covered.id, user.id, 'invoice_issue', {
-            invoiceNumber: { to: invoiceDisplay },
-            controlNumber: { to: controlNumber },
-            invoiceDate: { to: invoiceDate },
-            groupedWithOrderNumber: { to: order.orderNumber },
-          });
+          if (covered.status !== 'finalized') {
+            // Calcular montos sugeridos para cada proveedor de esta orden
+            const coveredRows = (covered.orderServiceTypes ?? []).map((ost) => ({
+              serviceTypeId: ost.serviceTypeId,
+              providerType: ost.providerType,
+              specialtyId: ost.specialtyId,
+              doctorId: ost.doctorId ?? undefined,
+              careCenterId: ost.careCenterId ?? undefined,
+              customName: ost.customName ?? '',
+            }));
+            const coveredQtyByST = new Map(
+              (covered.orderServiceTypes ?? []).map((ost) => [
+                ost.serviceTypeId,
+                ost.quantity ?? 1,
+              ]),
+            );
+            const coveredProviders = this.distinctProvidersFromRows(coveredRows);
+            
+            let coveredSuggestedSum = 0;
+            let coveredTotalUsd = 0;
+            const coveredSnapshotRows: Array<{
+              orderId: string;
+              serviceTypeId: string;
+              kind: 'doctor' | 'care_center';
+              priceUsd: string;
+            }> = [];
+
+            for (const prov of coveredProviders) {
+              const rowsForProv = coveredRows.filter((r) => {
+                const pid = r.providerType === 'doctor' ? r.doctorId : r.careCenterId;
+                return r.providerType === prov.providerType && pid === prov.providerId;
+              });
+              const stIds = rowsForProv.map((r) => r.serviceTypeId);
+              const { suggested, snapshotRows: rows } =
+                await this.computeProviderPricing(
+                  prov.providerType,
+                  prov.providerId,
+                  stIds,
+                  coveredQtyByST,
+                );
+              coveredSuggestedSum += suggested;
+              coveredTotalUsd += suggested; // Usar sugerido como monto a pagar
+              coveredSnapshotRows.push(...rows.map((r) => ({ ...r, orderId: covered.id })));
+              
+              // Escribir monto en orden interna del proveedor
+              const providerId =
+                prov.providerType === 'doctor' ? prov.providerId : prov.providerId;
+              await mgr.query(
+                `UPDATE "order_internal_orders"
+                 SET "providerAmountUsd" = $1
+                 WHERE "orderId" = $2
+                   AND "providerType" = $3
+                   AND COALESCE("doctorId", "careCenterId") = $4`,
+                [
+                  suggested.toFixed(2),
+                  covered.id,
+                  prov.providerType,
+                  providerId,
+                ],
+              );
+            }
+
+            // Finalizar la orden agrupada
+            await mgr.update(
+              Order,
+              { id: covered.id },
+              {
+                doctorAmountSuggested: coveredSuggestedSum.toFixed(2),
+                doctorAmount: coveredTotalUsd.toFixed(2),
+                billingExchangeRateId: dto.billingExchangeRateId,
+                ...(covered.useFixedRate
+                  ? { fixedExchangeRateId: dto.billingExchangeRateId }
+                  : {}),
+                invoiceNumber: invoiceDisplay,
+                controlNumber,
+                invoiceDate,
+                invoiceShowExchangeRate: showExchangeRate,
+                invoiceExchangeRateId: dto.billingExchangeRateId,
+                status: 'finalized',
+              },
+            );
+
+            // Snapshot de precios
+            await mgr.delete(OrderServicePricing, {
+              orderId: covered.id,
+              kind: In(['doctor', 'care_center']),
+            });
+            if (coveredSnapshotRows.length) {
+              await mgr.insert(
+                OrderServicePricing,
+                coveredSnapshotRows,
+              );
+            }
+
+            await this.logChange(mgr, covered.id, user.id, 'billing', {
+              doctorAmount: {
+                from: null,
+                to: +coveredTotalUsd.toFixed(2),
+              },
+              invoiceNumber: { to: invoiceDisplay },
+              controlNumber: { to: controlNumber },
+              invoiceDate: { to: invoiceDate },
+              invoiceExchangeRateId: {
+                from: null,
+                to: dto.billingExchangeRateId,
+              },
+              groupedWithOrderNumber: { to: order.orderNumber },
+            });
+          } else {
+            // Orden ya finalizada: sólo log del agrupamiento
+            await this.logChange(mgr, covered.id, user.id, 'invoice_issue', {
+              invoiceNumber: { to: invoiceDisplay },
+              controlNumber: { to: controlNumber },
+              invoiceDate: { to: invoiceDate },
+              groupedWithOrderNumber: { to: order.orderNumber },
+            });
+          }
         }
       }
       // `update` por columnas — la orden trae `providerReports` cargada y
@@ -3283,9 +3397,11 @@ export class OrdersService implements OnModuleInit {
     );
     if (!wanted.length) return [];
 
+    // Cargar con relaciones para las no finalizadas (necesitamos orderServiceTypes
+    // e internalOrders para calcular sus montos de proveedor al finalizarlas).
     const found = await this.repo.find({
       where: { id: In(wanted) },
-      loadEagerRelations: false,
+      relations: ['orderServiceTypes', 'orderServiceTypes.serviceType', 'orderServiceTypes.specialty', 'orderServiceTypes.doctor', 'orderServiceTypes.careCenter', 'internalOrders'],
     });
     const byId = new Map(found.map((o) => [o.id, o]));
     const missing = wanted.filter((id) => !byId.has(id));
@@ -3304,14 +3420,25 @@ export class OrdersService implements OnModuleInit {
           `La orden N° ${o.orderNumber} está cancelada: no puede ir en la factura`,
         );
       }
-      if (o.status !== 'finalized') {
+      // Permitir agrupar órdenes que hayan completado al menos el Paso 2 (atendida)
+      // o Paso 3 (informe emitido). No es necesario que estén finalizadas: al
+      // agruparlas se finalizan automáticamente con la misma factura.
+      const allowedStatuses = ['attended', 'report_issued', 'finalized'];
+      if (!allowedStatuses.includes(o.status)) {
         throw new BadRequestException(
-          `La orden N° ${o.orderNumber} todavía no pasó por facturación (Paso 4): finalízala antes de agruparla`,
+          `La orden N° ${o.orderNumber} no ha completado la atención: no se puede agrupar`,
         );
       }
       if (o.holderId !== issuer.holderId) {
         throw new BadRequestException(
           `La orden N° ${o.orderNumber} es de otro titular: sólo se agrupan órdenes del mismo titular`,
+        );
+      }
+      // IMPORTANTE: El tipo de orden debe coincidir (seguro con seguro, contado
+      // con contado, etc.). La sucursal NO importa.
+      if (o.type !== issuer.type) {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} es de tipo ${o.type} y esta factura es de tipo ${issuer.type}: sólo se agrupan órdenes del mismo tipo`,
         );
       }
     }
@@ -3412,9 +3539,10 @@ export class OrdersService implements OnModuleInit {
 
   /**
    * Órdenes que se pueden AGRUPAR en la misma factura que `id`: **mismo
-   * titular**, ya finalizadas y todavía **sin factura vigente**. El tipo de
-   * orden y la sucursal no importan; sólo se limita a las sucursales que el
-   * usuario puede ver.
+   * titular**, **mismo tipo de orden**, en Paso 3 completado (atendida o
+   * informe emitido) o ya finalizadas, y todavía **sin factura vigente**. La
+   * sucursal no importa; sólo se limita a las sucursales que el usuario puede
+   * ver. Las no finalizadas se finalizan automáticamente al agruparlas.
    */
   async invoiceableOrders(
     id: string,
@@ -3430,6 +3558,7 @@ export class OrdersService implements OnModuleInit {
       orderType: string;
       branchName: string | null;
       serviceTypesCount: number;
+      status: string;
     }>
   > {
     const order = await this.findOne(id, user);
@@ -3449,6 +3578,7 @@ export class OrdersService implements OnModuleInit {
         orderType: string;
         branchName: string | null;
         serviceTypesCount: string;
+        status: string;
       }>
     >(
       `SELECT o."id",
@@ -3464,14 +3594,16 @@ export class OrdersService implements OnModuleInit {
               o."type" AS "orderType",
               br."name" AS "branchName",
               (SELECT COUNT(*) FROM "order_service_types" ost
-                WHERE ost."orderId" = o."id") AS "serviceTypesCount"
+                WHERE ost."orderId" = o."id") AS "serviceTypesCount",
+              o."status"
          FROM "orders" o
          LEFT JOIN "patients" pa ON pa."id" = o."patientId"
          LEFT JOIN "branches" br ON br."id" = o."branchId"
         WHERE o."deletedAt" IS NULL
           AND o."id" <> $1
-          AND o."status" = 'finalized'
+          AND o."status" IN ('attended', 'report_issued', 'finalized')
           AND o."holderId" = $2::uuid
+          AND o."type" = $4
           AND ($3::uuid[] IS NULL OR o."branchId" = ANY($3::uuid[]))
           AND NOT EXISTS (
             SELECT 1 FROM "order_invoice_orders" pv
@@ -3479,7 +3611,7 @@ export class OrdersService implements OnModuleInit {
           )
         ORDER BY o."orderDate" DESC, o."orderNumber" DESC
         LIMIT 100`,
-      [order.id, order.holderId, allowedBranchIds],
+      [order.id, order.holderId, allowedBranchIds, order.type],
     );
     return rows.map((r) => ({
       ...r,

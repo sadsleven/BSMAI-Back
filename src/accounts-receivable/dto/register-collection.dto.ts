@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsInt,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -13,6 +14,7 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -169,6 +171,15 @@ export class QueryPendingReceivableDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  /**
+   * Antigüedad mínima en días: fecha de la factura; sin factura (Cashea o
+   * crédito), la fecha de creación de la orden. Mínimo 10.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ageDays?: number;
 }
 
 /** Listado de lotes. */
@@ -216,6 +227,12 @@ export class QueryAccountsReceivableDto {
   @IsOptional()
   @Matches(/^(ASC|DESC)$/i)
   sortDir?: 'ASC' | 'DESC';
+
+  /** Antigüedad mínima en días (fecha de creación del lote). Mínimo 10. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ageDays?: number;
 }
 
 /**
