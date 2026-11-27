@@ -48,6 +48,8 @@ export interface PendingPayable {
   orderNumber: string;
   /** N° de la factura VIGENTE de la orden (espejo); null si no tiene. */
   invoiceNumber: string | null;
+  /** Fecha de emisión de la factura vigente; null si aún no se facturó. */
+  invoiceDate: string | null;
   providerType: 'doctor' | 'care_center';
   doctorId: string | null;
   careCenterId: string | null;
@@ -68,6 +70,8 @@ interface PayableOrderTotals {
   grossBsBilling: number;
   /** N° de factura de las órdenes del lote, sin repetir y en orden. */
   invoiceNumbers: string[];
+  /** Fechas de factura (YYYY-MM-DD) de las órdenes del lote, sin repetir. */
+  invoiceDates: string[];
 }
 
 /** Agregados de los abonos de un lote, resueltos en SQL (listado). */
@@ -220,7 +224,7 @@ export class AccountsPayableService {
     const dataParams = [...params, limit, offset];
     const rows = await this.dataSource.query<PendingPayable[]>(
       `SELECT iio.id AS "internalOrderId", iio."internalNumber", iio."orderId",
-              o."orderNumber", o."invoiceNumber", iio."providerType", iio."doctorId", iio."careCenterId",
+              o."orderNumber", o."invoiceNumber", o."invoiceDate", iio."providerType", iio."doctorId", iio."careCenterId",
               iio."providerAmountUsd"::float8 AS "grossUsd",
               o."billingExchangeRateId", o."branchId", b."name" AS "branchName",
               COALESCE(d."firstName" || ' ' || d."lastName", NULLIF(cc."shortName", ''), cc."businessName") AS "providerName",
@@ -377,6 +381,7 @@ export class AccountsPayableService {
         grossUsd: string;
         grossBsBilling: string;
         invoiceNumbers: string[] | null;
+        invoiceDates: string[] | null;
       }>
     >(
       `SELECT apo."payableId",
@@ -384,7 +389,9 @@ export class AccountsPayableService {
               COALESCE(SUM(apo."grossUsd"), 0) AS "grossUsd",
               COALESCE(SUM(apo."grossUsd" * COALESCE(er."amountBs", 0)), 0) AS "grossBsBilling",
               ARRAY(SELECT DISTINCT x FROM unnest(array_agg(o."invoiceNumber")) AS x
-                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceNumbers"
+                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceNumbers",
+              ARRAY(SELECT DISTINCT x FROM unnest(array_agg(o."invoiceDate"::text)) AS x
+                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceDates"
        FROM "accounts_payable_orders" apo
        JOIN "order_internal_orders" iio ON iio.id = apo."internalOrderId"
        JOIN "orders" o ON o.id = iio."orderId"
@@ -401,6 +408,7 @@ export class AccountsPayableService {
           grossUsd: Number(r.grossUsd) || 0,
           grossBsBilling: Number(r.grossBsBilling) || 0,
           invoiceNumbers: r.invoiceNumbers ?? [],
+          invoiceDates: r.invoiceDates ?? [],
         },
       ]),
     );
@@ -638,8 +646,10 @@ export class AccountsPayableService {
       billedGrossBs = totals.grossBsBilling;
       batch.orderCount = totals.orderCount;
       batch.invoiceNumbers = totals.invoiceNumbers;
+      batch.invoiceDates = totals.invoiceDates;
     } else {
       const invoices = new Set<string>();
+      const invoiceDates = new Set<string>();
       for (const apo of batch.orders ?? []) {
         const g = Number(apo.grossUsd) || 0;
         grossUsd += g;
@@ -648,11 +658,14 @@ export class AccountsPayableService {
           Number(apo.internalOrder?.order?.billingExchangeRate?.amountBs ?? 0);
         const inv = apo.internalOrder?.order?.invoiceNumber;
         if (inv) invoices.add(inv);
+        const invDate = apo.internalOrder?.order?.invoiceDate;
+        if (invDate) invoiceDates.add(invDate);
       }
       batch.orderCount = (batch.orders ?? []).length;
       batch.invoiceNumbers = [...invoices].sort((a, b) =>
         a.localeCompare(b, 'es', { numeric: true }),
       );
+      batch.invoiceDates = [...invoiceDates].sort();
     }
     grossUsd = round2(grossUsd);
 

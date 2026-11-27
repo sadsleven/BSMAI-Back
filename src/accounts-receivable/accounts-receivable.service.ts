@@ -78,6 +78,8 @@ interface ReceivableOrderTotals {
   orderCount: number;
   /** N° de factura de las órdenes del lote, sin repetir y en orden. */
   invoiceNumbers: string[];
+  /** Fechas de factura (YYYY-MM-DD) de las órdenes del lote, sin repetir. */
+  invoiceDates: string[];
   /** ¿Alguna orden del lote cobra a tasa fija? ⇒ el lote va en modo `fixed`. */
   anyFixed: boolean;
   /** Σ `targetBs` del pivot. */
@@ -97,6 +99,8 @@ export interface PendingReceivable {
   orderNumber: string;
   /** N° de la factura VIGENTE de la orden (espejo); null si no tiene. */
   invoiceNumber: string | null;
+  /** Fecha de emisión de la factura vigente; null si aún no se facturó. */
+  invoiceDate: string | null;
   orderType: string;
   portion: AroPortion;
   debtorType: 'insurance' | 'holder' | 'cashea';
@@ -268,6 +272,7 @@ export class AccountsReceivableService {
         orderId: string;
         orderNumber: string;
         invoiceNumber: string | null;
+        invoiceDate: string | null;
         orderType: string;
         insuranceId: string | null;
         holderId: string | null;
@@ -290,7 +295,7 @@ export class AccountsReceivableService {
         createdAt: string;
       }>
     >(
-      `SELECT o.id AS "orderId", o."orderNumber", o."invoiceNumber", o."type" AS "orderType",
+      `SELECT o.id AS "orderId", o."orderNumber", o."invoiceNumber", o."invoiceDate", o."type" AS "orderType",
               o."insuranceId", o."holderId", COALESCE(NULLIF(i."shortName", ''), i."name") AS "insuranceName",
               p."firstName", p."lastName", p."businessName", p."cedula", p."rif",
               o."useFixedRate", o."priceAmount",
@@ -356,6 +361,7 @@ export class AccountsReceivableService {
         orderId: r.orderId,
         orderNumber: r.orderNumber,
         invoiceNumber: r.invoiceNumber,
+        invoiceDate: r.invoiceDate,
         orderType: r.orderType,
         portion: r.portion,
         debtorType,
@@ -515,6 +521,7 @@ export class AccountsReceivableService {
         targetBs: string;
         targetUsd: string;
         invoiceNumbers: string[] | null;
+        invoiceDates: string[] | null;
       }>
     >(
       `SELECT aro."receivableId",
@@ -523,7 +530,9 @@ export class AccountsReceivableService {
               COALESCE(SUM(aro."targetBs"), 0) AS "targetBs",
               COALESCE(SUM(aro."targetUsd"), 0) AS "targetUsd",
               ARRAY(SELECT DISTINCT x FROM unnest(array_agg(o."invoiceNumber")) AS x
-                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceNumbers"
+                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceNumbers",
+              ARRAY(SELECT DISTINCT x FROM unnest(array_agg(o."invoiceDate"::text)) AS x
+                     WHERE x IS NOT NULL AND x <> '' ORDER BY x) AS "invoiceDates"
        FROM "accounts_receivable_orders" aro
        JOIN "orders" o ON o.id = aro."orderId"
        WHERE aro."receivableId" = ANY($1)
@@ -539,6 +548,7 @@ export class AccountsReceivableService {
           targetBs: Number(r.targetBs) || 0,
           targetUsd: Number(r.targetUsd) || 0,
           invoiceNumbers: r.invoiceNumbers ?? [],
+          invoiceDates: r.invoiceDates ?? [],
         },
       ]),
     );
@@ -640,6 +650,15 @@ export class AccountsReceivableService {
               .filter((n): n is string => !!n),
           ),
         ].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+    batch.invoiceDates = totals
+      ? totals.invoiceDates
+      : [
+          ...new Set(
+            pivots
+              .map((o) => o.order?.invoiceDate)
+              .filter((n): n is string => !!n),
+          ),
+        ].sort();
     // Ajuste firmado en la moneda del lote (negativo resta, positivo suma).
     // El target efectivo nunca baja de 0.
     const adjustment = round2(Number(batch.adjustmentAmount ?? 0) || 0);
