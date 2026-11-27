@@ -3434,6 +3434,13 @@ export class OrdersService implements OnModuleInit {
           `La orden N° ${o.orderNumber} es de otro titular: sólo se agrupan órdenes del mismo titular`,
         );
       }
+      // IMPORTANTE: El tipo de orden debe coincidir (seguro con seguro, contado
+      // con contado, etc.). La sucursal NO importa.
+      if (o.type !== issuer.type) {
+        throw new BadRequestException(
+          `La orden N° ${o.orderNumber} es de tipo ${o.type} y esta factura es de tipo ${issuer.type}: sólo se agrupan órdenes del mismo tipo`,
+        );
+      }
     }
 
     // Una orden a lo sumo en UNA factura vigente (lo garantiza además el índice
@@ -3532,10 +3539,10 @@ export class OrdersService implements OnModuleInit {
 
   /**
    * Órdenes que se pueden AGRUPAR en la misma factura que `id`: **mismo
-   * titular**, en Paso 3 completado (atendida o informe emitido) o ya
-   * finalizadas, y todavía **sin factura vigente**. El tipo de orden y la
-   * sucursal no importan; sólo se limita a las sucursales que el usuario
-   * puede ver. Las no finalizadas se finalizan automáticamente al agruparlas.
+   * titular**, **mismo tipo de orden**, en Paso 3 completado (atendida o
+   * informe emitido) o ya finalizadas, y todavía **sin factura vigente**. La
+   * sucursal no importa; sólo se limita a las sucursales que el usuario puede
+   * ver. Las no finalizadas se finalizan automáticamente al agruparlas.
    */
   async invoiceableOrders(
     id: string,
@@ -3596,6 +3603,7 @@ export class OrdersService implements OnModuleInit {
           AND o."id" <> $1
           AND o."status" IN ('attended', 'report_issued', 'finalized')
           AND o."holderId" = $2::uuid
+          AND o."type" = $4
           AND ($3::uuid[] IS NULL OR o."branchId" = ANY($3::uuid[]))
           AND NOT EXISTS (
             SELECT 1 FROM "order_invoice_orders" pv
@@ -3603,7 +3611,7 @@ export class OrdersService implements OnModuleInit {
           )
         ORDER BY o."orderDate" DESC, o."orderNumber" DESC
         LIMIT 100`,
-      [order.id, order.holderId, allowedBranchIds],
+      [order.id, order.holderId, allowedBranchIds, order.type],
     );
     return rows.map((r) => ({
       ...r,
