@@ -856,6 +856,8 @@ export class ReportsService {
         casheaCommissionRate: string | null;
         casheaFinancingRate: string | null;
         fixedRateBs: string | null;
+        /** Tasa de la FACTURA de la orden (invoiceExchangeRateId → billingExchangeRateId → fija). */
+        invoiceRateBs: string | null;
         portion: 'full' | 'fixed' | 'indexed';
         indexedUsd: string;
         receivableId: string | null;
@@ -890,6 +892,7 @@ export class ReportsService {
               o."casheaCommissionRate"::text AS "casheaCommissionRate",
               o."casheaFinancingRate"::text AS "casheaFinancingRate",
               fx."amountBs"::text AS "fixedRateBs",
+              COALESCE(fxoi."amountBs", fxb."amountBs", fx."amountBs")::text AS "invoiceRateBs",
               pt.portion AS "portion", ix."indexedUsd"::text AS "indexedUsd",
               ar.id AS "receivableId", ar."receivableNumber", ar.status AS "receivableStatus",
               aro."targetUsd"::text AS "arTargetUsd", aro."targetBs"::text AS "arTargetBs",
@@ -900,6 +903,8 @@ export class ReportsService {
        LEFT JOIN "patients" p ON p.id = o."holderId"
        LEFT JOIN "patients" pac ON pac.id = o."patientId"
        LEFT JOIN "exchange_rates" fx ON fx.id = o."fixedExchangeRateId"
+       LEFT JOIN "exchange_rates" fxoi ON fxoi.id = o."invoiceExchangeRateId"
+       LEFT JOIN "exchange_rates" fxb ON fxb.id = o."billingExchangeRateId"
        CROSS JOIN LATERAL (
          SELECT COALESCE(SUM(ROUND(osp."priceUsd" * ost."quantity", 2)), 0) AS "indexedUsd"
          FROM "order_service_types" ost
@@ -1069,7 +1074,14 @@ export class ReportsService {
         invoiceDate: r.invoiceDate ?? null,
         costoUsd: round2(num(r.costoUsd)),
         useFixedRate: isFixedRow,
-        rateBs: isFixedRow ? round2(num(r.fixedRateBs)) : null,
+        // Tasa de la FACTURA: en filas indexadas, la tasa con que se emitió la
+        // factura (invoiceExchangeRateId → billingExchangeRateId → fija); null
+        // sólo si la orden aún no se facturó (el FE cae a la tasa vigente).
+        rateBs: isFixedRow
+          ? round2(num(r.fixedRateBs))
+          : num(r.invoiceRateBs) > 0
+            ? round2(num(r.invoiceRateBs))
+            : null,
         portion: r.portion,
         targetUsd,
         targetBs,
