@@ -192,6 +192,7 @@ export class AccountsReceivableService {
       insuranceId,
       holderId,
       branchId,
+      ageDays,
     } = query;
     const params: unknown[] = [];
     const where: string[] = [
@@ -227,6 +228,14 @@ export class AccountsReceivableService {
     if (branchId) {
       params.push(branchId);
       where.push(`o."branchId" = $${params.length}`);
+    }
+    // Antigüedad mínima: fecha de la factura; sin factura (Cashea/crédito con
+    // factura opcional), la fecha de creación de la orden.
+    if (ageDays) {
+      params.push(ageDays);
+      where.push(
+        `COALESCE(o."invoiceDate"::timestamp, o."createdAt") <= now() - make_interval(days => $${params.length}::int)`,
+      );
     }
     if (search && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`);
@@ -388,6 +397,7 @@ export class AccountsReceivableService {
       holderId,
       debtorType,
       branchId,
+      ageDays,
       sortBy = 'createdAt',
       sortDir = 'DESC',
     } = query;
@@ -428,6 +438,12 @@ export class AccountsReceivableService {
         { branchId },
       );
     }
+    // Antigüedad mínima: sólo lotes creados hace `ageDays` días o más.
+    if (ageDays)
+      qb.andWhere(
+        'ar."createdAt" <= now() - make_interval(days => CAST(:ageDays AS int))',
+        { ageDays },
+      );
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(

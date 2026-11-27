@@ -159,6 +159,7 @@ export class AccountsPayableService {
       doctorId,
       careCenterId,
       branchId,
+      ageDays,
     } = query;
     const params: unknown[] = [];
     const where: string[] = [
@@ -187,6 +188,13 @@ export class AccountsPayableService {
     if (branchId) {
       params.push(branchId);
       where.push(`o."branchId" = $${params.length}`);
+    }
+    // Antigüedad mínima: sólo órdenes creadas hace `ageDays` días o más.
+    if (ageDays) {
+      params.push(ageDays);
+      where.push(
+        `o."createdAt" <= now() - make_interval(days => $${params.length}::int)`,
+      );
     }
     if (search && search.trim()) {
       params.push(`%${search.trim().toLowerCase()}%`);
@@ -252,6 +260,7 @@ export class AccountsPayableService {
       doctorId,
       careCenterId,
       branchId,
+      ageDays,
       sortBy = 'createdAt',
       sortDir = 'DESC',
     } = query;
@@ -287,6 +296,12 @@ export class AccountsPayableService {
         { branchId },
       );
     }
+    // Antigüedad mínima: sólo lotes creados hace `ageDays` días o más.
+    if (ageDays)
+      qb.andWhere(
+        'ap."createdAt" <= now() - make_interval(days => CAST(:ageDays AS int))',
+        { ageDays },
+      );
     if (search && search.trim()) {
       const s = `%${search.trim().toLowerCase()}%`;
       qb.andWhere(

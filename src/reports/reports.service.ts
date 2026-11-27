@@ -305,6 +305,13 @@ export class ReportsService {
       params.push(query.careCenterId);
       where.push(`iio."careCenterId" = $${params.length}`);
     }
+    // Antigüedad mínima: fecha de creación de la orden (días desde su creación).
+    if (query.ageDays) {
+      params.push(query.ageDays);
+      where.push(
+        `o."createdAt" <= now() - make_interval(days => $${params.length}::int)`,
+      );
+    }
     if (query.search && query.search.trim()) {
       params.push(`%${query.search.trim().toLowerCase()}%`);
       const n = params.length;
@@ -791,6 +798,14 @@ export class ReportsService {
     if (query.holderId) {
       params.push(query.holderId);
       where.push(`o."holderId" = $${params.length}`);
+    }
+    // Antigüedad mínima: fecha de la factura; sin factura (Cashea/crédito con
+    // factura opcional), la fecha de creación de la orden.
+    if (query.ageDays) {
+      params.push(query.ageDays);
+      where.push(
+        `COALESCE(o."invoiceDate"::timestamp, o."createdAt") <= now() - make_interval(days => $${params.length}::int)`,
+      );
     }
     // `debtorType` es el filtro nuevo; `status` lo conserva por compatibilidad
     // con los enlaces viejos (antes `status` significaba el tipo de deudor).

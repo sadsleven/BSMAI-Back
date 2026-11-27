@@ -6,6 +6,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -206,6 +207,12 @@ export class QueryPendingPayableDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  /** Antigüedad mínima en días (fecha de creación de la orden). Mínimo 10. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ageDays?: number;
 }
 
 /** Listado de lotes. */
@@ -246,4 +253,10 @@ export class QueryAccountsPayableDto {
   @IsOptional()
   @Matches(/^(ASC|DESC)$/i)
   sortDir?: 'ASC' | 'DESC';
+
+  /** Antigüedad mínima en días (fecha de creación del lote). Mínimo 10. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ageDays?: number;
 }

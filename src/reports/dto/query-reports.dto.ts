@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 /**
  * Filtros comunes a todos los reportes financieros. Las fechas filtran sobre
@@ -43,6 +43,16 @@ export class QueryReportsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /**
+   * Antigüedad mínima en días de la obligación. Cuentas por cobrar: fecha de
+   * la factura (fallback: creación de la orden, p. ej. Cashea/crédito sin
+   * factura). Cuentas por pagar: fecha de creación de la orden. Mínimo 10.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ageDays?: number;
 }
 
 export class QueryPayablesReportDto extends QueryReportsDto {
